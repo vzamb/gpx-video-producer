@@ -1,4 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <color name="splash_background">#FF121212</color>
+
     <style name="Theme.GpxVideoProducer" parent="android:Theme.Material.NoActionBar" />
+
+    <style name="Theme.GpxVideo.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/splash_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="postSplashScreenTheme">@style/Theme.GpxVideoProducer</item>
+    </style>
 </resources>
