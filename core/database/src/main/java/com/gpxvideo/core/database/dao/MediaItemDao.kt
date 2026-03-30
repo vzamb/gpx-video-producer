@@ -22,6 +22,9 @@ interface MediaItemDao {
     @Delete
     suspend fun delete(mediaItem: MediaItemEntity)
 
+    @Query("DELETE FROM media_items WHERE id = :id")
+    suspend fun deleteById(id: UUID)
+
     @Query("SELECT * FROM media_items WHERE project_id = :projectId ORDER BY created_at ASC")
     fun getByProjectId(projectId: UUID): Flow<List<MediaItemEntity>>
 }
