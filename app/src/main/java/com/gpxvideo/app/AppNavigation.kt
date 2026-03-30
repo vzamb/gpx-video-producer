@@ -11,6 +11,8 @@ import com.gpxvideo.feature.project.CreateProjectRoute
 import com.gpxvideo.feature.project.ProjectEditorRoute
 import com.gpxvideo.feature.project.createProjectScreen
 import com.gpxvideo.feature.project.projectEditorScreen
+import com.gpxvideo.feature.export.ExportRoute
+import com.gpxvideo.feature.export.exportScreen
 import com.gpxvideo.feature.templates.TemplateEditorRoute
 import com.gpxvideo.feature.templates.TemplateGalleryRoute
 import com.gpxvideo.feature.templates.templateEditorScreen
@@ -63,6 +65,11 @@ fun AppNavigation() {
         templateEditorScreen(
             onSave = { navController.popBackStack() },
             onNavigateBack = { navController.popBackStack() }
+        )
+
+        exportScreen(
+            onNavigateBack = { navController.popBackStack() },
+            onExportComplete = { navController.popBackStack() }
         )
     }
 }

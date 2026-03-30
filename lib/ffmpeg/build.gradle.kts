@@ -1,6 +1,8 @@
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.hilt)
+    alias(libs.plugins.ksp)
 }
 
 android {
@@ -17,8 +19,11 @@ android {
 }
 
 dependencies {
-    // TODO: Add ffmpeg-kit dependency in Phase 10 (Export Pipeline)
+    // TODO: Add ffmpeg-kit dependency when Maven repo is configured
     // implementation(libs.ffmpeg.kit.full)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)
+
+    implementation(libs.hilt.android)
+    ksp(libs.hilt.android.compiler)
 }

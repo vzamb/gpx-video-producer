@@ -1,0 +1,269 @@
+package com.gpxvideo.feature.export
+
+import android.content.Context
+import android.os.Environment
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.gpxvideo.core.database.dao.GpxFileDao
+import com.gpxvideo.core.database.dao.MediaItemDao
+import com.gpxvideo.core.database.dao.OverlayDao
+import com.gpxvideo.core.database.dao.ProjectDao
+import com.gpxvideo.core.database.dao.TimelineClipDao
+import com.gpxvideo.core.database.dao.TimelineTrackDao
+import com.gpxvideo.core.model.AudioCodec
+import com.gpxvideo.core.model.ExportFormat
+import com.gpxvideo.core.model.GpxData
+import com.gpxvideo.core.model.OutputSettings
+import com.gpxvideo.core.model.Resolution
+import com.gpxvideo.core.model.SyncMode
+import com.gpxvideo.core.model.TrackType
+import com.gpxvideo.core.model.Transition
+import com.gpxvideo.core.model.TransitionType
+import com.gpxvideo.feature.overlays.GpxTimeSyncEngine
+import com.gpxvideo.lib.ffmpeg.FfmpegResult
+import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.UUID
+import javax.inject.Inject
+
+data class ExportUiState(
+    val settings: OutputSettings = OutputSettings(),
+    val exportState: ExportState = ExportState.Idle,
+    val estimatedSizeMb: Float = 0f
+)
+
+sealed class ExportState {
+    data object Idle : ExportState()
+    data class Exporting(
+        val phase: ExportPhase,
+        val progress: Float,
+        val startTimeMs: Long = System.currentTimeMillis()
+    ) : ExportState()
+    data class Complete(val outputPath: String, val fileSizeBytes: Long) : ExportState()
+    data class Error(val message: String) : ExportState()
+}
+
+@HiltViewModel
+class ExportViewModel @Inject constructor(
+    private val exportPipeline: ExportPipeline,
+    private val projectDao: ProjectDao,
+    private val mediaItemDao: MediaItemDao,
+    private val timelineTrackDao: TimelineTrackDao,
+    private val timelineClipDao: TimelineClipDao,
+    private val overlayDao: OverlayDao,
+    private val gpxFileDao: GpxFileDao,
+    @ApplicationContext private val context: Context,
+    savedStateHandle: SavedStateHandle
+) : ViewModel() {
+
+    val projectId: String = savedStateHandle.get<String>("projectId") ?: ""
+
+    private val _uiState = MutableStateFlow(ExportUiState())
+    val uiState: StateFlow<ExportUiState> = _uiState.asStateFlow()
+
+    init {
+        updateEstimatedSize()
+    }
+
+    fun updateFormat(format: ExportFormat) {
+        _uiState.update { it.copy(settings = it.settings.copy(format = format)) }
+        updateEstimatedSize()
+    }
+
+    fun updateResolution(resolution: Resolution) {
+        _uiState.update { it.copy(settings = it.settings.copy(resolution = resolution)) }
+        updateEstimatedSize()
+    }
+
+    fun updateFrameRate(fps: Int) {
+        _uiState.update { it.copy(settings = it.settings.copy(frameRate = fps)) }
+        updateEstimatedSize()
+    }
+
+    fun updateBitrate(bitrate: Long) {
+        _uiState.update { it.copy(settings = it.settings.copy(bitrateBps = bitrate)) }
+        updateEstimatedSize()
+    }
+
+    private fun updateEstimatedSize() {
+        val settings = _uiState.value.settings
+        // Rough estimate: bitrate * estimated_duration / 8 bytes
+        val estimatedDurationSec = 60f // Default estimate
+        val sizeMb = (settings.bitrateBps * estimatedDurationSec) / (8f * 1024 * 1024)
+        _uiState.update { it.copy(estimatedSizeMb = sizeMb) }
+    }
+
+    fun startExport() {
+        if (_uiState.value.exportState is ExportState.Exporting) return
+
+        viewModelScope.launch {
+            try {
+                _uiState.update {
+                    it.copy(exportState = ExportState.Exporting(ExportPhase.PREPARING, 0f))
+                }
+
+                val config = buildExportConfig() ?: run {
+                    _uiState.update {
+                        it.copy(exportState = ExportState.Error("Failed to build export configuration"))
+                    }
+                    return@launch
+                }
+
+                val result = exportPipeline.export(
+                    config = config,
+                    onPhaseChanged = { phase ->
+                        _uiState.update { state ->
+                            val current = state.exportState
+                            if (current is ExportState.Exporting) {
+                                state.copy(exportState = current.copy(phase = phase))
+                            } else state
+                        }
+                    },
+                    onProgress = { progress ->
+                        _uiState.update { state ->
+                            val current = state.exportState
+                            if (current is ExportState.Exporting) {
+                                state.copy(exportState = current.copy(progress = progress))
+                            } else state
+                        }
+                    }
+                )
+
+                when (result) {
+                    is FfmpegResult.Success -> {
+                        val file = File(result.outputPath)
+                        _uiState.update {
+                            it.copy(
+                                exportState = ExportState.Complete(
+                                    outputPath = result.outputPath,
+                                    fileSizeBytes = if (file.exists()) file.length() else 0L
+                                )
+                            )
+                        }
+                    }
+                    is FfmpegResult.Error -> {
+                        _uiState.update {
+                            it.copy(exportState = ExportState.Error(result.message))
+                        }
+                    }
+                    is FfmpegResult.Cancelled -> {
+                        _uiState.update { it.copy(exportState = ExportState.Idle) }
+                    }
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(exportState = ExportState.Error(e.message ?: "Unknown error"))
+                }
+            }
+        }
+    }
+
+    fun cancelExport() {
+        exportPipeline.cancel()
+        _uiState.update { it.copy(exportState = ExportState.Idle) }
+    }
+
+    fun resetState() {
+        _uiState.update { it.copy(exportState = ExportState.Idle) }
+    }
+
+    private suspend fun buildExportConfig(): ExportConfig? {
+        val uuid = try {
+            UUID.fromString(projectId)
+        } catch (e: Exception) {
+            return null
+        }
+
+        val project = projectDao.getById(uuid) ?: return null
+        val tracks = timelineTrackDao.getByProjectId(uuid).first()
+        val mediaItems = mediaItemDao.getByProjectId(uuid).first()
+        val overlayEntities = overlayDao.getByProjectId(uuid).first()
+        val gpxFiles = gpxFileDao.getByProjectId(uuid).first()
+
+        val settings = _uiState.value.settings
+
+        // Build clips from video tracks
+        val videoTracks = tracks.filter { it.type == TrackType.VIDEO.name }
+        val clips = mutableListOf<ExportClip>()
+
+        for (track in videoTracks) {
+            val trackClips = timelineClipDao.getByTrackId(track.id).first()
+            for (clip in trackClips) {
+                val mediaItem = clip.mediaItemId?.let { mid ->
+                    mediaItems.find { it.id == mid }
+                }
+                val filePath = mediaItem?.localCopyPath ?: mediaItem?.sourcePath ?: continue
+
+                val transition = clip.entryTransitionType?.let { type ->
+                    try {
+                        Transition(
+                            type = TransitionType.valueOf(type),
+                            durationMs = clip.entryTransitionDurationMs ?: 500L
+                        )
+                    } catch (e: Exception) {
+                        null
+                    }
+                }
+
+                clips.add(
+                    ExportClip(
+                        filePath = filePath,
+                        startTimeMs = clip.startTimeMs,
+                        endTimeMs = clip.endTimeMs,
+                        trimStartMs = clip.trimStartMs,
+                        trimEndMs = clip.trimEndMs,
+                        speed = clip.speed,
+                        volume = clip.volume,
+                        transition = transition
+                    )
+                )
+            }
+        }
+
+        // Build overlays (simplified — overlay entity stores config as JSON)
+        val exportOverlays = mutableListOf<ExportOverlay>()
+
+        // Parse GPX data
+        val gpxData: GpxData? = gpxFiles.firstOrNull()?.parsedDataJson?.let { json ->
+            try {
+                Json.decodeFromString<GpxData>(json)
+            } catch (e: Exception) {
+                null
+            }
+        }
+
+        val syncEngine = gpxData?.let {
+            GpxTimeSyncEngine(it, SyncMode.GPX_TIMESTAMP)
+        }
+
+        // Output path
+        val moviesDir = context.getExternalFilesDir(Environment.DIRECTORY_MOVIES)
+            ?: File(context.filesDir, "movies")
+        moviesDir.mkdirs()
+        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val extension = settings.format.extension
+        val outputPath = File(moviesDir, "export_${timestamp}.$extension").absolutePath
+
+        return ExportConfig(
+            projectId = uuid,
+            clips = clips,
+            overlays = exportOverlays,
+            outputSettings = settings,
+            outputPath = outputPath,
+            gpxData = gpxData,
+            syncEngine = syncEngine
+        )
+    }
+}
