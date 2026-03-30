@@ -29,9 +29,8 @@ fun NavGraphBuilder.projectEditorScreen(
     onNavigateToExport: (String) -> Unit
 ) {
     composable<ProjectEditorRoute> {
-        ProjectEditorScreen(
+        VideoEditorScreen(
             onNavigateBack = onNavigateBack,
-            onNavigateToPreview = onNavigateToPreview,
             onNavigateToExport = onNavigateToExport
         )
     }
