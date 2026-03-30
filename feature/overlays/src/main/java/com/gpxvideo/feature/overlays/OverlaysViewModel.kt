@@ -9,6 +9,7 @@ import com.gpxvideo.core.model.MapStyle
 import com.gpxvideo.core.model.OverlayConfig
 import com.gpxvideo.core.model.StatField
 import com.gpxvideo.core.model.StatsLayout
+import com.gpxvideo.core.model.SyncMode
 import com.gpxvideo.lib.gpxparser.GpxParser
 import com.gpxvideo.lib.gpxparser.GpxStatistics
 import com.gpxvideo.lib.gpxparser.GpxStats
@@ -46,6 +47,24 @@ class OverlaysViewModel @Inject constructor(
 
     private val _gpxStats = MutableStateFlow<GpxStats?>(null)
     val gpxStats: StateFlow<GpxStats?> = _gpxStats.asStateFlow()
+
+    private val _syncEngine = MutableStateFlow<GpxTimeSyncEngine?>(null)
+    val syncEngine: StateFlow<GpxTimeSyncEngine?> = _syncEngine.asStateFlow()
+
+    private val _syncMode = MutableStateFlow(SyncMode.GPX_TIMESTAMP)
+    val syncMode: StateFlow<SyncMode> = _syncMode.asStateFlow()
+
+    private val _timeOffsetMs = MutableStateFlow(0L)
+    val timeOffsetMs: StateFlow<Long> = _timeOffsetMs.asStateFlow()
+
+    private val _keyframes = MutableStateFlow<List<SyncKeyframe>>(emptyList())
+    val keyframes: StateFlow<List<SyncKeyframe>> = _keyframes.asStateFlow()
+
+    private val _currentPositionMs = MutableStateFlow(0L)
+    val currentPositionMs: StateFlow<Long> = _currentPositionMs.asStateFlow()
+
+    private val _currentPoint = MutableStateFlow<InterpolatedPoint?>(null)
+    val currentPoint: StateFlow<InterpolatedPoint?> = _currentPoint.asStateFlow()
 
     init {
         loadGpxData(projectId)
@@ -87,6 +106,28 @@ class OverlaysViewModel @Inject constructor(
         }
     }
 
+    fun updateSyncMode(mode: SyncMode) {
+        _syncMode.value = mode
+        rebuildSyncEngine()
+    }
+
+    fun updateTimeOffset(offsetMs: Long) {
+        _timeOffsetMs.value = offsetMs
+        rebuildSyncEngine()
+    }
+
+    fun addKeyframe(keyframe: SyncKeyframe) {
+        _keyframes.value = (_keyframes.value + keyframe).sortedBy { it.videoTimeMs }
+        rebuildSyncEngine()
+    }
+
+    fun updateVideoPosition(positionMs: Long) {
+        _currentPositionMs.value = positionMs
+        _syncEngine.value?.let { engine ->
+            _currentPoint.value = engine.getPointAtVideoTime(positionMs)
+        }
+    }
+
     fun loadGpxData(projectId: UUID) {
         viewModelScope.launch {
             gpxFileDao.getByProjectId(projectId).collect { gpxFiles ->
@@ -97,12 +138,27 @@ class OverlaysViewModel @Inject constructor(
                         val data = file.inputStream().use { GpxParser.parse(it) }
                         _gpxData.value = data
                         _gpxStats.value = GpxStatistics.computeFullStats(data)
+                        rebuildSyncEngine()
                     }
                 } catch (_: Exception) {
                     // GPX parsing failed — leave data as null
                 }
             }
         }
+    }
+
+    private fun rebuildSyncEngine() {
+        val data = _gpxData.value ?: return
+        val engine = GpxTimeSyncEngine(
+            gpxData = data,
+            syncMode = _syncMode.value,
+            timeOffsetMs = _timeOffsetMs.value,
+            keyframes = _keyframes.value
+        )
+        engine.precomputeLookupTable()
+        _syncEngine.value = engine
+        // Refresh current point with new engine
+        _currentPoint.value = engine.getPointAtVideoTime(_currentPositionMs.value)
     }
 
     private fun createDefaultOverlay(

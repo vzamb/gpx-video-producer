@@ -14,7 +14,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import com.gpxvideo.core.model.GpxData
 import com.gpxvideo.core.model.OverlayConfig
-import com.gpxvideo.lib.gpxparser.GpxStatistics
 import com.gpxvideo.lib.gpxparser.GpxStats
 
 @Composable
@@ -25,9 +24,18 @@ fun OverlayPreviewLayer(
     containerWidth: Int,
     containerHeight: Int,
     currentPositionMs: Long,
+    syncEngine: GpxTimeSyncEngine?,
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
+
+    // Quantize position to 100ms to avoid excessive re-rendering
+    val quantizedPosition = (currentPositionMs / 100L) * 100L
+
+    // Compute interpolated point once for all dynamic overlays
+    val currentPoint = remember(syncEngine, quantizedPosition) {
+        syncEngine?.getPointAtVideoTime(quantizedPosition)
+    }
 
     Box(modifier = modifier) {
         overlays.forEach { overlay ->
@@ -36,9 +44,9 @@ fun OverlayPreviewLayer(
             val offsetX = (overlay.position.x * containerWidth).toInt()
             val offsetY = (overlay.position.y * containerHeight).toInt()
 
-            val cacheKey = overlayKey(overlay)
+            val cacheKey = overlayKey(overlay, quantizedPosition)
             val bitmap = remember(cacheKey, pixelW, pixelH) {
-                renderOverlayBitmap(overlay, gpxData, stats, pixelW, pixelH)
+                renderOverlayBitmap(overlay, gpxData, stats, currentPoint, pixelW, pixelH)
             }
 
             if (bitmap != null) {
@@ -63,6 +71,7 @@ private fun renderOverlayBitmap(
     overlay: OverlayConfig,
     gpxData: GpxData?,
     stats: GpxStats?,
+    currentPoint: InterpolatedPoint?,
     width: Int,
     height: Int
 ): Bitmap? {
@@ -76,18 +85,33 @@ private fun renderOverlayBitmap(
         is OverlayConfig.StaticStats -> stats?.let {
             OverlayRenderer.renderStaticStats(overlay, it, width, height)
         }
-        // Dynamic overlays return null for now — to be implemented in a future phase
-        is OverlayConfig.DynamicAltitudeProfile -> null
-        is OverlayConfig.DynamicMap -> null
-        is OverlayConfig.DynamicStat -> null
+        is OverlayConfig.DynamicAltitudeProfile -> {
+            if (gpxData != null && currentPoint != null) {
+                DynamicOverlayRenderer.renderDynamicAltitudeProfile(
+                    overlay, gpxData, currentPoint, width, height
+                )
+            } else null
+        }
+        is OverlayConfig.DynamicMap -> {
+            if (gpxData != null && currentPoint != null) {
+                DynamicOverlayRenderer.renderDynamicMap(
+                    overlay, gpxData, currentPoint, width, height
+                )
+            } else null
+        }
+        is OverlayConfig.DynamicStat -> {
+            if (currentPoint != null) {
+                DynamicOverlayRenderer.renderDynamicStat(overlay, currentPoint, width, height)
+            } else null
+        }
     }
 }
 
-private fun overlayKey(overlay: OverlayConfig): Any = when (overlay) {
+private fun overlayKey(overlay: OverlayConfig, positionMs: Long): Any = when (overlay) {
     is OverlayConfig.StaticAltitudeProfile -> Triple(overlay.id, overlay.lineColor, overlay.copy())
     is OverlayConfig.StaticMap -> Triple(overlay.id, overlay.routeColor, overlay.copy())
     is OverlayConfig.StaticStats -> Triple(overlay.id, overlay.fields, overlay.copy())
-    is OverlayConfig.DynamicAltitudeProfile -> overlay.id
-    is OverlayConfig.DynamicMap -> overlay.id
-    is OverlayConfig.DynamicStat -> overlay.id
+    is OverlayConfig.DynamicAltitudeProfile -> Triple(overlay.id, overlay.copy(), positionMs)
+    is OverlayConfig.DynamicMap -> Triple(overlay.id, overlay.copy(), positionMs)
+    is OverlayConfig.DynamicStat -> Triple(overlay.id, overlay.copy(), positionMs)
 }

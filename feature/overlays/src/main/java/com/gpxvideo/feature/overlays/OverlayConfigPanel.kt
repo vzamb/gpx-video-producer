@@ -33,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.gpxvideo.core.model.DynamicField
 import com.gpxvideo.core.model.MapStyle
 import com.gpxvideo.core.model.OverlayConfig
 import com.gpxvideo.core.model.OverlayPosition
@@ -40,12 +41,14 @@ import com.gpxvideo.core.model.OverlaySize
 import com.gpxvideo.core.model.OverlayStyle
 import com.gpxvideo.core.model.StatField
 import com.gpxvideo.core.model.StatsLayout
+import com.gpxvideo.core.model.SyncMode
 
 @Composable
 fun OverlayConfigPanel(
     overlay: OverlayConfig,
     onUpdate: (OverlayConfig) -> Unit,
     onDelete: () -> Unit,
+    onOpenSyncConfig: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -60,9 +63,11 @@ fun OverlayConfigPanel(
             is OverlayConfig.StaticAltitudeProfile -> AltitudeProfileConfig(overlay, onUpdate)
             is OverlayConfig.StaticMap -> StaticMapConfig(overlay, onUpdate)
             is OverlayConfig.StaticStats -> StaticStatsConfig(overlay, onUpdate)
-            is OverlayConfig.DynamicAltitudeProfile -> {}
-            is OverlayConfig.DynamicMap -> {}
-            is OverlayConfig.DynamicStat -> {}
+            is OverlayConfig.DynamicAltitudeProfile -> DynamicAltitudeProfileConfig(
+                overlay, onUpdate, onOpenSyncConfig
+            )
+            is OverlayConfig.DynamicMap -> DynamicMapConfig(overlay, onUpdate, onOpenSyncConfig)
+            is OverlayConfig.DynamicStat -> DynamicStatConfig(overlay, onUpdate, onOpenSyncConfig)
         }
 
         SectionHeader("Position")
@@ -189,6 +194,93 @@ private fun MapStyleDropdown(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun DynamicAltitudeProfileConfig(
+    overlay: OverlayConfig.DynamicAltitudeProfile,
+    onUpdate: (OverlayConfig) -> Unit,
+    onOpenSyncConfig: () -> Unit
+) {
+    SectionHeader("Live Altitude Settings")
+    SyncModeButton(overlay.syncMode.name, onOpenSyncConfig)
+}
+
+@Composable
+private fun DynamicMapConfig(
+    overlay: OverlayConfig.DynamicMap,
+    onUpdate: (OverlayConfig) -> Unit,
+    onOpenSyncConfig: () -> Unit
+) {
+    SectionHeader("Live Map Settings")
+    MapStyleDropdown(overlay.mapStyle) {
+        onUpdate(overlay.copy(mapStyle = it))
+    }
+    ToggleRow("Follow Position", overlay.followPosition) {
+        onUpdate(overlay.copy(followPosition = it))
+    }
+    ToggleRow("Show Trail", overlay.showTrail) {
+        onUpdate(overlay.copy(showTrail = it))
+    }
+    SyncModeButton(overlay.syncMode.name, onOpenSyncConfig)
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DynamicStatConfig(
+    overlay: OverlayConfig.DynamicStat,
+    onUpdate: (OverlayConfig) -> Unit,
+    onOpenSyncConfig: () -> Unit
+) {
+    SectionHeader("Live Stat Settings")
+
+    // Field selector
+    var fieldExpanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(expanded = fieldExpanded, onExpandedChange = { fieldExpanded = it }) {
+        OutlinedTextField(
+            value = overlay.field.displayName,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Field") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = fieldExpanded) },
+            modifier = Modifier
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                .fillMaxWidth()
+        )
+        ExposedDropdownMenu(expanded = fieldExpanded, onDismissRequest = { fieldExpanded = false }) {
+            DynamicField.entries.forEach { field ->
+                DropdownMenuItem(
+                    text = { Text("${field.displayName} (${field.defaultUnit})") },
+                    onClick = {
+                        onUpdate(overlay.copy(field = field))
+                        fieldExpanded = false
+                    }
+                )
+            }
+        }
+    }
+
+    // Format pattern
+    OutlinedTextField(
+        value = overlay.format,
+        onValueChange = { onUpdate(overlay.copy(format = it)) },
+        label = { Text("Format Pattern") },
+        placeholder = { Text("e.g., %.1f") },
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true
+    )
+
+    SyncModeButton(overlay.syncMode.name, onOpenSyncConfig)
+}
+
+@Composable
+private fun SyncModeButton(currentMode: String, onOpenSyncConfig: () -> Unit) {
+    Button(
+        onClick = onOpenSyncConfig,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text("Sync: ${currentMode.replace("_", " ")}")
     }
 }
 

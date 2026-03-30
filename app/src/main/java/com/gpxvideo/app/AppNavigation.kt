@@ -11,6 +11,10 @@ import com.gpxvideo.feature.project.CreateProjectRoute
 import com.gpxvideo.feature.project.ProjectEditorRoute
 import com.gpxvideo.feature.project.createProjectScreen
 import com.gpxvideo.feature.project.projectEditorScreen
+import com.gpxvideo.feature.templates.TemplateEditorRoute
+import com.gpxvideo.feature.templates.TemplateGalleryRoute
+import com.gpxvideo.feature.templates.templateEditorScreen
+import com.gpxvideo.feature.templates.templateGalleryScreen
 
 @Composable
 fun AppNavigation() {
@@ -43,6 +47,21 @@ fun AppNavigation() {
         )
 
         previewScreen(
+            onNavigateBack = { navController.popBackStack() }
+        )
+
+        templateGalleryScreen(
+            onTemplateSelected = { templateId ->
+                navController.navigate(TemplateEditorRoute(templateId = templateId.toString()))
+            },
+            onCreateTemplate = {
+                navController.navigate(TemplateEditorRoute())
+            },
+            onNavigateBack = { navController.popBackStack() }
+        )
+
+        templateEditorScreen(
+            onSave = { navController.popBackStack() },
             onNavigateBack = { navController.popBackStack() }
         )
     }
