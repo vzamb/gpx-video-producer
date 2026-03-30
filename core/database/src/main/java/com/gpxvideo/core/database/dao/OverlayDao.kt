@@ -22,6 +22,12 @@ interface OverlayDao {
     @Delete
     suspend fun delete(overlay: OverlayEntity)
 
+    @Query("DELETE FROM overlays WHERE id = :id")
+    suspend fun deleteById(id: UUID)
+
+    @Query("SELECT * FROM overlays WHERE id = :id")
+    suspend fun getById(id: UUID): OverlayEntity?
+
     @Query("SELECT * FROM overlays WHERE project_id = :projectId")
     fun getByProjectId(projectId: UUID): Flow<List<OverlayEntity>>
 }

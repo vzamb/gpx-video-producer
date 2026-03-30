@@ -38,6 +38,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.gpxvideo.core.model.TrackType
+import com.gpxvideo.core.model.Transition
 import java.util.UUID
 import kotlin.math.roundToInt
 
@@ -64,6 +65,12 @@ sealed interface TimelineEditorAction {
     data class ClipSplit(val clipId: UUID) : TimelineEditorAction
     data class SpeedChanged(val clipId: UUID, val speed: Float) : TimelineEditorAction
     data class VolumeChanged(val clipId: UUID, val volume: Float) : TimelineEditorAction
+    data class EntryTransitionChanged(val clipId: UUID, val transition: Transition?) :
+        TimelineEditorAction
+    data class ExitTransitionChanged(val clipId: UUID, val transition: Transition?) :
+        TimelineEditorAction
+    data class KenBurnsChanged(val clipId: UUID, val config: KenBurnsConfig) :
+        TimelineEditorAction
 }
 
 @Composable
@@ -246,15 +253,37 @@ fun TimelineEditor(
         val selectedClip = state.selectedClipId?.let { clipId ->
             state.tracks.flatMap { it.clips }.find { it.id == clipId }
         }
+        val selectedTrackType = state.selectedClipId?.let { clipId ->
+            state.tracks.find { track -> track.clips.any { it.id == clipId } }?.type
+        }
+        val hasAdjacentClips = selectedClip?.let { clip ->
+            val track = state.tracks.find { t -> t.clips.any { it.id == clip.id } }
+            track != null && track.clips.size > 1
+        } ?: false
+
         if (selectedClip != null) {
             ClipPropertiesPanel(
                 clip = selectedClip,
+                trackType = selectedTrackType ?: TrackType.VIDEO,
+                hasAdjacentClips = hasAdjacentClips,
+                entryTransition = null,
+                exitTransition = null,
+                waveformData = emptyList(),
                 onSpeedChange = {
                     onAction(TimelineEditorAction.SpeedChanged(selectedClip.id, it))
                 },
                 onVolumeChange = {
                     onAction(TimelineEditorAction.VolumeChanged(selectedClip.id, it))
                 },
+                onEntryTransitionChanged = {
+                    onAction(TimelineEditorAction.EntryTransitionChanged(selectedClip.id, it))
+                },
+                onExitTransitionChanged = {
+                    onAction(TimelineEditorAction.ExitTransitionChanged(selectedClip.id, it))
+                },
+                onKenBurnsConfigChanged = if (selectedTrackType == TrackType.IMAGE) { config ->
+                    onAction(TimelineEditorAction.KenBurnsChanged(selectedClip.id, config))
+                } else null,
                 onDelete = { onAction(TimelineEditorAction.ClipDeleted(selectedClip.id)) },
                 onDuplicate = {
                     onAction(TimelineEditorAction.ClipDuplicated(selectedClip.id))

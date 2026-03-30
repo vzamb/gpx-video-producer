@@ -85,6 +85,9 @@ fun TimelineWithPreview(
                         timelineVm.splitClipAtPlayhead(action.clipId)
                     is TimelineEditorAction.SpeedChanged -> { /* TODO: per-clip speed */ }
                     is TimelineEditorAction.VolumeChanged -> { /* TODO: per-clip volume */ }
+                    is TimelineEditorAction.EntryTransitionChanged -> { /* TODO: transitions */ }
+                    is TimelineEditorAction.ExitTransitionChanged -> { /* TODO: transitions */ }
+                    is TimelineEditorAction.KenBurnsChanged -> { /* TODO: Ken Burns */ }
                 }
             },
             modifier = Modifier.weight(0.6f)

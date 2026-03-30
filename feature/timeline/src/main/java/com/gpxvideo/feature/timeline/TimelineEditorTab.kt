@@ -49,6 +49,9 @@ fun TimelineEditorTab(
                 is TimelineEditorAction.ClipSplit -> viewModel.splitClipAtPlayhead(action.clipId)
                 is TimelineEditorAction.SpeedChanged -> { /* TODO: adjust speed */ }
                 is TimelineEditorAction.VolumeChanged -> { /* TODO: adjust volume */ }
+                is TimelineEditorAction.EntryTransitionChanged -> { /* TODO: adjust entry transition */ }
+                is TimelineEditorAction.ExitTransitionChanged -> { /* TODO: adjust exit transition */ }
+                is TimelineEditorAction.KenBurnsChanged -> { /* TODO: adjust ken burns config */ }
             }
         },
         modifier = modifier
