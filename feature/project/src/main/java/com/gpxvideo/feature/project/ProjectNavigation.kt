@@ -24,11 +24,15 @@ fun NavGraphBuilder.createProjectScreen(
 }
 
 fun NavGraphBuilder.projectEditorScreen(
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onNavigateToPreview: (String) -> Unit,
+    onNavigateToExport: (String) -> Unit
 ) {
     composable<ProjectEditorRoute> {
         ProjectEditorScreen(
-            onNavigateBack = onNavigateBack
+            onNavigateBack = onNavigateBack,
+            onNavigateToPreview = onNavigateToPreview,
+            onNavigateToExport = onNavigateToExport
         )
     }
 }

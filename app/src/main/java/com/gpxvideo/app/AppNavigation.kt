@@ -77,7 +77,13 @@ fun AppNavigation() {
         )
 
         projectEditorScreen(
-            onNavigateBack = { navController.popBackStack() }
+            onNavigateBack = { navController.popBackStack() },
+            onNavigateToPreview = { projectId ->
+                navController.navigate(PreviewRoute(projectId = projectId))
+            },
+            onNavigateToExport = { projectId ->
+                navController.navigate(ExportRoute(projectId = projectId))
+            }
         )
 
         previewScreen(

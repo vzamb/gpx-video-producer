@@ -83,11 +83,28 @@ fun TimelineWithPreview(
                         timelineVm.duplicateClip(action.clipId)
                     is TimelineEditorAction.ClipSplit ->
                         timelineVm.splitClipAtPlayhead(action.clipId)
-                    is TimelineEditorAction.SpeedChanged -> { /* TODO: per-clip speed */ }
-                    is TimelineEditorAction.VolumeChanged -> { /* TODO: per-clip volume */ }
-                    is TimelineEditorAction.EntryTransitionChanged -> { /* TODO: transitions */ }
-                    is TimelineEditorAction.ExitTransitionChanged -> { /* TODO: transitions */ }
-                    is TimelineEditorAction.KenBurnsChanged -> { /* TODO: Ken Burns */ }
+                    is TimelineEditorAction.SpeedChanged ->
+                        timelineVm.setClipSpeed(action.clipId, action.speed)
+                    is TimelineEditorAction.VolumeChanged ->
+                        timelineVm.setClipVolume(action.clipId, action.volume)
+                    is TimelineEditorAction.EntryTransitionChanged ->
+                        timelineVm.setClipEntryTransition(
+                            action.clipId,
+                            action.transition?.type?.name,
+                            action.transition?.durationMs
+                        )
+                    is TimelineEditorAction.ExitTransitionChanged ->
+                        timelineVm.setClipExitTransition(
+                            action.clipId,
+                            action.transition?.type?.name,
+                            action.transition?.durationMs
+                        )
+                    is TimelineEditorAction.KenBurnsChanged ->
+                        timelineVm.setClipKenBurns(
+                            action.clipId,
+                            action.config.startX, action.config.startY, action.config.startScale,
+                            action.config.endX, action.config.endY, action.config.endScale
+                        )
                 }
             },
             modifier = Modifier.weight(0.6f)

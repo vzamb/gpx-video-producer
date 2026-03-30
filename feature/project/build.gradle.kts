@@ -30,6 +30,11 @@ dependencies {
     implementation(project(":core:common"))
     implementation(project(":core:ui"))
     implementation(project(":lib:media-utils"))
+    implementation(project(":feature:gpx"))
+    implementation(project(":feature:preview"))
+    implementation(project(":feature:timeline"))
+    implementation(project(":feature:overlays"))
+    implementation(project(":lib:gpx-parser"))
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)

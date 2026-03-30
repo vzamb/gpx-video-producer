@@ -37,7 +37,19 @@ data class TimelineClipState(
     val trimStartMs: Long = 0,
     val trimEndMs: Long = 0,
     val thumbnailPath: String? = null,
-    val color: Color
+    val color: Color,
+    val speed: Float = 1.0f,
+    val volume: Float = 1.0f,
+    val entryTransitionType: String? = null,
+    val entryTransitionDurationMs: Long? = null,
+    val exitTransitionType: String? = null,
+    val exitTransitionDurationMs: Long? = null,
+    val kenBurnsStartX: Float? = null,
+    val kenBurnsStartY: Float? = null,
+    val kenBurnsStartScale: Float? = null,
+    val kenBurnsEndX: Float? = null,
+    val kenBurnsEndY: Float? = null,
+    val kenBurnsEndScale: Float? = null
 )
 
 fun TrackType.toColor(): Color = when (this) {

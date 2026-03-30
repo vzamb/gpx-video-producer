@@ -2,6 +2,7 @@ package com.gpxvideo.feature.timeline
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.gpxvideo.core.database.dao.MediaItemDao
 import com.gpxvideo.core.database.dao.TimelineClipDao
 import com.gpxvideo.core.database.dao.TimelineTrackDao
 import com.gpxvideo.core.database.entity.TimelineClipEntity
@@ -22,7 +23,8 @@ import java.util.UUID
 class TimelineViewModel @AssistedInject constructor(
     @Assisted private val projectIdStr: String,
     private val trackDao: TimelineTrackDao,
-    private val clipDao: TimelineClipDao
+    private val clipDao: TimelineClipDao,
+    private val mediaItemDao: MediaItemDao
 ) : ViewModel() {
 
     @AssistedFactory
@@ -39,6 +41,7 @@ class TimelineViewModel @AssistedInject constructor(
 
     init {
         loadTimeline()
+        autoInitializeTimeline()
     }
 
     private fun loadTimeline() {
@@ -64,6 +67,60 @@ class TimelineViewModel @AssistedInject constructor(
                     canUndo = undoManager.canUndo,
                     canRedo = undoManager.canRedo
                 )
+            }
+        }
+    }
+
+    /**
+     * Auto-creates a video track + clips from project media items when
+     * the timeline is empty (first time opening the Editor tab).
+     */
+    private fun autoInitializeTimeline() {
+        viewModelScope.launch {
+            val existingTracks = trackDao.getByProjectId(projectId).first()
+            if (existingTracks.isNotEmpty()) return@launch
+
+            val mediaItems = mediaItemDao.getByProjectId(projectId).first()
+            if (mediaItems.isEmpty()) return@launch
+
+            val videoTrackId = UUID.randomUUID()
+            val audioTrackId = UUID.randomUUID()
+            trackDao.insert(
+                TimelineTrackEntity(
+                    id = videoTrackId,
+                    projectId = projectId,
+                    type = TrackType.VIDEO.name,
+                    order = 0
+                )
+            )
+            trackDao.insert(
+                TimelineTrackEntity(
+                    id = audioTrackId,
+                    projectId = projectId,
+                    type = TrackType.AUDIO.name,
+                    order = 1
+                )
+            )
+
+            var currentTimeMs = 0L
+            for (media in mediaItems) {
+                val mediaDuration = media.durationMs
+                val durationMs: Long = when {
+                    media.type == "VIDEO" && mediaDuration != null && mediaDuration > 0 -> mediaDuration
+                    media.type == "IMAGE" -> 5000L
+                    else -> 3000L
+                }
+                val clipId = UUID.randomUUID()
+                clipDao.insert(
+                    TimelineClipEntity(
+                        id = clipId,
+                        trackId = videoTrackId,
+                        mediaItemId = media.id,
+                        startTimeMs = currentTimeMs,
+                        endTimeMs = currentTimeMs + durationMs
+                    )
+                )
+                currentTimeMs += durationMs
             }
         }
     }
@@ -229,6 +286,46 @@ class TimelineViewModel @AssistedInject constructor(
         _state.value = _state.value.copy(selectedTrackId = trackId)
     }
 
+    fun setClipSpeed(clipId: UUID, speed: Float) {
+        updateClipProperty(clipId) { it.copy(speed = speed.coerceIn(0.25f, 4.0f)) }
+    }
+
+    fun setClipVolume(clipId: UUID, volume: Float) {
+        updateClipProperty(clipId) { it.copy(volume = volume.coerceIn(0f, 2.0f)) }
+    }
+
+    fun setClipEntryTransition(clipId: UUID, type: String?, durationMs: Long?) {
+        updateClipProperty(clipId) { it.copy(entryTransitionType = type, entryTransitionDurationMs = durationMs) }
+    }
+
+    fun setClipExitTransition(clipId: UUID, type: String?, durationMs: Long?) {
+        updateClipProperty(clipId) { it.copy(exitTransitionType = type, exitTransitionDurationMs = durationMs) }
+    }
+
+    fun setClipKenBurns(
+        clipId: UUID,
+        startX: Float, startY: Float, startScale: Float,
+        endX: Float, endY: Float, endScale: Float
+    ) {
+        updateClipProperty(clipId) {
+            it.copy(
+                kenBurnsStartX = startX, kenBurnsStartY = startY, kenBurnsStartScale = startScale,
+                kenBurnsEndX = endX, kenBurnsEndY = endY, kenBurnsEndScale = endScale
+            )
+        }
+    }
+
+    private fun updateClipProperty(clipId: UUID, transform: (TimelineClipState) -> TimelineClipState) {
+        val currentState = _state.value
+        val newTracks = currentState.tracks.map { track ->
+            track.copy(clips = track.clips.map { clip ->
+                if (clip.id == clipId) transform(clip) else clip
+            })
+        }
+        _state.value = currentState.copy(tracks = newTracks)
+        persistState()
+    }
+
     fun undo() {
         undoManager.undo(_state.value)?.let { newState ->
             _state.value = newState.copy(
@@ -306,7 +403,13 @@ private fun TimelineClipEntity.toClipState(trackType: TrackType): TimelineClipSt
         endTimeMs = endTimeMs,
         trimStartMs = trimStartMs,
         trimEndMs = trimEndMs,
-        color = trackType.toColor()
+        color = trackType.toColor(),
+        speed = speed,
+        volume = volume,
+        entryTransitionType = entryTransitionType,
+        entryTransitionDurationMs = entryTransitionDurationMs,
+        exitTransitionType = exitTransitionType,
+        exitTransitionDurationMs = exitTransitionDurationMs
     )
 }
 
@@ -318,6 +421,12 @@ private fun TimelineClipState.toEntity(): TimelineClipEntity {
         startTimeMs = startTimeMs,
         endTimeMs = endTimeMs,
         trimStartMs = trimStartMs,
-        trimEndMs = trimEndMs
+        trimEndMs = trimEndMs,
+        speed = speed,
+        volume = volume,
+        entryTransitionType = entryTransitionType,
+        entryTransitionDurationMs = entryTransitionDurationMs,
+        exitTransitionType = exitTransitionType,
+        exitTransitionDurationMs = exitTransitionDurationMs
     )
 }

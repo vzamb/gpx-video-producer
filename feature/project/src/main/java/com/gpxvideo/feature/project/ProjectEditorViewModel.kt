@@ -1,15 +1,23 @@
 package com.gpxvideo.feature.project
 
 import android.content.Context
+import android.database.Cursor
 import android.net.Uri
+import android.provider.OpenableColumns
 import android.webkit.MimeTypeMap
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.gpxvideo.core.database.dao.GpxFileDao
 import com.gpxvideo.core.database.dao.MediaItemDao
 import com.gpxvideo.core.database.dao.ProjectDao
+import com.gpxvideo.core.database.entity.GpxFileEntity
 import com.gpxvideo.core.database.entity.MediaItemEntity
 import com.gpxvideo.core.database.entity.ProjectEntity
+import com.gpxvideo.core.model.GpxData
+import com.gpxvideo.feature.gpx.GpxImportManager
+import com.gpxvideo.lib.gpxparser.GpxStatistics
+import com.gpxvideo.lib.gpxparser.GpxStats
 import com.gpxvideo.lib.mediautils.MediaProber
 import com.gpxvideo.lib.mediautils.ThumbnailGenerator
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -19,6 +27,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.io.File
@@ -29,7 +38,11 @@ data class ProjectEditorUiState(
     val project: ProjectEntity? = null,
     val mediaItems: List<MediaItemEntity> = emptyList(),
     val isLoading: Boolean = true,
-    val isImporting: Boolean = false
+    val isImporting: Boolean = false,
+    val gpxData: GpxData? = null,
+    val gpxStats: GpxStats? = null,
+    val gpxFiles: List<GpxFileEntity> = emptyList(),
+    val isImportingGpx: Boolean = false
 )
 
 @HiltViewModel
@@ -37,6 +50,8 @@ class ProjectEditorViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val projectDao: ProjectDao,
     private val mediaItemDao: MediaItemDao,
+    private val gpxFileDao: GpxFileDao,
+    private val gpxImportManager: GpxImportManager,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -46,23 +61,51 @@ class ProjectEditorViewModel @Inject constructor(
 
     private val _project = MutableStateFlow<ProjectEntity?>(null)
     private val _isImporting = MutableStateFlow(false)
+    private val _gpxData = MutableStateFlow<GpxData?>(null)
+    private val _gpxStats = MutableStateFlow<GpxStats?>(null)
+    private val _isImportingGpx = MutableStateFlow(false)
 
     init {
         viewModelScope.launch {
             _project.value = projectDao.getById(projectId)
+        }
+        viewModelScope.launch {
+            val existingFiles = gpxFileDao.getByProjectId(projectId).first()
+            if (existingFiles.isNotEmpty()) {
+                val gpxData = gpxImportManager.parseGpxFile(existingFiles.first())
+                if (gpxData != null) {
+                    _gpxData.value = gpxData
+                    _gpxStats.value = GpxStatistics.computeFullStats(gpxData)
+                }
+            }
         }
     }
 
     val uiState: StateFlow<ProjectEditorUiState> = combine(
         _project,
         mediaItemDao.getByProjectId(projectId),
-        _isImporting
-    ) { project, mediaItems, importing ->
+        _isImporting,
+        gpxFileDao.getByProjectId(projectId),
+        _gpxData,
+        _gpxStats,
+        _isImportingGpx
+    ) { values ->
+        val project = values[0] as ProjectEntity?
+        val mediaItems = @Suppress("UNCHECKED_CAST") (values[1] as List<MediaItemEntity>)
+        val importing = values[2] as Boolean
+        val gpxFiles = @Suppress("UNCHECKED_CAST") (values[3] as List<GpxFileEntity>)
+        val gpxData = values[4] as GpxData?
+        val gpxStats = values[5] as GpxStats?
+        val importingGpx = values[6] as Boolean
         ProjectEditorUiState(
             project = project,
             mediaItems = mediaItems,
             isLoading = project == null,
-            isImporting = importing
+            isImporting = importing,
+            gpxData = gpxData,
+            gpxStats = gpxStats,
+            gpxFiles = gpxFiles,
+            isImportingGpx = importingGpx
         )
     }.stateIn(
         scope = viewModelScope,
@@ -146,6 +189,53 @@ class ProjectEditorViewModel @Inject constructor(
             fileSize = info.fileSize
         )
         mediaItemDao.insert(entity)
+    }
+
+    fun importGpxFile(uri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _isImportingGpx.value = true
+            try {
+                val name = getFileName(uri) ?: "track.gpx"
+                val result = gpxImportManager.importGpxFile(projectId, uri, name)
+                result.onSuccess { gpxFile ->
+                    gpxFile.parsedData?.let { data ->
+                        _gpxData.value = data
+                        _gpxStats.value = GpxStatistics.computeFullStats(data)
+                    }
+                }
+            } finally {
+                _isImportingGpx.value = false
+            }
+        }
+    }
+
+    fun deleteGpxFile(id: UUID) {
+        viewModelScope.launch(Dispatchers.IO) {
+            gpxImportManager.deleteGpxFile(id)
+            val remaining = gpxFileDao.getByProjectId(projectId).first()
+            if (remaining.isEmpty()) {
+                _gpxData.value = null
+                _gpxStats.value = null
+            } else {
+                val gpxData = gpxImportManager.parseGpxFile(remaining.first())
+                _gpxData.value = gpxData
+                _gpxStats.value = gpxData?.let { GpxStatistics.computeFullStats(it) }
+            }
+        }
+    }
+
+    private fun getFileName(uri: Uri): String? {
+        var name: String? = null
+        val cursor: Cursor? = context.contentResolver.query(uri, null, null, null, null)
+        cursor?.use {
+            if (it.moveToFirst()) {
+                val index = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (index >= 0) {
+                    name = it.getString(index)
+                }
+            }
+        }
+        return name
     }
 
     fun deleteMedia(mediaItemId: UUID) {
