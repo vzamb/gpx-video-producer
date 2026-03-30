@@ -3,7 +3,6 @@ package com.gpxvideo.feature.preview
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -41,7 +40,6 @@ fun VideoPreview(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .aspectRatio(16f / 9f)
             .background(Color.Black)
     ) {
         AndroidView(

@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.gpxvideo.core.database.dao.MediaItemDao
 import com.gpxvideo.core.database.dao.TimelineClipDao
 import com.gpxvideo.core.database.dao.TimelineTrackDao
+import com.gpxvideo.core.database.entity.MediaItemEntity
 import com.gpxvideo.core.database.entity.TimelineClipEntity
 import com.gpxvideo.core.database.entity.TimelineTrackEntity
 import com.gpxvideo.core.model.TrackType
@@ -12,8 +13,11 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -37,11 +41,15 @@ class TimelineViewModel @AssistedInject constructor(
     private val _state = MutableStateFlow(TimelineState())
     val state: StateFlow<TimelineState> = _state.asStateFlow()
 
+    // Emits whenever timeline content changes so preview can reload
+    private val _timelineChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val timelineChanged: SharedFlow<Unit> = _timelineChanged.asSharedFlow()
+
     private val undoManager = UndoManager()
 
     init {
         loadTimeline()
-        autoInitializeTimeline()
+        watchMediaItems()
     }
 
     private fun loadTimeline() {
@@ -72,60 +80,100 @@ class TimelineViewModel @AssistedInject constructor(
     }
 
     /**
-     * Auto-creates a video track + clips from project media items when
-     * the timeline is empty (first time opening the Editor tab).
+     * Watches media items and creates timeline clips for new imports.
+     * - If no tracks exist: creates VIDEO+AUDIO tracks and clips for all media.
+     * - If tracks exist: appends clips for any media not yet in the timeline.
      */
-    private fun autoInitializeTimeline() {
+    private fun watchMediaItems() {
         viewModelScope.launch {
-            val existingTracks = trackDao.getByProjectId(projectId).first()
-            if (existingTracks.isNotEmpty()) return@launch
+            mediaItemDao.getByProjectId(projectId).collect { mediaItems ->
+                if (mediaItems.isEmpty()) return@collect
 
-            val mediaItems = mediaItemDao.getByProjectId(projectId).first()
-            if (mediaItems.isEmpty()) return@launch
-
-            val videoTrackId = UUID.randomUUID()
-            val audioTrackId = UUID.randomUUID()
-            trackDao.insert(
-                TimelineTrackEntity(
-                    id = videoTrackId,
-                    projectId = projectId,
-                    type = TrackType.VIDEO.name,
-                    order = 0
-                )
-            )
-            trackDao.insert(
-                TimelineTrackEntity(
-                    id = audioTrackId,
-                    projectId = projectId,
-                    type = TrackType.AUDIO.name,
-                    order = 1
-                )
-            )
-
-            var currentTimeMs = 0L
-            for (media in mediaItems) {
-                val mediaDuration = media.durationMs
-                val durationMs: Long = when {
-                    media.type == "VIDEO" && mediaDuration != null && mediaDuration > 0 -> mediaDuration
-                    media.type == "IMAGE" -> 5000L
-                    else -> 3000L
+                val existingTracks = trackDao.getByProjectId(projectId).first()
+                if (existingTracks.isEmpty()) {
+                    initializeTimeline(mediaItems)
+                } else {
+                    addNewMediaToTimeline(mediaItems, existingTracks)
                 }
-                val clipId = UUID.randomUUID()
-                clipDao.insert(
-                    TimelineClipEntity(
-                        id = clipId,
-                        trackId = videoTrackId,
-                        mediaItemId = media.id,
-                        startTimeMs = currentTimeMs,
-                        endTimeMs = currentTimeMs + durationMs
-                    )
-                )
-                currentTimeMs += durationMs
             }
         }
     }
 
-    fun addClipToTrack(trackId: UUID, mediaItemId: UUID?, startTimeMs: Long, durationMs: Long) {
+    private suspend fun initializeTimeline(mediaItems: List<MediaItemEntity>) {
+        val videoTrackId = UUID.randomUUID()
+        val audioTrackId = UUID.randomUUID()
+        trackDao.insert(
+            TimelineTrackEntity(
+                id = videoTrackId,
+                projectId = projectId,
+                type = TrackType.VIDEO.name,
+                order = 0
+            )
+        )
+        trackDao.insert(
+            TimelineTrackEntity(
+                id = audioTrackId,
+                projectId = projectId,
+                type = TrackType.AUDIO.name,
+                order = 1
+            )
+        )
+
+        var currentTimeMs = 0L
+        for (media in mediaItems) {
+            val durationMs = getMediaDuration(media)
+            clipDao.insert(
+                TimelineClipEntity(
+                    id = UUID.randomUUID(),
+                    trackId = videoTrackId,
+                    mediaItemId = media.id,
+                    startTimeMs = currentTimeMs,
+                    endTimeMs = currentTimeMs + durationMs
+                )
+            )
+            currentTimeMs += durationMs
+        }
+        _timelineChanged.tryEmit(Unit)
+    }
+
+    private suspend fun addNewMediaToTimeline(
+        mediaItems: List<MediaItemEntity>,
+        existingTracks: List<TimelineTrackEntity>
+    ) {
+        val videoTrack = existingTracks.find { it.type == TrackType.VIDEO.name } ?: return
+
+        val existingClips = clipDao.getByTrackId(videoTrack.id).first()
+        val existingMediaIds = existingClips.mapNotNull { it.mediaItemId }.toSet()
+        val newMedia = mediaItems.filter { it.id !in existingMediaIds }
+        if (newMedia.isEmpty()) return
+
+        var currentEnd = existingClips.maxOfOrNull { it.endTimeMs } ?: 0L
+        for (media in newMedia) {
+            val durationMs = getMediaDuration(media)
+            clipDao.insert(
+                TimelineClipEntity(
+                    id = UUID.randomUUID(),
+                    trackId = videoTrack.id,
+                    mediaItemId = media.id,
+                    startTimeMs = currentEnd,
+                    endTimeMs = currentEnd + durationMs
+                )
+            )
+            currentEnd += durationMs
+        }
+        _timelineChanged.tryEmit(Unit)
+    }
+
+    private fun getMediaDuration(media: MediaItemEntity): Long {
+        val mediaDuration = media.durationMs
+        return when {
+            media.type == "VIDEO" && mediaDuration != null && mediaDuration > 0 -> mediaDuration
+            media.type == "IMAGE" -> 5000L
+            else -> 3000L
+        }
+    }
+
+    fun addClipToTrack(trackId: UUID, mediaItemId: UUID?, startTimeMs: Long, durationMs: Long, label: String = "Clip") {
         val track = _state.value.tracks.find { it.id == trackId } ?: return
         if (track.isLocked) return
 
@@ -133,12 +181,13 @@ class TimelineViewModel @AssistedInject constructor(
             id = UUID.randomUUID(),
             trackId = trackId,
             mediaItemId = mediaItemId,
-            label = "Clip",
+            label = label,
             startTimeMs = snapToGrid(startTimeMs),
             endTimeMs = snapToGrid(startTimeMs + durationMs),
             color = track.type.toColor()
         )
         executeAction(TimelineAction.AddClip(clip, trackId))
+        _timelineChanged.tryEmit(Unit)
     }
 
     fun moveClip(clipId: UUID, newStartTimeMs: Long) {
@@ -234,6 +283,64 @@ class TimelineViewModel @AssistedInject constructor(
             clips = emptyList()
         )
         executeAction(TimelineAction.AddTrack(track))
+    }
+
+    /**
+     * Creates an overlay track and clip spanning the given time range.
+     */
+    fun addOverlayToTimeline(overlayType: String, displayName: String) {
+        val maxOrder = _state.value.tracks.maxOfOrNull { it.order } ?: -1
+        val trackId = UUID.randomUUID()
+        val track = TimelineTrackState(
+            id = trackId,
+            type = TrackType.OVERLAY,
+            label = displayName,
+            order = maxOrder + 1,
+            clips = emptyList()
+        )
+        executeAction(TimelineAction.AddTrack(track))
+
+        val duration = _state.value.totalDurationMs.coerceAtLeast(5000L)
+        val clip = TimelineClipState(
+            id = UUID.randomUUID(),
+            trackId = trackId,
+            mediaItemId = null,
+            label = displayName,
+            startTimeMs = 0L,
+            endTimeMs = duration,
+            color = TrackType.OVERLAY.toColor()
+        )
+        executeAction(TimelineAction.AddClip(clip, trackId))
+        _timelineChanged.tryEmit(Unit)
+    }
+
+    /**
+     * Creates a text track and clip spanning the given time range.
+     */
+    fun addTextToTimeline(text: String) {
+        val maxOrder = _state.value.tracks.maxOfOrNull { it.order } ?: -1
+        val trackId = UUID.randomUUID()
+        val track = TimelineTrackState(
+            id = trackId,
+            type = TrackType.TEXT,
+            label = "Text",
+            order = maxOrder + 1,
+            clips = emptyList()
+        )
+        executeAction(TimelineAction.AddTrack(track))
+
+        val duration = _state.value.totalDurationMs.coerceAtLeast(5000L)
+        val clip = TimelineClipState(
+            id = UUID.randomUUID(),
+            trackId = trackId,
+            mediaItemId = null,
+            label = text.take(20),
+            startTimeMs = 0L,
+            endTimeMs = duration,
+            color = TrackType.TEXT.toColor()
+        )
+        executeAction(TimelineAction.AddClip(clip, trackId))
+        _timelineChanged.tryEmit(Unit)
     }
 
     fun deleteTrack(trackId: UUID) {
@@ -358,7 +465,11 @@ class TimelineViewModel @AssistedInject constructor(
     private fun persistState() {
         viewModelScope.launch {
             val currentState = _state.value
+            val allCurrentClipIds = mutableSetOf<UUID>()
+            val allCurrentTrackIds = mutableSetOf<UUID>()
+
             for (track in currentState.tracks) {
+                allCurrentTrackIds.add(track.id)
                 trackDao.insert(
                     TimelineTrackEntity(
                         id = track.id,
@@ -370,7 +481,24 @@ class TimelineViewModel @AssistedInject constructor(
                     )
                 )
                 for (clip in track.clips) {
+                    allCurrentClipIds.add(clip.id)
                     clipDao.insert(clip.toEntity())
+                }
+            }
+
+            // Delete clips/tracks that were removed from state
+            val dbTracks = trackDao.getByProjectId(projectId).first()
+            for (dbTrack in dbTracks) {
+                if (dbTrack.id !in allCurrentTrackIds) {
+                    clipDao.deleteByTrackId(dbTrack.id)
+                    trackDao.delete(dbTrack)
+                } else {
+                    val dbClips = clipDao.getByTrackId(dbTrack.id).first()
+                    for (dbClip in dbClips) {
+                        if (dbClip.id !in allCurrentClipIds) {
+                            clipDao.deleteById(dbClip.id)
+                        }
+                    }
                 }
             }
         }

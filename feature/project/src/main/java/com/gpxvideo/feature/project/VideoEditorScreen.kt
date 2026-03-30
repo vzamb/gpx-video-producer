@@ -4,11 +4,14 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -16,15 +19,30 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCut
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Upload
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,12 +50,18 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.gpxvideo.core.ui.component.LoadingIndicator
+import com.gpxvideo.feature.overlays.OverlayCatalog
+import com.gpxvideo.feature.overlays.OverlayCatalogItem
+import com.gpxvideo.feature.overlays.OverlayCategory
 import com.gpxvideo.feature.preview.PreviewViewModel
 import com.gpxvideo.feature.preview.VideoPreview
 import com.gpxvideo.feature.timeline.TimelineEditorAction
+import com.gpxvideo.feature.timeline.TimelineState
 import com.gpxvideo.feature.timeline.TimelineViewModel
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VideoEditorScreen(
     onNavigateBack: () -> Unit,
@@ -68,6 +92,13 @@ fun VideoEditorScreen(
     val playerIsPlaying by previewVm.isPlaying.collectAsStateWithLifecycle()
     val playerDuration by previewVm.duration.collectAsStateWithLifecycle()
 
+    // Reload preview when timeline content changes
+    LaunchedEffect(timelineVm) {
+        timelineVm.timelineChanged.collectLatest {
+            previewVm.reloadMedia()
+        }
+    }
+
     // Sync player position → timeline playhead while playing
     LaunchedEffect(Unit) {
         snapshotFlow { playerPosition to playerIsPlaying }
@@ -94,6 +125,11 @@ fun VideoEditorScreen(
     ) { uri ->
         uri?.let { viewModel.importGpxFile(it) }
     }
+
+    // Bottom sheet states
+    var showOverlayCatalog by remember { mutableStateOf(false) }
+    var showTextInput by remember { mutableStateOf(false) }
+    var showEffectsPanel by remember { mutableStateOf(false) }
 
     // Dispatch timeline actions to both ViewModels
     val handleTimelineAction: (TimelineEditorAction) -> Unit = { action ->
@@ -177,6 +213,13 @@ fun VideoEditorScreen(
             onToggleFullscreen = { /* TODO: fullscreen preview */ }
         )
 
+        // 3.5 Clip action bar (when a clip is selected)
+        ClipActionBar(
+            timelineState = timelineState,
+            onAction = handleTimelineAction,
+            onShowEffects = { showEffectsPanel = true }
+        )
+
         // 4. Timeline area
         EditorTimeline(
             timelineState = timelineState.copy(
@@ -210,13 +253,50 @@ fun VideoEditorScreen(
                     )
                 )
             },
-            onAddEffect = { /* TODO: open effects sheet */ },
-            onAddOverlay = { /* TODO: open overlay catalog sheet */ },
+            onAddEffect = { showEffectsPanel = true },
+            onAddOverlay = { showOverlayCatalog = true },
             onAddGpx = { gpxPickerLauncher.launch(arrayOf("*/*")) },
-            onAddText = { /* TODO: open text editor sheet */ }
+            onAddText = { showTextInput = true }
+        )
+    }
+
+    // --- Bottom Sheets ---
+
+    if (showOverlayCatalog) {
+        OverlayCatalogSheet(
+            onSelect = { item ->
+                timelineVm.addOverlayToTimeline(item.type, item.displayName)
+                showOverlayCatalog = false
+            },
+            onDismiss = { showOverlayCatalog = false }
+        )
+    }
+
+    if (showTextInput) {
+        TextInputSheet(
+            onConfirm = { text ->
+                timelineVm.addTextToTimeline(text)
+                showTextInput = false
+            },
+            onDismiss = { showTextInput = false }
+        )
+    }
+
+    if (showEffectsPanel) {
+        EffectsSheet(
+            timelineState = timelineState,
+            onSpeedChange = { clipId, speed ->
+                timelineVm.setClipSpeed(clipId, speed)
+            },
+            onVolumeChange = { clipId, volume ->
+                timelineVm.setClipVolume(clipId, volume)
+            },
+            onDismiss = { showEffectsPanel = false }
         )
     }
 }
+
+// --- Top Bar ---
 
 @Composable
 private fun EditorTopBar(
@@ -281,6 +361,216 @@ private fun EditorTopBar(
             )
             Spacer(modifier = Modifier.width(4.dp))
             Text("Export", style = MaterialTheme.typography.labelLarge)
+        }
+    }
+}
+
+// --- Clip Action Bar (shown when a clip is selected) ---
+
+@Composable
+private fun ClipActionBar(
+    timelineState: TimelineState,
+    onAction: (TimelineEditorAction) -> Unit,
+    onShowEffects: () -> Unit
+) {
+    val selectedClip = timelineState.selectedClipId ?: return
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(40.dp)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .padding(horizontal = 8.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconButton(onClick = { onAction(TimelineEditorAction.ClipSplit(selectedClip)) }) {
+            Icon(Icons.Default.ContentCut, "Split", modifier = Modifier.size(20.dp))
+        }
+        IconButton(onClick = { onAction(TimelineEditorAction.ClipDuplicated(selectedClip)) }) {
+            Icon(Icons.Default.ContentCopy, "Duplicate", modifier = Modifier.size(20.dp))
+        }
+        IconButton(onClick = onShowEffects) {
+            Icon(Icons.Default.Upload, "Effects", modifier = Modifier.size(20.dp))
+        }
+        IconButton(onClick = { onAction(TimelineEditorAction.ClipDeleted(selectedClip)) }) {
+            Icon(Icons.Default.Delete, "Delete", modifier = Modifier.size(20.dp),
+                tint = MaterialTheme.colorScheme.error)
+        }
+        IconButton(onClick = { onAction(TimelineEditorAction.ClipSelected(null)) }) {
+            Icon(Icons.Default.Close, "Deselect", modifier = Modifier.size(20.dp))
+        }
+    }
+}
+
+// --- Overlay Catalog Bottom Sheet ---
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun OverlayCatalogSheet(
+    onSelect: (OverlayCatalogItem) -> Unit,
+    onDismiss: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ) {
+        Text(
+            text = "Add Overlay",
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+
+        OverlayCategory.entries.forEach { category ->
+            val items = OverlayCatalog.items.filter { it.category == category }
+            if (items.isNotEmpty()) {
+                Text(
+                    text = category.displayName,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                )
+                items.forEach { item ->
+                    ListItem(
+                        headlineContent = { Text(item.displayName) },
+                        supportingContent = { Text(item.description) },
+                        leadingContent = {
+                            Icon(
+                                imageVector = item.icon,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        },
+                        modifier = Modifier.clickable { onSelect(item) }
+                    )
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(32.dp))
+    }
+}
+
+// --- Text Input Bottom Sheet ---
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TextInputSheet(
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var textValue by remember { mutableStateOf("") }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Text(
+                text = "Add Text Overlay",
+                style = MaterialTheme.typography.titleMedium
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedTextField(
+                value = textValue,
+                onValueChange = { textValue = it },
+                label = { Text("Text content") },
+                modifier = Modifier.fillMaxWidth(),
+                maxLines = 3
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+                Spacer(modifier = Modifier.width(8.dp))
+                FilledTonalButton(
+                    onClick = { if (textValue.isNotBlank()) onConfirm(textValue) },
+                    enabled = textValue.isNotBlank()
+                ) { Text("Add") }
+            }
+            Spacer(modifier = Modifier.height(32.dp))
+        }
+    }
+}
+
+// --- Effects Bottom Sheet ---
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EffectsSheet(
+    timelineState: TimelineState,
+    onSpeedChange: (java.util.UUID, Float) -> Unit,
+    onVolumeChange: (java.util.UUID, Float) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val selectedClip = timelineState.selectedClipId?.let { clipId ->
+        timelineState.tracks.flatMap { it.clips }.find { it.id == clipId }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Text(
+                text = "Clip Effects",
+                style = MaterialTheme.typography.titleMedium
+            )
+
+            if (selectedClip == null) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "Select a clip in the timeline first",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Speed control
+                Text("Speed: ${"%.1fx".format(selectedClip.speed)}", style = MaterialTheme.typography.labelLarge)
+                var speedValue by remember(selectedClip.id) { mutableFloatStateOf(selectedClip.speed) }
+                Slider(
+                    value = speedValue,
+                    onValueChange = { speedValue = it },
+                    onValueChangeFinished = { onSpeedChange(selectedClip.id, speedValue) },
+                    valueRange = 0.25f..4f,
+                    steps = 14
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Volume control
+                Text("Volume: ${(selectedClip.volume * 100).toInt()}%", style = MaterialTheme.typography.labelLarge)
+                var volumeValue by remember(selectedClip.id) { mutableFloatStateOf(selectedClip.volume) }
+                Slider(
+                    value = volumeValue,
+                    onValueChange = { volumeValue = it },
+                    onValueChangeFinished = { onVolumeChange(selectedClip.id, volumeValue) },
+                    valueRange = 0f..2f,
+                    steps = 7
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Clip info
+                val durationSec = (selectedClip.endTimeMs - selectedClip.startTimeMs) / 1000f
+                Text(
+                    text = "Duration: ${"%.1f".format(durationSec)}s | Start: ${selectedClip.startTimeMs / 1000}s",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 }

@@ -55,7 +55,7 @@ class PreviewViewModel @AssistedInject constructor(
         loadProjectMedia()
     }
 
-    private fun loadProjectMedia() {
+    fun loadProjectMedia() {
         viewModelScope.launch {
             val mediaItems = mediaItemDao.getByProjectId(projectId).first()
             val mediaMap = mediaItems.associateBy { it.id }
@@ -79,6 +79,11 @@ class PreviewViewModel @AssistedInject constructor(
             }
             _uiState.value = _uiState.value.copy(isLoading = false)
         }
+    }
+
+    /** Called by the screen when timeline content changes. */
+    fun reloadMedia() {
+        loadProjectMedia()
     }
 
     fun play() = previewEngine.play()
@@ -106,10 +111,18 @@ class PreviewViewModel @AssistedInject constructor(
 
     private fun TimelineClipEntity.toPreviewClip(mediaItem: MediaItemEntity): PreviewClip {
         val clipDurationMs = endTimeMs - startTimeMs
+        // trimStartMs = how far into the source media to start
+        // If trimEndMs is 0 (default), use the full clip duration from the source
+        val effectiveEndMs = if (trimEndMs > 0L) {
+            trimEndMs
+        } else {
+            val sourceDuration = mediaItem.durationMs ?: clipDurationMs
+            (trimStartMs + clipDurationMs).coerceAtMost(sourceDuration)
+        }
         return PreviewClip(
             uri = pathToUri(mediaItem.localCopyPath),
             startMs = trimStartMs,
-            endMs = trimStartMs + clipDurationMs,
+            endMs = effectiveEndMs,
             speed = speed
         )
     }
