@@ -5,6 +5,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.rememberNavController
 import com.gpxvideo.feature.home.homeScreen
 import com.gpxvideo.feature.home.HomeRoute
+import com.gpxvideo.feature.preview.PreviewRoute
+import com.gpxvideo.feature.preview.previewScreen
 import com.gpxvideo.feature.project.CreateProjectRoute
 import com.gpxvideo.feature.project.ProjectEditorRoute
 import com.gpxvideo.feature.project.createProjectScreen
@@ -37,6 +39,10 @@ fun AppNavigation() {
         )
 
         projectEditorScreen(
+            onNavigateBack = { navController.popBackStack() }
+        )
+
+        previewScreen(
             onNavigateBack = { navController.popBackStack() }
         )
     }
