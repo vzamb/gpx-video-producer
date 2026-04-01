@@ -118,6 +118,13 @@ class PreviewViewModel @AssistedInject constructor(
 
     fun captureCurrentFrame(): android.graphics.Bitmap? = previewEngine.captureFrame()
 
+    /**
+     * Capture a frame guaranteed free of any color adjustments applied to the
+     * preview TextureView.  Used by the effects panel so filter previews start
+     * from an unmodified image.
+     */
+    fun captureCleanFrame(): android.graphics.Bitmap? = previewEngine.captureCleanFrame()
+
     fun setPlaybackSpeed(speed: Float) {
         previewEngine.setPlaybackSpeed(speed)
         _uiState.value = _uiState.value.copy(playbackSpeed = speed)

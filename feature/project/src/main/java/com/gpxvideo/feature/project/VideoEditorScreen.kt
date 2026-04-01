@@ -31,6 +31,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
@@ -472,13 +473,17 @@ fun VideoEditorScreen(
 
     if (showEffectsPanel) {
         var frameBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
-        LaunchedEffect(Unit) {
-            kotlinx.coroutines.delay(200)
-            frameBitmap = previewVm.captureCurrentFrame()
-        }
         val targetClip = timelineState.selectedClipId?.let { clipId ->
             timelineState.tracks.flatMap { it.clips }.find { it.id == clipId }
         } ?: timelineState.tracks.flatMap { it.clips }.firstOrNull()
+
+        // Extract a clean frame from the source file so that previously applied
+        // color adjustments don't bleed into filter previews.
+        LaunchedEffect(Unit) {
+            frameBitmap = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                previewVm.captureCleanFrame()
+            }
+        }
 
         EffectsSheet(
             frameBitmap = frameBitmap,
@@ -692,26 +697,26 @@ private fun ClipActionBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(36.dp)
+            .height(34.dp)
             .background(MaterialTheme.colorScheme.surfaceContainer)
-            .padding(horizontal = 12.dp),
+            .padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        IconButton(onClick = { onAction(TimelineEditorAction.ClipSplit(selectedClip)) }, modifier = Modifier.size(32.dp)) {
-            Icon(Icons.Default.ContentCut, "Split", modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        IconButton(onClick = { onAction(TimelineEditorAction.ClipSplit(selectedClip)) }, modifier = Modifier.size(30.dp)) {
+            Icon(Icons.Default.ContentCut, "Split", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        IconButton(onClick = { onAction(TimelineEditorAction.ClipDuplicated(selectedClip)) }, modifier = Modifier.size(32.dp)) {
-            Icon(Icons.Default.ContentCopy, "Duplicate", modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        IconButton(onClick = { onAction(TimelineEditorAction.ClipDuplicated(selectedClip)) }, modifier = Modifier.size(30.dp)) {
+            Icon(Icons.Default.ContentCopy, "Duplicate", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        IconButton(onClick = onShowEffects, modifier = Modifier.size(32.dp)) {
-            Icon(Icons.Default.Upload, "Effects", modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+        IconButton(onClick = onShowEffects, modifier = Modifier.size(30.dp)) {
+            Icon(Icons.Default.AutoAwesome, "Effects", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
         }
-        IconButton(onClick = { onAction(TimelineEditorAction.ClipDeleted(selectedClip)) }, modifier = Modifier.size(32.dp)) {
-            Icon(Icons.Default.Delete, "Delete", modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error)
+        IconButton(onClick = { onAction(TimelineEditorAction.ClipDeleted(selectedClip)) }, modifier = Modifier.size(30.dp)) {
+            Icon(Icons.Default.Delete, "Delete", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error)
         }
-        IconButton(onClick = { onAction(TimelineEditorAction.ClipSelected(null)) }, modifier = Modifier.size(32.dp)) {
-            Icon(Icons.Default.Close, "Deselect", modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        IconButton(onClick = { onAction(TimelineEditorAction.ClipSelected(null)) }, modifier = Modifier.size(30.dp)) {
+            Icon(Icons.Default.Close, "Deselect", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -1145,29 +1150,32 @@ private fun StatOverlayPreviewTile(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(1.2f)
+                .aspectRatio(1.3f)
                 .background(
                     androidx.compose.ui.graphics.Color(0xFF161B22),
-                    androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
+                    androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
                 )
-                .padding(6.dp),
+                .padding(4.dp),
             contentAlignment = Alignment.Center
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
                 if (isLive) {
                     Box(
                         modifier = Modifier
-                            .size(6.dp)
+                            .size(5.dp)
                             .background(
                                 androidx.compose.ui.graphics.Color(0xFFEF5350),
                                 CircleShape
                             )
                     )
-                    Spacer(modifier = Modifier.height(2.dp))
+                    Spacer(modifier = Modifier.height(1.dp))
                 }
                 Text(
                     text = value,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.primary,
                     maxLines = 1
                 )
@@ -1181,7 +1189,7 @@ private fun StatOverlayPreviewTile(
                 }
             }
         }
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,

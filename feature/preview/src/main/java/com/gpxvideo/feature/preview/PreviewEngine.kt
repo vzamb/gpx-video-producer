@@ -255,6 +255,41 @@ class PreviewEngine @Inject constructor(
         return try { boundTextureView?.bitmap } catch (_: Exception) { null }
     }
 
+    /**
+     * Return a frame that is guaranteed free of any [PreviewDisplayTransform]
+     * color adjustments.  Uses [android.media.MediaMetadataRetriever] on the
+     * source file so the hardware-layer paint applied to the [TextureView] is
+     * bypassed entirely.  Falls back to [captureFrame] when retrieval fails.
+     */
+    fun captureCleanFrame(): android.graphics.Bitmap? {
+        val player = exoPlayer ?: return captureFrame()
+        val idx = player.currentMediaItemIndex
+        if (idx < 0 || idx >= player.mediaItemCount) return captureFrame()
+
+        val uri = player.getMediaItemAt(idx).localConfiguration?.uri
+            ?: return captureFrame()
+
+        return try {
+            val retriever = android.media.MediaMetadataRetriever()
+            try {
+                if (uri.scheme.let { it == "file" || it == null }) {
+                    retriever.setDataSource(uri.path)
+                } else {
+                    retriever.setDataSource(context, uri)
+                }
+                val positionUs = player.currentPosition * 1000L
+                retriever.getFrameAtTime(
+                    positionUs,
+                    android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC
+                )
+            } finally {
+                retriever.release()
+            }
+        } catch (_: Exception) {
+            captureFrame()
+        }
+    }
+
     private fun ensureInitialized() {
         if (exoPlayer == null) initialize()
     }
