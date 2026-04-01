@@ -2,12 +2,17 @@ package com.gpxvideo.feature.preview
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
+import android.view.TextureView
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.VideoSize
 import androidx.annotation.OptIn
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import com.gpxvideo.feature.timeline.ClipContentMode
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -26,15 +31,42 @@ data class PreviewClip(
     val uri: Uri,
     val startMs: Long,
     val endMs: Long,
-    val speed: Float = 1f
+    val speed: Float = 1f,
+    val displayTransform: PreviewDisplayTransform = PreviewDisplayTransform()
+)
+
+data class PreviewDisplayTransform(
+    val contentMode: ClipContentMode = ClipContentMode.FIT,
+    val positionX: Float = 0.5f,
+    val positionY: Float = 0.5f,
+    val scale: Float = 1f,
+    val rotationDegrees: Float = 0f,
+    val brightness: Float = 0f,
+    val contrast: Float = 1f,
+    val saturation: Float = 1f,
+    /** Known aspect ratio of the source video (width/height, rotation-corrected). 0 = unknown. */
+    val sourceVideoAspectRatio: Float = 0f
+)
+
+private data class PreviewClipRange(
+    val index: Int,
+    val timelineStartMs: Long,
+    val timelineEndMs: Long,
+    val displayTransform: PreviewDisplayTransform
 )
 
 @Singleton
 class PreviewEngine @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
+    private companion object {
+        const val TAG = "PreviewEngine"
+    }
+
     private var exoPlayer: ExoPlayer? = null
+    private var boundTextureView: TextureView? = null
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private var clipRanges: List<PreviewClipRange> = emptyList()
 
     private val _currentPositionMs = MutableStateFlow(0L)
     val currentPositionMs: StateFlow<Long> = _currentPositionMs.asStateFlow()
@@ -44,6 +76,12 @@ class PreviewEngine @Inject constructor(
 
     private val _duration = MutableStateFlow(0L)
     val duration: StateFlow<Long> = _duration.asStateFlow()
+
+    private val _videoAspectRatio = MutableStateFlow<Float?>(null)
+    val videoAspectRatio: StateFlow<Float?> = _videoAspectRatio.asStateFlow()
+
+    private val _activeDisplayTransform = MutableStateFlow(PreviewDisplayTransform())
+    val activeDisplayTransform: StateFlow<PreviewDisplayTransform> = _activeDisplayTransform.asStateFlow()
 
     private var positionPollingJob: Job? = null
 
@@ -58,11 +96,37 @@ class PreviewEngine @Inject constructor(
 
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     if (playbackState == Player.STATE_READY) {
-                        _duration.value = player.duration.coerceAtLeast(0)
+                        _duration.value = clipRanges.lastOrNull()?.timelineEndMs ?: 0L
+                        _currentPositionMs.value = currentTimelinePosition(player)
+                        updateActiveDisplayTransform(player.currentMediaItemIndex)
                     }
                     if (playbackState == Player.STATE_ENDED) {
                         _isPlaying.value = false
+                        _currentPositionMs.value = clipRanges.lastOrNull()?.timelineEndMs ?: 0L
                         stopPositionPolling()
+                    }
+                }
+
+                override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                    updateActiveDisplayTransform(player.currentMediaItemIndex)
+                }
+
+                override fun onPlayerError(error: PlaybackException) {
+                    Log.e(TAG, "Preview playback failed", error)
+                    _isPlaying.value = false
+                    stopPositionPolling()
+                }
+
+                override fun onVideoSizeChanged(videoSize: VideoSize) {
+                    val width = videoSize.width
+                    val height = videoSize.height
+                    // Only update AR when a valid size is reported.
+                    // ExoPlayer fires 0x0 during clip transitions — ignore those to avoid
+                    // momentarily losing the correct aspect ratio.
+                    if (width > 0 && height > 0) {
+                        val ar = (width * videoSize.pixelWidthHeightRatio) / height.toFloat()
+                        Log.d(TAG, "onVideoSizeChanged: ${width}x${height} pxRatio=${videoSize.pixelWidthHeightRatio} → AR=$ar")
+                        _videoAspectRatio.value = ar
                     }
                 }
             })
@@ -76,10 +140,13 @@ class PreviewEngine @Inject constructor(
         _currentPositionMs.value = 0
         _isPlaying.value = false
         _duration.value = 0
+        _videoAspectRatio.value = null
+        _activeDisplayTransform.value = PreviewDisplayTransform()
     }
 
     fun setMediaSource(uri: Uri) {
         ensureInitialized()
+        clipRanges = emptyList()
         val item = MediaItem.fromUri(uri)
         exoPlayer?.setMediaItem(item)
         exoPlayer?.prepare()
@@ -88,8 +155,30 @@ class PreviewEngine @Inject constructor(
     @OptIn(UnstableApi::class)
     fun setMediaSources(clips: List<PreviewClip>) {
         ensureInitialized()
-        if (clips.isEmpty()) return
-        val items = clips.map { clip ->
+        val validClips = clips.filter { it.endMs > it.startMs }
+        if (validClips.isEmpty()) {
+            clipRanges = emptyList()
+            _duration.value = 0L
+            _currentPositionMs.value = 0L
+            _videoAspectRatio.value = null
+            _activeDisplayTransform.value = PreviewDisplayTransform()
+            _isPlaying.value = false
+            exoPlayer?.clearMediaItems()
+            return
+        }
+        var timelineCursor = 0L
+        clipRanges = validClips.mapIndexed { index, clip ->
+            val durationMs = (clip.endMs - clip.startMs).coerceAtLeast(0L)
+            val range = PreviewClipRange(
+                index = index,
+                timelineStartMs = timelineCursor,
+                timelineEndMs = timelineCursor + durationMs,
+                displayTransform = clip.displayTransform
+            )
+            timelineCursor += durationMs
+            range
+        }
+        val items = validClips.map { clip ->
             MediaItem.Builder()
                 .setUri(clip.uri)
                 .setClippingConfiguration(
@@ -102,10 +191,25 @@ class PreviewEngine @Inject constructor(
         }
         exoPlayer?.setMediaItems(items)
         exoPlayer?.prepare()
+        exoPlayer?.playWhenReady = false
+        exoPlayer?.seekTo(0, 1L)
+        _duration.value = clipRanges.lastOrNull()?.timelineEndMs ?: 0L
+        _currentPositionMs.value = 0L
+        val firstTransform = clipRanges.firstOrNull()?.displayTransform ?: PreviewDisplayTransform()
+        _activeDisplayTransform.value = firstTransform
+        if (firstTransform.sourceVideoAspectRatio > 0f) {
+            _videoAspectRatio.value = firstTransform.sourceVideoAspectRatio
+        }
     }
 
     fun play() {
-        exoPlayer?.play()
+        val player = exoPlayer ?: return
+        if (player.playbackState == Player.STATE_ENDED) {
+            player.seekTo(0, 0L)
+        }
+        player.prepare()
+        player.playWhenReady = true
+        player.play()
     }
 
     fun pause() {
@@ -113,8 +217,21 @@ class PreviewEngine @Inject constructor(
     }
 
     fun seekTo(positionMs: Long) {
-        exoPlayer?.seekTo(positionMs)
-        _currentPositionMs.value = positionMs
+        val player = exoPlayer ?: return
+        if (clipRanges.isEmpty()) {
+            player.seekTo(positionMs)
+            _currentPositionMs.value = positionMs
+            return
+        }
+        val clampedPosition = positionMs.coerceIn(0L, clipRanges.last().timelineEndMs)
+        val range = clipRanges.firstOrNull { clampedPosition < it.timelineEndMs } ?: clipRanges.last()
+        val localPosition = (clampedPosition - range.timelineStartMs).coerceAtLeast(0L)
+        player.seekTo(range.index, localPosition)
+        _currentPositionMs.value = clampedPosition
+        _activeDisplayTransform.value = range.displayTransform
+        if (range.displayTransform.sourceVideoAspectRatio > 0f) {
+            _videoAspectRatio.value = range.displayTransform.sourceVideoAspectRatio
+        }
     }
 
     fun setPlaybackSpeed(speed: Float) {
@@ -122,6 +239,21 @@ class PreviewEngine @Inject constructor(
     }
 
     fun getPlayer(): ExoPlayer? = exoPlayer
+
+    fun bindToTextureView(textureView: TextureView) {
+        ensureInitialized()
+        boundTextureView = textureView
+        exoPlayer?.setVideoTextureView(textureView)
+    }
+
+    fun unbindTextureView(textureView: TextureView) {
+        exoPlayer?.clearVideoTextureView(textureView)
+        if (boundTextureView == textureView) boundTextureView = null
+    }
+
+    fun captureFrame(): android.graphics.Bitmap? {
+        return try { boundTextureView?.bitmap } catch (_: Exception) { null }
+    }
 
     private fun ensureInitialized() {
         if (exoPlayer == null) initialize()
@@ -132,8 +264,8 @@ class PreviewEngine @Inject constructor(
         positionPollingJob = scope.launch {
             while (isActive) {
                 exoPlayer?.let { player ->
-                    _currentPositionMs.value = player.currentPosition
-                    _duration.value = player.duration.coerceAtLeast(0)
+                    _currentPositionMs.value = currentTimelinePosition(player)
+                    _duration.value = clipRanges.lastOrNull()?.timelineEndMs ?: player.duration.coerceAtLeast(0)
                 }
                 delay(16)
             }
@@ -143,5 +275,27 @@ class PreviewEngine @Inject constructor(
     private fun stopPositionPolling() {
         positionPollingJob?.cancel()
         positionPollingJob = null
+    }
+
+    private fun currentTimelinePosition(player: ExoPlayer): Long {
+        if (clipRanges.isEmpty()) return player.currentPosition.coerceAtLeast(0L)
+        val currentItemIndex = player.currentMediaItemIndex.coerceAtLeast(0)
+        val range = clipRanges.getOrNull(currentItemIndex) ?: return player.currentPosition.coerceAtLeast(0L)
+        return (range.timelineStartMs + player.currentPosition).coerceAtMost(
+            clipRanges.lastOrNull()?.timelineEndMs ?: Long.MAX_VALUE
+        )
+    }
+
+    private fun updateActiveDisplayTransform(currentItemIndex: Int) {
+        val transform = clipRanges
+            .getOrNull(currentItemIndex.coerceAtLeast(0))
+            ?.displayTransform
+            ?: PreviewDisplayTransform()
+        _activeDisplayTransform.value = transform
+        // Eagerly set the video AR from metadata so the TextureView transform is correct
+        // even before ExoPlayer fires onVideoSizeChanged for this clip.
+        if (transform.sourceVideoAspectRatio > 0f) {
+            _videoAspectRatio.value = transform.sourceVideoAspectRatio
+        }
     }
 }

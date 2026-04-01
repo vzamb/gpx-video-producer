@@ -19,60 +19,82 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 
-// Colors
-val Orange500 = Color(0xFFFF5722)
-val Orange700 = Color(0xFFE64A19)
-val Amber500 = Color(0xFFFFC107)
-val Green500 = Color(0xFF4CAF50)
-val Green700 = Color(0xFF388E3C)
+// Primary accent — a sporty blue that pops on dark surfaces
+val AccentBlue = Color(0xFF448AFF)
+val AccentBlueDark = Color(0xFF1565C0)
 
-val DarkBackground = Color(0xFF121212)
-val DarkSurface = Color(0xFF1E1E1E)
-val DarkSurfaceVariant = Color(0xFF2D2D2D)
+// Secondary — warm highlight for GPX data visuals
+val AccentTeal = Color(0xFF26A69A)
+val AccentTealDark = Color(0xFF00796B)
+
+// Tertiary — warm accent for warnings and emphasis
+val AccentAmber = Color(0xFFFFAB40)
+
+// Sport-activity highlight colors (kept for route/profile visuals)
+val SportGreen = Color(0xFF66BB6A)
+val SportRed = Color(0xFFEF5350)
+
+// Dark palette — deep blue-black editor surfaces
+val EditorBackground = Color(0xFF0D1117)
+val EditorSurface = Color(0xFF161B22)
+val EditorSurfaceVariant = Color(0xFF21262D)
+val EditorSurfaceContainer = Color(0xFF1A1F27)
+val EditorSurfaceContainerHigh = Color(0xFF262C36)
+val EditorSurfaceDim = Color(0xFF0A0E13)
 
 private val DarkColorScheme = darkColorScheme(
-    primary = Orange500,
+    primary = AccentBlue,
     onPrimary = Color.White,
-    primaryContainer = Orange700,
+    primaryContainer = AccentBlueDark,
     onPrimaryContainer = Color.White,
-    secondary = Green500,
+    secondary = AccentTeal,
     onSecondary = Color.White,
-    secondaryContainer = Green700,
+    secondaryContainer = AccentTealDark,
     onSecondaryContainer = Color.White,
-    tertiary = Amber500,
-    background = DarkBackground,
-    onBackground = Color.White,
-    surface = DarkSurface,
-    onSurface = Color.White,
-    surfaceVariant = DarkSurfaceVariant,
-    onSurfaceVariant = Color(0xFFCACACA),
-    outline = Color(0xFF5A5A5A),
-    error = Color(0xFFCF6679),
-    onError = Color.Black
+    tertiary = AccentAmber,
+    background = EditorBackground,
+    onBackground = Color(0xFFE6EDF3),
+    surface = EditorSurface,
+    onSurface = Color(0xFFE6EDF3),
+    surfaceVariant = EditorSurfaceVariant,
+    onSurfaceVariant = Color(0xFF8B949E),
+    surfaceContainerLowest = EditorSurfaceDim,
+    surfaceContainerLow = EditorBackground,
+    surfaceContainer = EditorSurfaceContainer,
+    surfaceContainerHigh = EditorSurfaceContainerHigh,
+    surfaceDim = EditorSurfaceDim,
+    outline = Color(0xFF30363D),
+    outlineVariant = Color(0xFF21262D),
+    error = Color(0xFFF85149),
+    onError = Color.White,
+    inverseSurface = Color(0xFFE6EDF3),
+    inverseOnSurface = EditorBackground
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = Orange500,
+    primary = AccentBlue,
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFFFCCBC),
-    onPrimaryContainer = Color(0xFF3E0400),
-    secondary = Green500,
+    primaryContainer = Color(0xFFD6E4FF),
+    onPrimaryContainer = Color(0xFF001A40),
+    secondary = AccentTeal,
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFC8E6C9),
-    onSecondaryContainer = Color(0xFF002204),
-    tertiary = Amber500
+    secondaryContainer = Color(0xFFB2DFDB),
+    onSecondaryContainer = Color(0xFF00201E),
+    tertiary = AccentAmber
 )
 
 val GpxVideoTypography = Typography(
     headlineLarge = TextStyle(
         fontWeight = FontWeight.Bold,
         fontSize = 28.sp,
-        lineHeight = 36.sp
+        lineHeight = 36.sp,
+        letterSpacing = (-0.5).sp
     ),
     headlineMedium = TextStyle(
         fontWeight = FontWeight.SemiBold,
         fontSize = 24.sp,
-        lineHeight = 32.sp
+        lineHeight = 32.sp,
+        letterSpacing = (-0.25).sp
     ),
     titleLarge = TextStyle(
         fontWeight = FontWeight.SemiBold,
@@ -84,6 +106,12 @@ val GpxVideoTypography = Typography(
         fontSize = 16.sp,
         lineHeight = 24.sp
     ),
+    titleSmall = TextStyle(
+        fontWeight = FontWeight.Medium,
+        fontSize = 14.sp,
+        lineHeight = 20.sp,
+        letterSpacing = 0.1.sp
+    ),
     bodyLarge = TextStyle(
         fontSize = 16.sp,
         lineHeight = 24.sp
@@ -92,23 +120,35 @@ val GpxVideoTypography = Typography(
         fontSize = 14.sp,
         lineHeight = 20.sp
     ),
+    bodySmall = TextStyle(
+        fontSize = 12.sp,
+        lineHeight = 16.sp
+    ),
     labelLarge = TextStyle(
         fontWeight = FontWeight.Medium,
         fontSize = 14.sp,
-        lineHeight = 20.sp
+        lineHeight = 20.sp,
+        letterSpacing = 0.1.sp
+    ),
+    labelMedium = TextStyle(
+        fontWeight = FontWeight.Medium,
+        fontSize = 12.sp,
+        lineHeight = 16.sp,
+        letterSpacing = 0.5.sp
     ),
     labelSmall = TextStyle(
         fontWeight = FontWeight.Medium,
-        fontSize = 11.sp,
-        lineHeight = 16.sp
+        fontSize = 10.sp,
+        lineHeight = 14.sp,
+        letterSpacing = 0.5.sp
     )
 )
 
 val GpxVideoShapes = Shapes(
-    small = RoundedCornerShape(8.dp),
-    medium = RoundedCornerShape(12.dp),
-    large = RoundedCornerShape(16.dp),
-    extraLarge = RoundedCornerShape(24.dp)
+    small = RoundedCornerShape(6.dp),
+    medium = RoundedCornerShape(10.dp),
+    large = RoundedCornerShape(14.dp),
+    extraLarge = RoundedCornerShape(20.dp)
 )
 
 @Composable
@@ -123,6 +163,7 @@ fun GpxVideoTheme(
         SideEffect {
             val window = (view.context as Activity).window
             window.statusBarColor = colorScheme.background.toArgb()
+            window.navigationBarColor = colorScheme.background.toArgb()
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
         }
     }

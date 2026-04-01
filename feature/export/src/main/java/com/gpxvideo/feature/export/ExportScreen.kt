@@ -21,6 +21,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -47,6 +48,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -64,6 +66,7 @@ fun ExportScreen(
     viewModel: ExportViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
     Scaffold(
         topBar = {
@@ -121,7 +124,12 @@ fun ExportScreen(
                     ExportCompleteSection(
                         outputPath = state.outputPath,
                         fileSizeBytes = state.fileSizeBytes,
-                        onShare = { onExportComplete(state.outputPath) },
+                        onShare = {
+                            shareVideoFile(context, state.outputPath)
+                        },
+                        onSaveToGallery = {
+                            viewModel.saveToGallery(state.outputPath)
+                        },
                         onDone = onNavigateBack
                     )
                 }
@@ -334,6 +342,7 @@ private fun ExportCompleteSection(
     outputPath: String,
     fileSizeBytes: Long,
     onShare: () -> Unit,
+    onSaveToGallery: () -> Unit,
     onDone: () -> Unit
 ) {
     Card(
@@ -370,35 +379,73 @@ private fun ExportCompleteSection(
             )
 
             val sizeMb = fileSizeBytes / (1024f * 1024f)
-            Text(
-                "${"%.1f".format(sizeMb)} MB",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            if (fileSizeBytes > 0) {
+                Text(
+                    "${"%.1f".format(sizeMb)} MB",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Text(
+                    "Stub export — add FFmpeg-kit for real encoding",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
 
-            Row(
+            // Share button
+            Button(
+                onClick = onShare,
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary
+                )
             ) {
-                OutlinedButton(
-                    onClick = onShare,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(Icons.Default.Share, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Share")
-                }
+                Icon(Icons.Default.Share, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Share")
+            }
 
-                Button(
-                    onClick = onDone,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(Icons.Default.FolderOpen, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Done")
-                }
+            // Save to gallery
+            OutlinedButton(
+                onClick = onSaveToGallery,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.FolderOpen, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Save to Gallery")
+            }
+
+            // Done
+            OutlinedButton(
+                onClick = onDone,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Done")
             }
         }
+    }
+}
+
+private fun shareVideoFile(context: android.content.Context, filePath: String) {
+    try {
+        val file = java.io.File(filePath)
+        if (!file.exists()) return
+        val uri = androidx.core.content.FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            file
+        )
+        val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+            type = "video/*"
+            putExtra(android.content.Intent.EXTRA_STREAM, uri)
+            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(
+            android.content.Intent.createChooser(shareIntent, "Share video")
+        )
+    } catch (e: Exception) {
+        android.widget.Toast.makeText(context, "Could not share: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
     }
 }
 

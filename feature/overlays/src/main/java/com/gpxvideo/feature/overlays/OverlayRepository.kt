@@ -68,6 +68,10 @@ class OverlayRepository @Inject constructor(
                 DynamicStatJson.serializer(),
                 DynamicStatJson(config.field.name, config.syncMode.name, config.format)
             )
+            is OverlayConfig.TextLabel -> "text_label" to json.encodeToString(
+                TextLabelJson.serializer(),
+                TextLabelJson(config.text, config.textAlignment)
+            )
         }
 
         val styleJson = json.encodeToString(
@@ -190,6 +194,20 @@ class OverlayRepository @Inject constructor(
                         format = c.format
                     )
                 }
+                "text_label" -> {
+                    val c = json.decodeFromString(TextLabelJson.serializer(), entity.configJson)
+                    OverlayConfig.TextLabel(
+                        id = entity.id,
+                        projectId = entity.projectId,
+                        name = entity.name,
+                        timelineClipId = entity.timelineClipId,
+                        position = position,
+                        size = size,
+                        style = style,
+                        text = c.text,
+                        textAlignment = c.textAlignment
+                    )
+                }
                 else -> null
             }
         } catch (_: Exception) {
@@ -257,4 +275,10 @@ internal data class DynamicStatJson(
     val field: String = "CURRENT_SPEED",
     val syncMode: String = "GPX_TIMESTAMP",
     val format: String = ""
+)
+
+@Serializable
+internal data class TextLabelJson(
+    val text: String = "Text",
+    val textAlignment: String = "CENTER"
 )

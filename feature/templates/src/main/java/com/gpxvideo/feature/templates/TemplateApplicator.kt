@@ -152,6 +152,14 @@ class TemplateApplicator @Inject constructor(
                 size = preset.defaultSize,
                 style = preset.defaultStyle
             )
+            "text_label" -> OverlayConfig.TextLabel(
+                projectId = projectId,
+                timelineClipId = timelineClipId,
+                position = preset.defaultPosition,
+                size = preset.defaultSize,
+                style = preset.defaultStyle,
+                text = preset.config["text"] ?: "Text"
+            )
             else -> null
         }
     }
@@ -163,6 +171,7 @@ class TemplateApplicator @Inject constructor(
         is OverlayConfig.DynamicAltitudeProfile -> "dynamic_altitude_profile"
         is OverlayConfig.DynamicMap -> "dynamic_map"
         is OverlayConfig.DynamicStat -> "dynamic_stat"
+        is OverlayConfig.TextLabel -> "text_label"
     }
 
     private fun extractConfigMap(config: OverlayConfig): Map<String, String> = when (config) {
@@ -185,5 +194,6 @@ class TemplateApplicator @Inject constructor(
         )
         is OverlayConfig.DynamicAltitudeProfile -> emptyMap()
         is OverlayConfig.StaticAltitudeProfile -> emptyMap()
+        is OverlayConfig.TextLabel -> mapOf("text" to config.text)
     }
 }

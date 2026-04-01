@@ -4,6 +4,7 @@ import android.content.Context
 import com.gpxvideo.core.model.ExportFormat
 import com.gpxvideo.core.model.OverlayConfig
 import com.gpxvideo.core.model.TransitionType
+import com.gpxvideo.lib.ffmpeg.FfmpegCommand
 import com.gpxvideo.lib.ffmpeg.FfmpegCommandBuilder
 import com.gpxvideo.lib.ffmpeg.FfmpegExecutor
 import com.gpxvideo.lib.ffmpeg.FfmpegResult
@@ -13,6 +14,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import javax.inject.Inject
+
+private data class RenderedOverlayInput(
+    val path: String,
+    val isSequence: Boolean
+)
 
 class ExportPipeline @Inject constructor(
     private val ffmpegExecutor: FfmpegExecutor,
@@ -26,7 +32,6 @@ class ExportPipeline @Inject constructor(
         onProgress: (Float) -> Unit
     ): FfmpegResult = withContext(Dispatchers.IO) {
 
-        // Phase 1: PREPARING
         onPhaseChanged(ExportPhase.PREPARING)
         onProgress(0f)
 
@@ -37,43 +42,68 @@ class ExportPipeline @Inject constructor(
             return@withContext FfmpegResult.Error("No clips to export", -1, "")
         }
 
-        // Phase 2: RENDERING_OVERLAYS
         val dynamicOverlays = config.overlays.filter { isDynamic(it.overlayConfig) }
-        val overlayPatterns = mutableMapOf<ExportOverlay, String>()
+        val stillOverlays = config.overlays.filterNot { isDynamic(it.overlayConfig) }
+        val renderedInputs = linkedMapOf<ExportOverlay, RenderedOverlayInput>()
+        val totalOverlayCount = (dynamicOverlays.size + stillOverlays.size).coerceAtLeast(1)
 
-        if (dynamicOverlays.isNotEmpty() && config.gpxData != null && config.syncEngine != null) {
+        if (config.overlays.isNotEmpty()) {
             onPhaseChanged(ExportPhase.RENDERING_OVERLAYS)
-            val width = config.outputSettings.resolution.width
-            val height = config.outputSettings.resolution.height
+            val outputWidth = config.outputSettings.resolution.width
+            val outputHeight = config.outputSettings.resolution.height
+            var completed = 0
 
-            for ((idx, overlay) in dynamicOverlays.withIndex()) {
-                val overlayWidth = (overlay.overlayConfig.size.width * width).toInt().coerceAtLeast(1)
-                val overlayHeight = (overlay.overlayConfig.size.height * height).toInt().coerceAtLeast(1)
+            if (dynamicOverlays.isNotEmpty() && config.gpxData != null && config.syncEngine != null) {
+                for (overlay in dynamicOverlays) {
+                    val overlayWidth = (overlay.overlayConfig.size.width * outputWidth).toInt().coerceAtLeast(1)
+                    val overlayHeight = (overlay.overlayConfig.size.height * outputHeight).toInt().coerceAtLeast(1)
 
-                val pattern = overlayFrameRenderer.renderOverlayFrames(
+                    val pattern = overlayFrameRenderer.renderOverlayFrames(
+                        overlay = overlay,
+                        gpxData = config.gpxData,
+                        syncEngine = config.syncEngine,
+                        outputDir = tempDir,
+                        frameRate = config.outputSettings.frameRate,
+                        width = overlayWidth,
+                        height = overlayHeight
+                    ) { frameProgress ->
+                        val doneWeight = completed.toFloat() / totalOverlayCount
+                        val currentWeight = frameProgress / totalOverlayCount
+                        onProgress(0.3f * (doneWeight + currentWeight))
+                    }
+                    renderedInputs[overlay] = RenderedOverlayInput(
+                        path = File(tempDir, pattern).absolutePath,
+                        isSequence = true
+                    )
+                    completed += 1
+                    onProgress(0.3f * (completed.toFloat() / totalOverlayCount))
+                }
+            }
+
+            for (overlay in stillOverlays) {
+                val overlayWidth = (overlay.overlayConfig.size.width * outputWidth).toInt().coerceAtLeast(1)
+                val overlayHeight = (overlay.overlayConfig.size.height * outputHeight).toInt().coerceAtLeast(1)
+                val path = overlayFrameRenderer.renderStillOverlay(
                     overlay = overlay,
                     gpxData = config.gpxData,
-                    syncEngine = config.syncEngine,
+                    gpxStats = config.gpxStats,
                     outputDir = tempDir,
-                    frameRate = config.outputSettings.frameRate,
                     width = overlayWidth,
                     height = overlayHeight
-                ) { frameProgress ->
-                    val overlayWeight = 0.3f
-                    val base = overlayWeight * idx / dynamicOverlays.size
-                    val contribution = overlayWeight * frameProgress / dynamicOverlays.size
-                    onProgress(base + contribution)
+                )
+                if (path != null) {
+                    renderedInputs[overlay] = RenderedOverlayInput(path = path, isSequence = false)
                 }
-                overlayPatterns[overlay] = pattern
+                completed += 1
+                onProgress(0.3f * (completed.toFloat() / totalOverlayCount))
             }
         }
 
-        // Phase 3: ENCODING
         onPhaseChanged(ExportPhase.ENCODING)
 
-        val command = buildFfmpegCommand(config, overlayPatterns, tempDir)
+        val command = buildFfmpegCommand(config, renderedInputs)
         val result = ffmpegExecutor.execute(command) { progress ->
-            val encodingBase = if (dynamicOverlays.isNotEmpty()) 0.3f else 0f
+            val encodingBase = if (renderedInputs.isNotEmpty()) 0.3f else 0f
             val encodingWeight = 0.6f
             onProgress(encodingBase + encodingWeight * progress.percentage)
         }
@@ -83,11 +113,9 @@ class ExportPipeline @Inject constructor(
             return@withContext result
         }
 
-        // Phase 4: MIXING_AUDIO (handled in the main command via filter_complex)
         onPhaseChanged(ExportPhase.MIXING_AUDIO)
         onProgress(0.9f)
 
-        // Phase 5: FINALIZING
         onPhaseChanged(ExportPhase.FINALIZING)
         cleanupTempDir(tempDir)
         onProgress(1f)
@@ -97,16 +125,14 @@ class ExportPipeline @Inject constructor(
 
     private fun buildFfmpegCommand(
         config: ExportConfig,
-        overlayPatterns: Map<ExportOverlay, String>,
-        tempDir: File
-    ): com.gpxvideo.lib.ffmpeg.FfmpegCommand {
+        renderedInputs: Map<ExportOverlay, RenderedOverlayInput>
+    ): FfmpegCommand {
         val builder = FfmpegCommandBuilder().overwrite()
         val settings = config.outputSettings
         val filterGraph = FilterGraphBuilder()
         val width = settings.resolution.width
         val height = settings.resolution.height
 
-        // Add video clip inputs
         for (clip in config.clips) {
             val inputOptions = mutableMapOf<String, String>()
             if (clip.trimStartMs > 0) {
@@ -118,18 +144,28 @@ class ExportPipeline @Inject constructor(
             builder.addInput(clip.filePath, inputOptions)
         }
 
-        // Add overlay image sequence inputs
-        var overlayInputIndex = config.clips.size
-        for ((overlay, pattern) in overlayPatterns) {
-            builder.addImageSequenceInput(
-                File(tempDir, pattern).absolutePath,
-                settings.frameRate
-            )
+        val overlayEntries = renderedInputs.entries.toList()
+        val overlayInputIndex = config.clips.size
+        overlayEntries.forEach { (overlay, rendered) ->
+            val startSeconds = "%.3f".format(overlay.startTimeMs / 1000.0)
+            if (rendered.isSequence) {
+                builder.addImageSequenceInput(
+                    rendered.path,
+                    settings.frameRate,
+                    options = linkedMapOf("itsoffset" to startSeconds)
+                )
+            } else {
+                builder.addInput(
+                    rendered.path,
+                    linkedMapOf(
+                        "loop" to "1",
+                        "itsoffset" to startSeconds
+                    )
+                )
+            }
         }
 
-        // Build filter graph
-        if (config.clips.size == 1 && overlayPatterns.isEmpty()) {
-            // Simple case: single clip, no overlays
+        if (config.clips.size == 1 && overlayEntries.isEmpty()) {
             val clip = config.clips.first()
             if (clip.speed != 1.0f) {
                 filterGraph.addSpeed("0:v", clip.speed, "v0")
@@ -143,24 +179,20 @@ class ExportPipeline @Inject constructor(
 
             filterGraph.addScale("v0".takeIf { clip.speed != 1.0f } ?: "0:v", width, height, "vout")
         } else {
-            // Complex case: multiple clips and/or overlays
             for ((idx, clip) in config.clips.withIndex()) {
                 val inputLabel = "$idx:v"
                 var currentLabel = inputLabel
 
-                // Apply speed
                 if (clip.speed != 1.0f) {
                     val speedLabel = "v${idx}_speed"
                     filterGraph.addSpeed(currentLabel, clip.speed, speedLabel)
                     currentLabel = speedLabel
                 }
 
-                // Scale to output resolution
                 val scaleLabel = "v${idx}_scaled"
                 filterGraph.addScale(currentLabel, width, height, scaleLabel)
                 currentLabel = scaleLabel
 
-                // Apply transition fades
                 if (clip.transition != null && clip.transition.type != TransitionType.CUT) {
                     val fadeLabel = "v${idx}_fade"
                     filterGraph.addFade(
@@ -170,12 +202,10 @@ class ExportPipeline @Inject constructor(
                     currentLabel = fadeLabel
                 }
 
-                // Rename final label for concat
                 if (currentLabel != "v$idx") {
                     filterGraph.addSetPts(currentLabel, "PTS-STARTPTS", "v$idx")
                 }
 
-                // Audio processing
                 val audioInput = "$idx:a"
                 var currentAudioLabel = audioInput
                 if (clip.speed != 1.0f) {
@@ -193,31 +223,29 @@ class ExportPipeline @Inject constructor(
                 }
             }
 
-            // Concat all clips
             if (config.clips.size > 1) {
                 filterGraph.addAudioVideoConcat(config.clips.size)
             } else {
-                // Single clip, just rename
                 filterGraph.addCustomFilter("[v0]copy[vout]")
                 filterGraph.addCustomFilter("[a0]acopy[aout]")
             }
 
-            // Apply overlays
             var currentBase = "vout"
-            for ((idx, entry) in overlayPatterns.entries.withIndex()) {
-                val (overlay, _) = entry
-                val overlayIdx = overlayInputIndex + idx
-                val oConfig = overlay.overlayConfig
-                val x = (oConfig.position.x * width).toInt()
-                val y = (oConfig.position.y * height).toInt()
-                val outLabel = if (idx == overlayPatterns.size - 1) "vfinal" else "vov$idx"
-
-                filterGraph.addOverlay(currentBase, "$overlayIdx:v", x, y, outLabel)
+            overlayEntries.forEachIndexed { idx, (overlay, _) ->
+                val overlayStreamIndex = overlayInputIndex + idx
+                val x = (overlay.overlayConfig.position.x * width).toInt()
+                val y = (overlay.overlayConfig.position.y * height).toInt()
+                val outLabel = if (idx == overlayEntries.lastIndex) "vfinal" else "vov$idx"
+                filterGraph.addOverlayWithEnable(
+                    baseStream = currentBase,
+                    overlayStream = "$overlayStreamIndex:v",
+                    x = x,
+                    y = y,
+                    enableStart = overlay.startTimeMs / 1000.0,
+                    enableEnd = overlay.endTimeMs / 1000.0,
+                    outputLabel = outLabel
+                )
                 currentBase = outLabel
-            }
-
-            if (overlayPatterns.isNotEmpty()) {
-                // Final output uses vfinal
             }
         }
 
@@ -226,10 +254,10 @@ class ExportPipeline @Inject constructor(
             builder.addFilterComplex(filterString)
         }
 
-        // Output options
         builder.setVideoCodec(settings.videoCodecName())
         builder.setAudioCodec(settings.audioCodecName())
         builder.setFrameRate(settings.frameRate)
+        builder.setBitrate(settings.bitrateBps)
         builder.setCrf(crfForFormat(settings.format))
         builder.setPixelFormat("yuv420p")
 
@@ -238,13 +266,13 @@ class ExportPipeline @Inject constructor(
             builder.setMovFlags("+faststart")
         }
 
-        // Map outputs
         if (filterString.isNotEmpty()) {
-            val hasOverlays = overlayPatterns.isNotEmpty()
-            val videoOut = if (hasOverlays) "vfinal" else "vout"
+            val videoOut = if (overlayEntries.isNotEmpty()) "vfinal" else "vout"
             builder.addOutputOption("-map", "[$videoOut]")
             if (filterString.contains("[aout]")) {
                 builder.addOutputOption("-map", "[aout]")
+            } else if (config.clips.size == 1) {
+                builder.addOutputOption("-map", "0:a?")
             }
         }
 

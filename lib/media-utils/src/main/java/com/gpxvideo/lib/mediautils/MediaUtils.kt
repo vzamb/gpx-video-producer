@@ -1,5 +1,6 @@
 package com.gpxvideo.lib.mediautils
 
+import android.content.ContentResolver
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -26,11 +27,11 @@ object MediaProber {
     suspend fun probeMedia(context: Context, uri: Uri): MediaInfo = withContext(Dispatchers.IO) {
         val retriever = MediaMetadataRetriever()
         try {
-            retriever.setDataSource(context, uri)
+            retriever.setSafeDataSource(context, uri)
 
             val durationMs = retriever.extractMetadata(
                 MediaMetadataRetriever.METADATA_KEY_DURATION
-            )?.toLongOrNull()
+            )?.toLongOrNull()?.takeIf { it > 0L }
             val videoWidth = retriever.extractMetadata(
                 MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH
             )?.toIntOrNull() ?: 0
@@ -47,8 +48,9 @@ object MediaProber {
                 MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO
             ) == "yes"
 
-            val fileSize = context.contentResolver.openFileDescriptor(uri, "r")?.use {
-                it.statSize
+            val fileSize = when (uri.scheme) {
+                null, ContentResolver.SCHEME_FILE -> uri.path?.let(::File)?.takeIf(File::exists)?.length()
+                else -> context.contentResolver.openFileDescriptor(uri, "r")?.use { it.statSize }
             } ?: 0L
 
             // For images, video width/height may be 0; fall back to BitmapFactory
@@ -87,7 +89,7 @@ object ThumbnailGenerator {
     ): Bitmap? = withContext(Dispatchers.IO) {
         val retriever = MediaMetadataRetriever()
         try {
-            retriever.setDataSource(context, uri)
+            retriever.setSafeDataSource(context, uri)
             retriever.getFrameAtTime(
                 timeMs * 1000,
                 MediaMetadataRetriever.OPTION_CLOSEST_SYNC
@@ -136,4 +138,11 @@ object ThumbnailGenerator {
             }
             outputFile.absolutePath
         }
+}
+
+private fun MediaMetadataRetriever.setSafeDataSource(context: Context, uri: Uri) {
+    when (uri.scheme) {
+        null, ContentResolver.SCHEME_FILE -> setDataSource(uri.path ?: uri.toString())
+        else -> setDataSource(context, uri)
+    }
 }

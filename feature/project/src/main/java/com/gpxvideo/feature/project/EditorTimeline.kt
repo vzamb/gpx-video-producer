@@ -1,17 +1,21 @@
 package com.gpxvideo.feature.project
 
+import android.net.Uri
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -36,6 +40,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -43,8 +48,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -53,21 +62,26 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.gpxvideo.core.database.entity.MediaItemEntity
 import com.gpxvideo.core.model.TrackType
+import com.gpxvideo.feature.timeline.BASE_PX_PER_MS
 import com.gpxvideo.feature.timeline.TimelineClipState
 import com.gpxvideo.feature.timeline.TimelineEditorAction
 import com.gpxvideo.feature.timeline.TimelineState
 import com.gpxvideo.feature.timeline.TimelineTrackState
-import com.gpxvideo.feature.timeline.BASE_PX_PER_MS
 import com.gpxvideo.feature.timeline.toColor
+import com.gpxvideo.lib.mediautils.ThumbnailGenerator
+import java.io.File
 import java.util.UUID
 import kotlin.math.roundToInt
 
-private val VIDEO_TRACK_HEIGHT = 64.dp
+private val VIDEO_TRACK_HEIGHT = 72.dp
 private val COMPONENT_TRACK_HEIGHT = 48.dp
 private val RULER_HEIGHT = 24.dp
 private val TRACK_ICON_WIDTH = 32.dp
 private val CLIP_CORNER = 6.dp
+private val CLIP_HANDLE_WIDTH = 10.dp
+private const val MIN_CLIP_DURATION_MS = 300L
 
 private val VideoClipColor = Color(0xFF2196F3)
 private val AudioClipColor = Color(0xFF4CAF50)
@@ -78,6 +92,7 @@ private val EffectClipColor = Color(0xFF9C27B0)
 @Composable
 fun EditorTimeline(
     timelineState: TimelineState,
+    mediaItems: List<MediaItemEntity>,
     playerPositionMs: Long,
     onSeekTo: (Long) -> Unit,
     onAction: (TimelineEditorAction) -> Unit,
@@ -88,22 +103,23 @@ fun EditorTimeline(
     val horizontalScrollState = rememberScrollState()
     val verticalScrollState = rememberScrollState()
     val density = LocalDensity.current
+    val mediaItemsById = remember(mediaItems) { mediaItems.associateBy { it.id } }
 
     val timelineContentWidth = with(density) {
-        ((timelineState.totalDurationMs + 10000) * pxPerMs).toDp()
+        ((timelineState.totalDurationMs + 10_000) * pxPerMs).toDp()
     }
 
-    // Separate tracks by type
     val videoTracks = timelineState.tracks.filter {
         it.type == TrackType.VIDEO || it.type == TrackType.IMAGE
     }
     val componentTracks = timelineState.tracks.filter {
-        it.type == TrackType.OVERLAY || it.type == TrackType.TEXT
+        (it.type == TrackType.OVERLAY || it.type == TrackType.TEXT) && it.clips.isNotEmpty()
     }
-    val audioTracks = timelineState.tracks.filter { it.type == TrackType.AUDIO }
+    val audioTracks = timelineState.tracks.filter {
+        it.type == TrackType.AUDIO && it.clips.isNotEmpty()
+    }
 
     Column(modifier = modifier) {
-        // Time ruler row
         Row(modifier = Modifier.fillMaxWidth()) {
             Spacer(
                 modifier = Modifier
@@ -115,10 +131,10 @@ fun EditorTimeline(
                 modifier = Modifier
                     .weight(1f)
                     .horizontalScroll(horizontalScrollState)
-                    .pointerInput(pxPerMs) {
+                    .pointerInput(pxPerMs, horizontalScrollState.value, timelineState.totalDurationMs) {
                         detectTapGestures { offset ->
                             val tapMs = ((offset.x + horizontalScrollState.value) / pxPerMs).toLong()
-                            onSeekTo(tapMs.coerceAtLeast(0))
+                            onSeekTo(tapMs.coerceIn(0L, timelineState.totalDurationMs))
                         }
                     }
             ) {
@@ -130,23 +146,21 @@ fun EditorTimeline(
             }
         }
 
-        // Scrollable tracks area with playhead overlay
         Box(modifier = Modifier.weight(1f)) {
-            Column(
-                modifier = Modifier.verticalScroll(verticalScrollState)
-            ) {
-                // Video track(s)
+            Column(modifier = Modifier.verticalScroll(verticalScrollState)) {
                 videoTracks.forEach { track ->
                     TrackRow(
                         track = track,
+                        mediaItemsById = mediaItemsById,
                         height = VIDEO_TRACK_HEIGHT,
                         pxPerMs = pxPerMs,
                         selectedClipId = timelineState.selectedClipId,
                         horizontalScrollState = horizontalScrollState,
                         timelineContentWidth = timelineContentWidth,
+                        totalDurationMs = timelineState.totalDurationMs,
+                        onSeekTo = onSeekTo,
                         onAction = onAction,
                         trailingContent = {
-                            // + button to add media at end of video track
                             Box(
                                 modifier = Modifier
                                     .size(VIDEO_TRACK_HEIGHT - 8.dp)
@@ -166,40 +180,42 @@ fun EditorTimeline(
                     )
                 }
 
-                // Empty video track placeholder if none exist
                 if (videoTracks.isEmpty()) {
                     EmptyVideoTrackRow(onAddMediaClick = onAddMediaClick)
                 }
 
-                // Component tracks (overlay, text)
                 componentTracks.forEachIndexed { index, track ->
                     TrackRow(
                         track = track,
+                        mediaItemsById = mediaItemsById,
                         height = COMPONENT_TRACK_HEIGHT,
                         pxPerMs = pxPerMs,
                         selectedClipId = timelineState.selectedClipId,
                         horizontalScrollState = horizontalScrollState,
                         timelineContentWidth = timelineContentWidth,
+                        totalDurationMs = timelineState.totalDurationMs,
+                        onSeekTo = onSeekTo,
                         onAction = onAction,
                         layerNumber = index + 2
                     )
                 }
 
-                // Audio track(s)
                 audioTracks.forEach { track ->
                     TrackRow(
                         track = track,
+                        mediaItemsById = mediaItemsById,
                         height = COMPONENT_TRACK_HEIGHT,
                         pxPerMs = pxPerMs,
                         selectedClipId = timelineState.selectedClipId,
                         horizontalScrollState = horizontalScrollState,
                         timelineContentWidth = timelineContentWidth,
+                        totalDurationMs = timelineState.totalDurationMs,
+                        onSeekTo = onSeekTo,
                         onAction = onAction,
                         iconOverride = Icons.Default.MusicNote
                     )
                 }
 
-                // "Add music" placeholder if no audio tracks
                 if (audioTracks.isEmpty()) {
                     Row(
                         modifier = Modifier
@@ -226,7 +242,6 @@ fun EditorTimeline(
                 }
             }
 
-            // Playhead line - spans full visible height
             val playheadOffsetPx = (playerPositionMs * pxPerMs) -
                 horizontalScrollState.value.toFloat() + with(density) { TRACK_ICON_WIDTH.toPx() }
 
@@ -259,11 +274,11 @@ private fun CompactRuler(
     val textStyle = TextStyle(color = Color.Gray, fontSize = 8.sp)
     val zoomLevel = pxPerMs / BASE_PX_PER_MS
     val majorTickIntervalMs = when {
-        zoomLevel >= 4.0f -> 1000L
-        zoomLevel >= 2.0f -> 2000L
-        zoomLevel >= 1.0f -> 5000L
-        zoomLevel >= 0.5f -> 10000L
-        else -> 30000L
+        zoomLevel >= 4.0f -> 1_000L
+        zoomLevel >= 2.0f -> 2_000L
+        zoomLevel >= 1.0f -> 5_000L
+        zoomLevel >= 0.5f -> 10_000L
+        else -> 30_000L
     }
 
     Canvas(
@@ -311,11 +326,14 @@ private fun CompactRuler(
 @Composable
 private fun TrackRow(
     track: TimelineTrackState,
+    mediaItemsById: Map<UUID, MediaItemEntity>,
     height: androidx.compose.ui.unit.Dp,
     pxPerMs: Float,
     selectedClipId: UUID?,
     horizontalScrollState: androidx.compose.foundation.ScrollState,
     timelineContentWidth: androidx.compose.ui.unit.Dp,
+    totalDurationMs: Long,
+    onSeekTo: (Long) -> Unit,
     onAction: (TimelineEditorAction) -> Unit,
     layerNumber: Int? = null,
     iconOverride: ImageVector? = null,
@@ -334,7 +352,6 @@ private fun TrackRow(
             .background(trackBg),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Track icon column
         Box(
             modifier = Modifier
                 .width(TRACK_ICON_WIDTH)
@@ -358,7 +375,6 @@ private fun TrackRow(
             }
         }
 
-        // Clips area (horizontal scroll shared with ruler)
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -370,19 +386,27 @@ private fun TrackRow(
                     .width(timelineContentWidth)
                     .fillMaxHeight()
                     .padding(vertical = 2.dp)
+                    .pointerInput(pxPerMs, horizontalScrollState.value, totalDurationMs) {
+                        detectTapGestures { offset ->
+                            val tapMs = ((offset.x + horizontalScrollState.value) / pxPerMs).toLong()
+                            onSeekTo(tapMs.coerceIn(0L, totalDurationMs))
+                        }
+                    }
             ) {
                 track.clips.forEach { clip ->
                     ClipBar(
                         clip = clip,
+                        mediaItem = clip.mediaItemId?.let(mediaItemsById::get),
                         trackType = track.type,
                         trackHeight = height,
                         pxPerMs = pxPerMs,
                         isSelected = clip.id == selectedClipId,
+                        totalDurationMs = totalDurationMs,
+                        onSeekTo = onSeekTo,
                         onAction = onAction
                     )
                 }
 
-                // Trailing content (e.g., + button) after last clip
                 if (trailingContent != null) {
                     val lastEndPx = track.clips.maxOfOrNull { it.endTimeMs * pxPerMs } ?: 0f
                     val density = LocalDensity.current
@@ -405,17 +429,18 @@ private fun TrackRow(
 @Composable
 private fun ClipBar(
     clip: TimelineClipState,
+    mediaItem: MediaItemEntity?,
     trackType: TrackType,
     trackHeight: androidx.compose.ui.unit.Dp,
     pxPerMs: Float,
     isSelected: Boolean,
+    totalDurationMs: Long,
+    onSeekTo: (Long) -> Unit,
     onAction: (TimelineEditorAction) -> Unit
 ) {
     val density = LocalDensity.current
     val startPx = clip.startTimeMs * pxPerMs
     val widthPx = (clip.endTimeMs - clip.startTimeMs) * pxPerMs
-    val offsetDp = with(density) { startPx.toDp() }
-    val widthDp = with(density) { widthPx.toDp() }
 
     val clipColor = when (trackType) {
         TrackType.VIDEO -> VideoClipColor
@@ -425,56 +450,256 @@ private fun ClipBar(
         TrackType.TEXT -> TextClipColor
     }
 
-    var dragOffsetX by remember { mutableFloatStateOf(0f) }
+    var moveOffsetPx by remember(clip.id) { mutableFloatStateOf(0f) }
+    var trimStartOffsetPx by remember(clip.id) { mutableFloatStateOf(0f) }
+    var trimEndOffsetPx by remember(clip.id) { mutableFloatStateOf(0f) }
+
+    val minWidthPx = (MIN_CLIP_DURATION_MS * pxPerMs).coerceAtLeast(24f)
+    val displayStartPx = startPx + moveOffsetPx + trimStartOffsetPx
+    val displayWidthPx = (widthPx - trimStartOffsetPx + trimEndOffsetPx).coerceAtLeast(minWidthPx)
+    val offsetDp = with(density) { displayStartPx.toDp() }
+    val widthDp = with(density) { displayWidthPx.toDp() }
 
     Box(
         modifier = Modifier
-            .offset(x = offsetDp + with(density) { dragOffsetX.toDp() })
+            .offset(x = offsetDp)
             .width(widthDp.coerceAtLeast(4.dp))
             .height(trackHeight - 6.dp)
             .clip(RoundedCornerShape(CLIP_CORNER))
-            .background(clipColor.copy(alpha = if (isSelected) 1f else 0.7f))
+            .background(clipColor.copy(alpha = if (isSelected) 0.95f else 0.75f))
             .then(
-                if (isSelected) Modifier.border(
-                    width = 1.5.dp,
-                    color = Color.White,
-                    shape = RoundedCornerShape(CLIP_CORNER)
-                ) else Modifier
+                if (isSelected) {
+                    Modifier.border(
+                        width = 1.5.dp,
+                        color = Color.White,
+                        shape = RoundedCornerShape(CLIP_CORNER)
+                    )
+                } else {
+                    Modifier
+                }
             )
-            .clickable { onAction(TimelineEditorAction.ClipSelected(clip.id)) }
-            .pointerInput(clip.id) {
-                detectDragGestures(
-                    onDragStart = { dragOffsetX = 0f },
-                    onDragEnd = {
-                        val newStartMs = ((startPx + dragOffsetX) / pxPerMs).toLong()
-                            .coerceAtLeast(0)
-                        onAction(TimelineEditorAction.ClipMoved(clip.id, newStartMs))
-                        dragOffsetX = 0f
-                    },
-                    onDragCancel = { dragOffsetX = 0f }
-                ) { change, dragAmount ->
-                    change.consume()
-                    dragOffsetX += dragAmount.x
+            .pointerInput(clip.id, widthPx, totalDurationMs) {
+                detectTapGestures { offset ->
+                    val clipDurationMs = (clip.endTimeMs - clip.startTimeMs).coerceAtLeast(1L)
+                    val fraction = if (widthPx <= 0f) 0f else (offset.x / widthPx).coerceIn(0f, 1f)
+                    val seekMs = clip.startTimeMs + (clipDurationMs * fraction).toLong()
+                    onAction(TimelineEditorAction.ClipSelected(clip.id))
+                    onSeekTo(seekMs.coerceIn(0L, totalDurationMs))
                 }
             }
-            .padding(horizontal = 6.dp, vertical = 2.dp),
-        contentAlignment = Alignment.CenterStart
+            .pointerInput(clip.id, pxPerMs) {
+                detectDragGestures(
+                    onDragStart = {
+                        moveOffsetPx = 0f
+                        onAction(TimelineEditorAction.ClipSelected(clip.id))
+                    },
+                    onDragEnd = {
+                        val newStartMs = ((clip.startTimeMs * pxPerMs + moveOffsetPx) / pxPerMs).toLong()
+                            .coerceAtLeast(0)
+                        onAction(TimelineEditorAction.ClipMoved(clip.id, newStartMs))
+                        moveOffsetPx = 0f
+                    },
+                    onDragCancel = { moveOffsetPx = 0f }
+                ) { change, dragAmount ->
+                    change.consume()
+                    moveOffsetPx += dragAmount.x
+                }
+            }
     ) {
-        Column {
-            Text(
-                text = clip.label,
-                style = MaterialTheme.typography.labelSmall,
-                color = Color.White,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            val durationSec = (clip.endTimeMs - clip.startTimeMs) / 1000f
-            Text(
-                text = "%.1fs".format(durationSec),
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
-                color = Color.White.copy(alpha = 0.7f),
-                maxLines = 1
-            )
+        when {
+            trackType == TrackType.VIDEO || trackType == TrackType.IMAGE -> {
+                MediaFilmstrip(
+                    clip = clip,
+                    mediaItem = mediaItem,
+                    trackType = trackType
+                )
+            }
+
+            else -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 6.dp, vertical = 4.dp),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    Text(
+                        text = clip.label,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .width(CLIP_HANDLE_WIDTH)
+                .fillMaxHeight()
+                .background(Color.White.copy(alpha = if (isSelected) 0.65f else 0.28f))
+                .pointerInput(clip.id, pxPerMs) {
+                    detectDragGestures(
+                        onDragStart = {
+                            trimStartOffsetPx = 0f
+                            onAction(TimelineEditorAction.ClipSelected(clip.id))
+                        },
+                        onDragEnd = {
+                            val newStartMs = (clip.startTimeMs + (trimStartOffsetPx / pxPerMs).toLong())
+                                .coerceAtLeast(0L)
+                                .coerceAtMost(clip.endTimeMs - MIN_CLIP_DURATION_MS)
+                            onAction(TimelineEditorAction.ClipTrimmed(clip.id, newStartMs, clip.endTimeMs))
+                            trimStartOffsetPx = 0f
+                        },
+                        onDragCancel = { trimStartOffsetPx = 0f }
+                    ) { change, dragAmount ->
+                        change.consume()
+                        val maxRightTrim = widthPx - minWidthPx
+                        trimStartOffsetPx = (trimStartOffsetPx + dragAmount.x)
+                            .coerceIn(-clip.startTimeMs * pxPerMs, maxRightTrim)
+                    }
+                }
+        )
+
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .width(CLIP_HANDLE_WIDTH)
+                .fillMaxHeight()
+                .background(Color.White.copy(alpha = if (isSelected) 0.65f else 0.28f))
+                .pointerInput(clip.id, pxPerMs, totalDurationMs) {
+                    detectDragGestures(
+                        onDragStart = {
+                            trimEndOffsetPx = 0f
+                            onAction(TimelineEditorAction.ClipSelected(clip.id))
+                        },
+                        onDragEnd = {
+                            val newEndMs = (clip.endTimeMs + (trimEndOffsetPx / pxPerMs).toLong())
+                                .coerceAtLeast(clip.startTimeMs + MIN_CLIP_DURATION_MS)
+                                .coerceAtMost(totalDurationMs.coerceAtLeast(clip.startTimeMs + MIN_CLIP_DURATION_MS))
+                            onAction(TimelineEditorAction.ClipTrimmed(clip.id, clip.startTimeMs, newEndMs))
+                            trimEndOffsetPx = 0f
+                        },
+                        onDragCancel = { trimEndOffsetPx = 0f }
+                    ) { change, dragAmount ->
+                        change.consume()
+                        val maxLeftTrim = -(widthPx - minWidthPx)
+                        val maxRightTrim = (totalDurationMs - clip.endTimeMs).coerceAtLeast(0L) * pxPerMs
+                        trimEndOffsetPx = (trimEndOffsetPx + dragAmount.x)
+                            .coerceIn(maxLeftTrim, maxRightTrim)
+                    }
+                }
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.BottomStart)
+                .background(Color.Black.copy(alpha = 0.45f))
+                .padding(horizontal = 6.dp, vertical = 3.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = clip.label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "%.1fs".format((clip.endTimeMs - clip.startTimeMs) / 1000f),
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
+                    color = Color.White.copy(alpha = 0.8f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MediaFilmstrip(
+    clip: TimelineClipState,
+    mediaItem: MediaItemEntity?,
+    trackType: TrackType
+) {
+    if (mediaItem == null) {
+        Box(modifier = Modifier.fillMaxSize())
+        return
+    }
+
+    val context = LocalContext.current
+    val frameCount = (((clip.endTimeMs - clip.startTimeMs) * BASE_PX_PER_MS) / 56f)
+        .roundToInt()
+        .coerceIn(1, 8)
+    val frames by rememberFilmstripFrames(
+        context = context,
+        mediaItem = mediaItem,
+        clip = clip,
+        frameCount = frameCount,
+        isImage = trackType == TrackType.IMAGE
+    )
+
+    if (frames.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.2f)))
+        return
+    }
+
+    Row(modifier = Modifier.fillMaxSize()) {
+        frames.forEach { bitmap ->
+            if (bitmap != null) {
+                Image(
+                    bitmap = bitmap,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .background(Color.Black.copy(alpha = 0.2f))
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun rememberFilmstripFrames(
+    context: android.content.Context,
+    mediaItem: MediaItemEntity,
+    clip: TimelineClipState,
+    frameCount: Int,
+    isImage: Boolean
+) = produceState<List<ImageBitmap?>>(initialValue = emptyList(), context, mediaItem.id, clip.id, frameCount, clip.trimStartMs, clip.trimEndMs) {
+    val uri = Uri.fromFile(File(mediaItem.localCopyPath))
+    val sourceDurationMs = mediaItem.durationMs
+    val visibleDurationMs = when {
+        clip.trimEndMs > clip.trimStartMs -> clip.trimEndMs - clip.trimStartMs
+        sourceDurationMs != null && sourceDurationMs > 0L -> {
+            (clip.endTimeMs - clip.startTimeMs).coerceAtMost(sourceDurationMs)
+        }
+        else -> clip.endTimeMs - clip.startTimeMs
+    }.coerceAtLeast(1L)
+
+    value = if (isImage) {
+        val image = ThumbnailGenerator.generateImageThumbnail(context, uri)?.asImageBitmap()
+        List(frameCount) { image }
+    } else {
+        (0 until frameCount).map { index ->
+            val fraction = if (frameCount == 1) 0f else index.toFloat() / (frameCount - 1)
+            val frameTimeMs = clip.trimStartMs + (visibleDurationMs * fraction).toLong()
+            ThumbnailGenerator.generateVideoThumbnail(context, uri, frameTimeMs)?.asImageBitmap()
         }
     }
 }

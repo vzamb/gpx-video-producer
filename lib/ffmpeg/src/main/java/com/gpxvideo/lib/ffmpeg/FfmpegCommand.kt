@@ -26,11 +26,16 @@ class FfmpegCommandBuilder {
         return this
     }
 
-    fun addImageSequenceInput(pattern: String, framerate: Int): FfmpegCommandBuilder {
+    fun addImageSequenceInput(
+        pattern: String,
+        framerate: Int,
+        options: Map<String, String> = emptyMap()
+    ): FfmpegCommandBuilder {
         inputs.add(
             FfmpegInput(
                 path = pattern,
-                options = mapOf(
+                options = linkedMapOf(
+                    *options.toList().toTypedArray(),
                     "framerate" to framerate.toString(),
                     "f" to "image2"
                 )

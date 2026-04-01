@@ -21,10 +21,10 @@ fun GpxRouteCanvas(
     points: List<GpxPoint>,
     bounds: GeoBounds,
     modifier: Modifier = Modifier,
-    routeColor: Color = Color(0xFFFF5722),
+    routeColor: Color = Color(0xFF448AFF),
     routeWidth: Float = 3f,
     showStartEnd: Boolean = true,
-    backgroundColor: Color = Color(0xFF1E1E1E)
+    backgroundColor: Color = Color(0xFF0D1117)
 ) {
     Spacer(
         modifier = modifier
@@ -100,12 +100,12 @@ fun GpxRouteCanvas(
 
                     if (showStartEnd && startCenter != null && endCenter != null) {
                         drawCircle(
-                            color = Color(0xFF4CAF50),
+                            color = Color(0xFF66BB6A),
                             radius = 8f,
                             center = startCenter
                         )
                         drawCircle(
-                            color = Color(0xFFF44336),
+                            color = Color(0xFFEF5350),
                             radius = 8f,
                             center = endCenter
                         )

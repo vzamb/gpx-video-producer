@@ -32,8 +32,6 @@ object OverlayRenderer {
         val canvas = Canvas(bitmap)
         val allPoints = gpxData.tracks.flatMap { it.segments.flatMap { s -> s.points } }
 
-        drawBackground(canvas, width, height, overlay.style.backgroundColor, overlay.style.cornerRadius)
-
         if (allPoints.size < 2) return bitmap
 
         val leftPad = if (overlay.showLabels) width * 0.12f else width * 0.05f
@@ -106,15 +104,17 @@ object OverlayRenderer {
             style = Paint.Style.STROKE
             isAntiAlias = true
             strokeCap = Paint.Cap.ROUND
+            setShadowLayer(3f, 0f, 0f, Color.argb(140, 0, 0, 0))
         }
         canvas.drawPath(linePath, linePaint)
 
         if (overlay.showLabels) {
             val labelPaint = Paint().apply {
-                color = Color.argb(170, 255, 255, 255)
+                color = Color.argb(220, 255, 255, 255)
                 textSize = height * 0.08f
                 isAntiAlias = true
                 typeface = Typeface.MONOSPACE
+                setShadowLayer(3f, 1f, 1f, Color.argb(200, 0, 0, 0))
             }
             canvas.drawText("${maxEle.toInt()}m", 2f, topPad + labelPaint.textSize * 0.4f, labelPaint)
             canvas.drawText("${minEle.toInt()}m", 2f, topPad + drawH + labelPaint.textSize * 0.4f, labelPaint)
@@ -136,15 +136,6 @@ object OverlayRenderer {
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         val allPoints = gpxData.tracks.flatMap { it.segments.flatMap { s -> s.points } }
-
-        val bgColor = when (overlay.mapStyle) {
-            MapStyle.DARK -> Color.argb(255, 20, 20, 20)
-            MapStyle.TERRAIN -> Color.argb(255, 30, 40, 30)
-            MapStyle.SATELLITE -> Color.argb(255, 15, 25, 15)
-            MapStyle.MINIMAL -> overlay.style.backgroundColor?.let { colorFromLong(it) }
-                ?: Color.argb(255, 30, 30, 30)
-        }
-        drawBackgroundColor(canvas, width, height, bgColor, overlay.style.cornerRadius)
 
         if (allPoints.size < 2) return bitmap
 
@@ -179,6 +170,7 @@ object OverlayRenderer {
             isAntiAlias = true
             strokeCap = Paint.Cap.ROUND
             strokeJoin = Paint.Join.ROUND
+            setShadowLayer(4f, 0f, 0f, Color.argb(160, 0, 0, 0))
         }
         canvas.drawPath(routePath, routePaint)
 
@@ -210,8 +202,6 @@ object OverlayRenderer {
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
 
-        drawBackground(canvas, width, height, overlay.style.backgroundColor, overlay.style.cornerRadius)
-
         val fields = overlay.fields.ifEmpty {
             listOf(StatField.TOTAL_DISTANCE, StatField.TOTAL_TIME)
         }
@@ -221,25 +211,32 @@ object OverlayRenderer {
         val cellW = width.toFloat() / cols
         val cellH = height.toFloat() / rows
 
+        val shadowRadius = width * 0.008f
+        val shadowColor = Color.argb(180, 0, 0, 0)
+
         val labelPaint = Paint().apply {
-            color = Color.argb(170, 255, 255, 255)
-            textSize = (cellH * 0.2f).coerceAtMost(width * 0.04f)
+            color = Color.argb(200, 255, 255, 255)
+            textSize = (cellH * 0.22f).coerceAtMost(width * 0.045f).coerceAtLeast(10f)
             isAntiAlias = true
             textAlign = Paint.Align.CENTER
-            typeface = Typeface.DEFAULT
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+            letterSpacing = 0.04f
+            setShadowLayer(shadowRadius, 1f, 1f, shadowColor)
         }
         val valuePaint = Paint().apply {
             color = colorFromLong(overlay.style.fontColor)
-            textSize = (cellH * 0.35f).coerceAtMost(width * 0.07f)
+            textSize = (cellH * 0.38f).coerceAtMost(width * 0.08f).coerceAtLeast(14f)
             isAntiAlias = true
             textAlign = Paint.Align.CENTER
-            typeface = Typeface.DEFAULT_BOLD
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            setShadowLayer(shadowRadius * 1.5f, 1.5f, 1.5f, shadowColor)
         }
         val unitPaint = Paint().apply {
-            color = Color.argb(140, 255, 255, 255)
-            textSize = (cellH * 0.15f).coerceAtMost(width * 0.03f)
+            color = Color.argb(160, 255, 255, 255)
+            textSize = (cellH * 0.16f).coerceAtMost(width * 0.035f).coerceAtLeast(8f)
             isAntiAlias = true
             textAlign = Paint.Align.CENTER
+            setShadowLayer(shadowRadius, 1f, 1f, shadowColor)
         }
 
         values.forEachIndexed { index, (field, value) ->
@@ -250,10 +247,10 @@ object OverlayRenderer {
             val cx = cellW * col + cellW / 2
             val cy = cellH * row + cellH / 2
 
-            canvas.drawText(field.displayName, cx, cy - cellH * 0.15f, labelPaint)
-            canvas.drawText(value, cx, cy + cellH * 0.1f, valuePaint)
+            canvas.drawText(field.displayName.uppercase(), cx, cy - cellH * 0.18f, labelPaint)
+            canvas.drawText(value, cx, cy + cellH * 0.12f, valuePaint)
             if (field.unit.isNotEmpty()) {
-                canvas.drawText(field.unit, cx, cy + cellH * 0.3f, unitPaint)
+                canvas.drawText(field.unit, cx, cy + cellH * 0.32f, unitPaint)
             }
         }
 
@@ -275,7 +272,9 @@ object OverlayRenderer {
     }
 
     private fun drawBackground(canvas: Canvas, width: Int, height: Int, bgColor: Long?, cornerRadius: Float) {
-        val color = bgColor?.let { colorFromLong(it) } ?: Color.argb(255, 30, 30, 30)
+        // Only draw background if explicitly set (non-null). Default is transparent.
+        val color = bgColor?.let { colorFromLong(it) } ?: return
+        if (Color.alpha(color) == 0) return
         drawBackgroundColor(canvas, width, height, color, cornerRadius)
     }
 

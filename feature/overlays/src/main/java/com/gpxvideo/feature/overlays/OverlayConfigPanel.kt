@@ -68,6 +68,7 @@ fun OverlayConfigPanel(
             )
             is OverlayConfig.DynamicMap -> DynamicMapConfig(overlay, onUpdate, onOpenSyncConfig)
             is OverlayConfig.DynamicStat -> DynamicStatConfig(overlay, onUpdate, onOpenSyncConfig)
+            is OverlayConfig.TextLabel -> TextLabelConfig(overlay, onUpdate)
         }
 
         SectionHeader("Position")
@@ -106,6 +107,20 @@ fun OverlayConfigPanel(
             Text("Delete Overlay", modifier = Modifier.padding(start = 8.dp))
         }
     }
+}
+
+@Composable
+private fun TextLabelConfig(
+    overlay: OverlayConfig.TextLabel,
+    onUpdate: (OverlayConfig) -> Unit
+) {
+    SectionHeader("Text")
+    OutlinedTextField(
+        value = overlay.text,
+        onValueChange = { onUpdate(overlay.copy(text = it, name = it.take(20).ifBlank { "Text" })) },
+        label = { Text("Text content") },
+        modifier = Modifier.fillMaxWidth()
+    )
 }
 
 @Composable
@@ -203,7 +218,7 @@ private fun DynamicAltitudeProfileConfig(
     onUpdate: (OverlayConfig) -> Unit,
     onOpenSyncConfig: () -> Unit
 ) {
-    SectionHeader("Live Altitude Settings")
+    SectionHeader(syncSectionTitle("Altitude", overlay.syncMode))
     SyncModeButton(overlay.syncMode.name, onOpenSyncConfig)
 }
 
@@ -213,7 +228,7 @@ private fun DynamicMapConfig(
     onUpdate: (OverlayConfig) -> Unit,
     onOpenSyncConfig: () -> Unit
 ) {
-    SectionHeader("Live Map Settings")
+    SectionHeader(syncSectionTitle("Map", overlay.syncMode))
     MapStyleDropdown(overlay.mapStyle) {
         onUpdate(overlay.copy(mapStyle = it))
     }
@@ -233,7 +248,7 @@ private fun DynamicStatConfig(
     onUpdate: (OverlayConfig) -> Unit,
     onOpenSyncConfig: () -> Unit
 ) {
-    SectionHeader("Live Stat Settings")
+    SectionHeader(syncSectionTitle("Metric", overlay.syncMode))
 
     // Field selector
     var fieldExpanded by remember { mutableStateOf(false) }
@@ -280,8 +295,21 @@ private fun SyncModeButton(currentMode: String, onOpenSyncConfig: () -> Unit) {
         onClick = onOpenSyncConfig,
         modifier = Modifier.fillMaxWidth()
     ) {
-        Text("Sync: ${currentMode.replace("_", " ")}")
+        Text("Sync: ${formatSyncMode(currentMode)}")
     }
+}
+
+private fun syncSectionTitle(subject: String, mode: SyncMode): String = when (mode) {
+    SyncMode.GPX_TIMESTAMP -> "Live $subject Settings"
+    SyncMode.CLIP_PROGRESS -> "Moving $subject Settings"
+    SyncMode.MANUAL_KEYFRAMES -> "Manual $subject Settings"
+}
+
+private fun formatSyncMode(mode: String): String = when (runCatching { SyncMode.valueOf(mode) }.getOrNull()) {
+    SyncMode.GPX_TIMESTAMP -> "Live timestamp"
+    SyncMode.CLIP_PROGRESS -> "Moving across clip"
+    SyncMode.MANUAL_KEYFRAMES -> "Manual keyframes"
+    null -> mode.replace("_", " ")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -364,6 +392,7 @@ private fun updatePosition(config: OverlayConfig, position: OverlayPosition): Ov
     is OverlayConfig.DynamicAltitudeProfile -> config.copy(position = position)
     is OverlayConfig.DynamicMap -> config.copy(position = position)
     is OverlayConfig.DynamicStat -> config.copy(position = position)
+    is OverlayConfig.TextLabel -> config.copy(position = position)
 }
 
 private fun updateSize(config: OverlayConfig, size: OverlaySize): OverlayConfig = when (config) {
@@ -373,6 +402,7 @@ private fun updateSize(config: OverlayConfig, size: OverlaySize): OverlayConfig 
     is OverlayConfig.DynamicAltitudeProfile -> config.copy(size = size)
     is OverlayConfig.DynamicMap -> config.copy(size = size)
     is OverlayConfig.DynamicStat -> config.copy(size = size)
+    is OverlayConfig.TextLabel -> config.copy(size = size)
 }
 
 private fun updateStyle(config: OverlayConfig, style: OverlayStyle): OverlayConfig = when (config) {
@@ -382,4 +412,5 @@ private fun updateStyle(config: OverlayConfig, style: OverlayStyle): OverlayConf
     is OverlayConfig.DynamicAltitudeProfile -> config.copy(style = style)
     is OverlayConfig.DynamicMap -> config.copy(style = style)
     is OverlayConfig.DynamicStat -> config.copy(style = style)
+    is OverlayConfig.TextLabel -> config.copy(style = style)
 }

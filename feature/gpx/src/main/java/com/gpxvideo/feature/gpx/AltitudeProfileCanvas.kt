@@ -25,11 +25,11 @@ import com.gpxvideo.lib.gpxparser.GpxStatistics
 fun AltitudeProfileCanvas(
     points: List<GpxPoint>,
     modifier: Modifier = Modifier,
-    lineColor: Color = Color(0xFF4CAF50),
-    fillColor: Color = Color(0x804CAF50),
+    lineColor: Color = Color(0xFF26A69A),
+    fillColor: Color = Color(0x8026A69A),
     showGrid: Boolean = true,
     showLabels: Boolean = true,
-    backgroundColor: Color = Color(0xFF1E1E1E)
+    backgroundColor: Color = Color(0xFF0D1117)
 ) {
     val textMeasurer = rememberTextMeasurer()
     val labelStyle = remember {

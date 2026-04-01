@@ -123,6 +123,21 @@ sealed class OverlayConfig {
         val syncMode: SyncMode = SyncMode.GPX_TIMESTAMP,
         val format: String = ""
     ) : OverlayConfig()
+
+    data class TextLabel(
+        override val id: UUID = UUID.randomUUID(),
+        override val projectId: UUID,
+        override val name: String = "Text",
+        override val timelineClipId: UUID,
+        override val position: OverlayPosition = OverlayPosition(0.08f, 0.08f),
+        override val size: OverlaySize = OverlaySize(0.32f, 0.12f),
+        override val style: OverlayStyle = OverlayStyle(
+            backgroundColor = 0x33000000,
+            fontSize = 24f
+        ),
+        val text: String = "Text",
+        val textAlignment: String = "CENTER"
+    ) : OverlayConfig()
 }
 
 enum class MapStyle { MINIMAL, DARK, TERRAIN, SATELLITE }
@@ -148,7 +163,7 @@ enum class StatField(val displayName: String, val unit: String) {
 
 enum class StatsLayout { SINGLE, GRID_2X1, GRID_2X2, GRID_3X2, GRID_4X2, VERTICAL_LIST }
 
-enum class SyncMode { GPX_TIMESTAMP, MANUAL_KEYFRAMES }
+enum class SyncMode { GPX_TIMESTAMP, CLIP_PROGRESS, MANUAL_KEYFRAMES }
 
 enum class DynamicField(val displayName: String, val defaultUnit: String) {
     CURRENT_SPEED("Speed", "km/h"),

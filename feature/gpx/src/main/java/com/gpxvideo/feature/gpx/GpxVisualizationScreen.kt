@@ -1,5 +1,7 @@
 package com.gpxvideo.feature.gpx
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -7,11 +9,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.gpxvideo.core.model.GpxData
 import com.gpxvideo.lib.gpxparser.GpxStats
@@ -28,49 +32,60 @@ fun GpxVisualizationScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
+            .padding(horizontal = 12.dp)
     ) {
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Route map — hero card
         Text(
             text = "Route",
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp)
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)
         )
-
-        GpxRouteCanvas(
-            points = allPoints,
-            bounds = gpxData.bounds,
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(250.dp)
-                .padding(horizontal = 16.dp)
-        )
+                .height(240.dp)
+                .background(Color(0xFF0D1117), RoundedCornerShape(12.dp))
+        ) {
+            GpxRouteCanvas(
+                points = allPoints,
+                bounds = gpxData.bounds,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Altitude profile
         Text(
             text = "Altitude Profile",
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(start = 16.dp, bottom = 4.dp)
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)
         )
-
-        AltitudeProfileCanvas(
-            points = allPoints,
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(200.dp)
-                .padding(horizontal = 16.dp)
-        )
+                .height(180.dp)
+                .background(Color(0xFF0D1117), RoundedCornerShape(12.dp))
+        ) {
+            AltitudeProfileCanvas(
+                points = allPoints,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Statistics grid
         Text(
             text = "Statistics",
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(start = 16.dp, bottom = 4.dp)
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)
         )
-
         StatsGrid(
             stats = stats,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            modifier = Modifier.fillMaxWidth()
         )
 
         Spacer(modifier = Modifier.height(16.dp))

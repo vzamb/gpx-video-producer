@@ -86,6 +86,17 @@ class GpxTimeSyncEngine(
     private fun videoTimeToGpxTimeMs(videoTimeMs: Long): Long {
         return when (syncMode) {
             SyncMode.GPX_TIMESTAMP -> videoTimeMs + timeOffsetMs
+            SyncMode.CLIP_PROGRESS -> {
+                if (totalTimeMs <= 0L) 0L
+                else {
+                    val safeVideoTime = videoTimeMs.coerceAtLeast(0L)
+                    val referenceDuration = keyframes.lastOrNull()?.videoTimeMs
+                        ?.takeIf { it > 0L }
+                        ?: totalTimeMs
+                    ((safeVideoTime.toDouble() / referenceDuration.toDouble())
+                        .coerceIn(0.0, 1.0) * totalTimeMs).toLong()
+                }
+            }
 
             SyncMode.MANUAL_KEYFRAMES -> {
                 if (keyframes.isEmpty()) return videoTimeMs

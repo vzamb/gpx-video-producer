@@ -36,7 +36,6 @@ object DynamicOverlayRenderer {
         val canvas = Canvas(bitmap)
         val allPoints = gpxData.tracks.flatMap { it.segments.flatMap { s -> s.points } }
 
-        drawBackground(canvas, width, height, overlay.style.backgroundColor, overlay.style.cornerRadius)
         if (allPoints.size < 2) return bitmap
 
         val leftPad = width * 0.05f
@@ -206,14 +205,6 @@ object DynamicOverlayRenderer {
         val canvas = Canvas(bitmap)
         val allPoints = gpxData.tracks.flatMap { it.segments.flatMap { s -> s.points } }
 
-        val bgColor = when (overlay.mapStyle) {
-            MapStyle.DARK -> Color.argb(255, 20, 20, 20)
-            MapStyle.TERRAIN -> Color.argb(255, 30, 40, 30)
-            MapStyle.SATELLITE -> Color.argb(255, 15, 25, 15)
-            MapStyle.MINIMAL -> overlay.style.backgroundColor?.let { colorFromLong(it) }
-                ?: Color.argb(255, 30, 30, 30)
-        }
-        drawBackgroundColor(canvas, width, height, bgColor, overlay.style.cornerRadius)
         if (allPoints.size < 2) return bitmap
 
         val padding = width * 0.08f
@@ -342,43 +333,50 @@ object DynamicOverlayRenderer {
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
 
-        drawBackground(canvas, width, height, overlay.style.backgroundColor, overlay.style.cornerRadius)
-
         val field = overlay.field
         val value = formatDynamicValue(field, currentPoint, overlay.format)
         val label = field.displayName
         val unit = field.defaultUnit
         val zoneColor = getZoneColor(field, currentPoint)
 
+        val shadowRadius = width * 0.01f
+        val shadowColor = Color.argb(200, 0, 0, 0)
+
         val valuePaint = Paint().apply {
             color = zoneColor ?: colorFromLong(overlay.style.fontColor)
-            textSize = (height * 0.42f).coerceAtMost(width * 0.22f)
+            textSize = (height * 0.42f).coerceAtMost(width * 0.22f).coerceAtLeast(14f)
             isAntiAlias = true
             textAlign = Paint.Align.CENTER
-            typeface = Typeface.DEFAULT_BOLD
-            setShadowLayer(2f, 1f, 1f, Color.argb(100, 0, 0, 0))
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            setShadowLayer(shadowRadius * 2f, 2f, 2f, shadowColor)
         }
 
         val labelPaint = Paint().apply {
-            color = Color.argb(170, 255, 255, 255)
-            textSize = (height * 0.16f).coerceAtMost(width * 0.08f)
+            color = Color.argb(210, 255, 255, 255)
+            textSize = (height * 0.16f).coerceAtMost(width * 0.08f).coerceAtLeast(10f)
             isAntiAlias = true
             textAlign = Paint.Align.CENTER
+            letterSpacing = 0.06f
+            setShadowLayer(shadowRadius, 1f, 1f, shadowColor)
         }
 
         val unitPaint = Paint().apply {
-            color = Color.argb(140, 255, 255, 255)
-            textSize = (height * 0.14f).coerceAtMost(width * 0.07f)
+            color = Color.argb(170, 255, 255, 255)
+            textSize = (height * 0.14f).coerceAtMost(width * 0.07f).coerceAtLeast(9f)
             isAntiAlias = true
             textAlign = Paint.Align.CENTER
+            setShadowLayer(shadowRadius, 1f, 1f, shadowColor)
         }
 
         val cx = width / 2f
-        val baseY = height * 0.32f
-        canvas.drawText(label, cx, baseY, labelPaint)
-        canvas.drawText(value, cx, baseY + valuePaint.textSize * 1.0f, valuePaint)
+        val totalTextH = labelPaint.textSize + valuePaint.textSize * 1.1f +
+                (if (unit.isNotEmpty()) unitPaint.textSize * 1.2f else 0f)
+        val baseY = (height - totalTextH) / 2f + labelPaint.textSize
+
+        canvas.drawText(label.uppercase(), cx, baseY, labelPaint)
+        canvas.drawText(value, cx, baseY + valuePaint.textSize * 1.05f, valuePaint)
         if (unit.isNotEmpty()) {
-            canvas.drawText(unit, cx, baseY + valuePaint.textSize * 1.0f + unitPaint.textSize * 1.2f, unitPaint)
+            canvas.drawText(unit, cx, baseY + valuePaint.textSize * 1.05f + unitPaint.textSize * 1.2f, unitPaint)
         }
 
         return bitmap
@@ -533,7 +531,9 @@ object DynamicOverlayRenderer {
     }
 
     private fun drawBackground(canvas: Canvas, w: Int, h: Int, bgColor: Long?, cr: Float) {
-        val color = bgColor?.let { colorFromLong(it) } ?: Color.argb(255, 30, 30, 30)
+        // Only draw background if explicitly set (non-null). Default is transparent.
+        val color = bgColor?.let { colorFromLong(it) } ?: return
+        if (Color.alpha(color) == 0) return
         drawBackgroundColor(canvas, w, h, color, cr)
     }
 

@@ -173,6 +173,27 @@ sealed class TimelineAction {
         }
     }
 
+    data class AddTrackWithClip(
+        val track: TimelineTrackState,
+        val clip: TimelineClipState
+    ) : TimelineAction() {
+        override fun execute(state: TimelineState): TimelineState {
+            return state.copy(
+                tracks = (state.tracks + track.copy(clips = listOf(clip))).sortedBy { it.order },
+                selectedTrackId = track.id,
+                selectedClipId = clip.id
+            ).recalculateDuration()
+        }
+
+        override fun reverse(state: TimelineState): TimelineState {
+            return state.copy(
+                tracks = state.tracks.filter { it.id != track.id },
+                selectedTrackId = if (state.selectedTrackId == track.id) null else state.selectedTrackId,
+                selectedClipId = if (state.selectedClipId == clip.id) null else state.selectedClipId
+            ).recalculateDuration()
+        }
+    }
+
     data class ReorderTrack(
         val trackId: UUID,
         val oldOrder: Int,

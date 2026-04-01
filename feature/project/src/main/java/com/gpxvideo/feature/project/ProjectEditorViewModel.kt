@@ -179,7 +179,7 @@ class ProjectEditorViewModel @Inject constructor(
             type = mediaType,
             sourcePath = uri.toString(),
             localCopyPath = destFile.absolutePath,
-            durationMs = info.durationMs,
+            durationMs = info.durationMs?.takeIf { it > 0L },
             width = info.width,
             height = info.height,
             rotation = info.rotation,
@@ -195,9 +195,13 @@ class ProjectEditorViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             _isImportingGpx.value = true
             try {
+                val existingFiles = gpxFileDao.getByProjectId(projectId).first()
                 val name = getFileName(uri) ?: "track.gpx"
                 val result = gpxImportManager.importGpxFile(projectId, uri, name)
                 result.onSuccess { gpxFile ->
+                    existingFiles.forEach { existing ->
+                        gpxImportManager.deleteGpxFile(existing.id)
+                    }
                     gpxFile.parsedData?.let { data ->
                         _gpxData.value = data
                         _gpxStats.value = GpxStatistics.computeFullStats(data)
@@ -206,6 +210,28 @@ class ProjectEditorViewModel @Inject constructor(
             } finally {
                 _isImportingGpx.value = false
             }
+        }
+    }
+
+    fun renameGpxFile(name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            val current = gpxFileDao.getByProjectId(projectId).first().firstOrNull() ?: return@launch
+            gpxFileDao.update(current.copy(name = trimmed))
+        }
+    }
+
+    fun updateCanvasResolution(width: Int, height: Int) {
+        if (width <= 0 || height <= 0) return
+        viewModelScope.launch(Dispatchers.IO) {
+            val currentProject = _project.value ?: projectDao.getById(projectId) ?: return@launch
+            val updated = currentProject.copy(
+                resolutionWidth = width,
+                resolutionHeight = height
+            )
+            projectDao.update(updated)
+            _project.value = updated
         }
     }
 

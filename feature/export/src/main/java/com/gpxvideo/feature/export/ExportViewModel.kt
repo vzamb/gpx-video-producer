@@ -7,7 +7,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.gpxvideo.core.database.dao.GpxFileDao
 import com.gpxvideo.core.database.dao.MediaItemDao
-import com.gpxvideo.core.database.dao.OverlayDao
 import com.gpxvideo.core.database.dao.ProjectDao
 import com.gpxvideo.core.database.dao.TimelineClipDao
 import com.gpxvideo.core.database.dao.TimelineTrackDao
@@ -21,7 +20,10 @@ import com.gpxvideo.core.model.TrackType
 import com.gpxvideo.core.model.Transition
 import com.gpxvideo.core.model.TransitionType
 import com.gpxvideo.feature.overlays.GpxTimeSyncEngine
+import com.gpxvideo.feature.overlays.OverlayRepository
 import com.gpxvideo.lib.ffmpeg.FfmpegResult
+import com.gpxvideo.lib.gpxparser.GpxParser
+import com.gpxvideo.lib.gpxparser.GpxStatistics
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,7 +32,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.Json
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -62,7 +63,7 @@ class ExportViewModel @Inject constructor(
     private val mediaItemDao: MediaItemDao,
     private val timelineTrackDao: TimelineTrackDao,
     private val timelineClipDao: TimelineClipDao,
-    private val overlayDao: OverlayDao,
+    private val overlayRepository: OverlayRepository,
     private val gpxFileDao: GpxFileDao,
     @ApplicationContext private val context: Context,
     savedStateHandle: SavedStateHandle
@@ -179,6 +180,35 @@ class ExportViewModel @Inject constructor(
         _uiState.update { it.copy(exportState = ExportState.Idle) }
     }
 
+    fun saveToGallery(outputPath: String) {
+        viewModelScope.launch {
+            try {
+                val file = java.io.File(outputPath)
+                if (!file.exists()) return@launch
+
+                val resolver = context.contentResolver
+                val contentValues = android.content.ContentValues().apply {
+                    put(android.provider.MediaStore.Video.Media.DISPLAY_NAME, file.name)
+                    put(android.provider.MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+                    put(android.provider.MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES)
+                }
+                val uri = resolver.insert(
+                    android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                    contentValues
+                )
+                if (uri != null) {
+                    resolver.openOutputStream(uri)?.use { output ->
+                        file.inputStream().use { input ->
+                            input.copyTo(output)
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+                // Silently fail for stub exports
+            }
+        }
+    }
+
     private suspend fun buildExportConfig(): ExportConfig? {
         val uuid = try {
             UUID.fromString(projectId)
@@ -189,7 +219,7 @@ class ExportViewModel @Inject constructor(
         val project = projectDao.getById(uuid) ?: return null
         val tracks = timelineTrackDao.getByProjectId(uuid).first()
         val mediaItems = mediaItemDao.getByProjectId(uuid).first()
-        val overlayEntities = overlayDao.getByProjectId(uuid).first()
+        val overlays = overlayRepository.getOverlaysForProject(uuid).first()
         val gpxFiles = gpxFileDao.getByProjectId(uuid).first()
 
         val settings = _uiState.value.settings
@@ -231,21 +261,36 @@ class ExportViewModel @Inject constructor(
                 )
             }
         }
+        clips.sortBy { it.startTimeMs }
 
-        // Build overlays (simplified — overlay entity stores config as JSON)
-        val exportOverlays = mutableListOf<ExportOverlay>()
+        val trackOrderById = tracks.associate { it.id to it.order }
+        val exportOverlays = overlays.mapNotNull { overlay ->
+            val clip = timelineClipDao.getById(overlay.timelineClipId) ?: return@mapNotNull null
+            if (clip.endTimeMs <= clip.startTimeMs) return@mapNotNull null
+            val order = trackOrderById[clip.trackId] ?: Int.MAX_VALUE
+            Triple(
+                order,
+                clip.startTimeMs,
+                ExportOverlay(
+                    overlayConfig = overlay,
+                    startTimeMs = clip.startTimeMs,
+                    endTimeMs = clip.endTimeMs
+                )
+            )
+        }.sortedWith(compareBy({ it.first }, { it.second }))
+            .map { it.third }
 
-        // Parse GPX data
-        val gpxData: GpxData? = gpxFiles.firstOrNull()?.parsedDataJson?.let { json ->
-            try {
-                Json.decodeFromString<GpxData>(json)
-            } catch (e: Exception) {
-                null
-            }
+        val gpxData: GpxData? = gpxFiles.firstOrNull()?.let { gpxFile ->
+            runCatching {
+                File(gpxFile.filePath).inputStream().use { GpxParser.parse(it) }
+            }.getOrNull()
         }
+        val gpxStats = gpxData?.let { GpxStatistics.computeFullStats(it) }
 
         val syncEngine = gpxData?.let {
-            GpxTimeSyncEngine(it, SyncMode.GPX_TIMESTAMP)
+            GpxTimeSyncEngine(it, SyncMode.GPX_TIMESTAMP).apply {
+                precomputeLookupTable()
+            }
         }
 
         // Output path
@@ -263,6 +308,7 @@ class ExportViewModel @Inject constructor(
             outputSettings = settings,
             outputPath = outputPath,
             gpxData = gpxData,
+            gpxStats = gpxStats,
             syncEngine = syncEngine
         )
     }

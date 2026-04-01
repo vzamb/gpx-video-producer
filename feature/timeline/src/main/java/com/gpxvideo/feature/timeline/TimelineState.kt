@@ -44,6 +44,15 @@ data class TimelineClipState(
     val entryTransitionDurationMs: Long? = null,
     val exitTransitionType: String? = null,
     val exitTransitionDurationMs: Long? = null,
+    val contentMode: ClipContentMode = ClipContentMode.FIT,
+    val positionX: Float = 0.5f,
+    val positionY: Float = 0.5f,
+    val rotation: Float = 0.0f,
+    val scale: Float = 1.0f,
+    val opacity: Float = 1.0f,
+    val brightness: Float = 0.0f,
+    val contrast: Float = 1.0f,
+    val saturation: Float = 1.0f,
     val kenBurnsStartX: Float? = null,
     val kenBurnsStartY: Float? = null,
     val kenBurnsStartScale: Float? = null,
@@ -51,6 +60,12 @@ data class TimelineClipState(
     val kenBurnsEndY: Float? = null,
     val kenBurnsEndScale: Float? = null
 )
+
+enum class ClipContentMode {
+    FIT,
+    FILL,
+    CROP
+}
 
 fun TrackType.toColor(): Color = when (this) {
     TrackType.VIDEO -> Color(0xFF2196F3)

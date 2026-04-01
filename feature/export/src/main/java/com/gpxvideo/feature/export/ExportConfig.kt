@@ -6,6 +6,7 @@ import com.gpxvideo.core.model.OverlayConfig
 import com.gpxvideo.core.model.OutputSettings
 import com.gpxvideo.core.model.Transition
 import com.gpxvideo.feature.overlays.GpxTimeSyncEngine
+import com.gpxvideo.lib.gpxparser.GpxStats
 import java.util.UUID
 
 data class ExportConfig(
@@ -15,6 +16,7 @@ data class ExportConfig(
     val outputSettings: OutputSettings,
     val outputPath: String,
     val gpxData: GpxData?,
+    val gpxStats: GpxStats?,
     val syncEngine: GpxTimeSyncEngine?
 )
 

@@ -30,4 +30,10 @@ interface OverlayDao {
 
     @Query("SELECT * FROM overlays WHERE project_id = :projectId")
     fun getByProjectId(projectId: UUID): Flow<List<OverlayEntity>>
+
+    @Query("SELECT * FROM overlays WHERE timeline_clip_id = :timelineClipId LIMIT 1")
+    suspend fun getByTimelineClipId(timelineClipId: UUID): OverlayEntity?
+
+    @Query("DELETE FROM overlays WHERE timeline_clip_id = :timelineClipId")
+    suspend fun deleteByTimelineClipId(timelineClipId: UUID)
 }

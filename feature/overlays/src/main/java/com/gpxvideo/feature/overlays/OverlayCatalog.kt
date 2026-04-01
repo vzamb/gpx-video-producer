@@ -5,7 +5,6 @@ import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.QueryStats
 import androidx.compose.material.icons.filled.Speed
-import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.ui.graphics.vector.ImageVector
 
 data class OverlayCatalogItem(
@@ -13,58 +12,92 @@ data class OverlayCatalogItem(
     val displayName: String,
     val description: String,
     val icon: ImageVector,
-    val category: OverlayCategory
+    val category: OverlayCategory,
+    val requiresGpx: Boolean = true
 )
 
-enum class OverlayCategory(val displayName: String) {
-    STATIC("Static"),
-    DYNAMIC("Dynamic"),
-    TEXT("Text")
+enum class OverlayCategory(val displayName: String, val helperText: String) {
+    STATIC("Static", "Full-route visuals for intros, recaps, and summary cards."),
+    MOVING("Moving", "Animated route elements that travel across the whole activity."),
+    LIVE("Live", "Timestamp-aware overlays synced to the video position.")
+}
+
+enum class OverlayStylePreset(val displayName: String, val description: String) {
+    CLEAN("Clean", "Sharp dark cards with cool highlights."),
+    BROADCAST("Broadcast", "Sporty TV-style contrast and bright accents."),
+    GLASS("Glass", "Softer translucent cards for premium recaps.")
+}
+
+enum class OverlayFormatPreset(val displayName: String, val description: String) {
+    COMPACT("Compact", "Small footprint for busy edits."),
+    CARD("Card", "Balanced default for most layouts."),
+    WIDE("Wide", "Expanded panels for map and graph focus.")
 }
 
 object OverlayCatalog {
-    val items: List<OverlayCatalogItem> = listOf(
+    val gpxItems: List<OverlayCatalogItem> = listOf(
         OverlayCatalogItem(
             type = "static_altitude_profile",
             displayName = "Altitude Profile",
-            description = "Static elevation chart of the full route",
+            description = "A full-route elevation chart for recap scenes.",
             icon = Icons.AutoMirrored.Filled.ShowChart,
             category = OverlayCategory.STATIC
         ),
         OverlayCatalogItem(
             type = "static_map",
-            displayName = "GPS Map",
-            description = "Static overview map of the full route",
+            displayName = "Route Map",
+            description = "A static overview of the entire GPX track.",
             icon = Icons.Default.Map,
             category = OverlayCategory.STATIC
         ),
         OverlayCatalogItem(
             type = "static_stats",
-            displayName = "Statistics",
-            description = "Summary statistics grid (distance, time, etc.)",
+            displayName = "Summary Stats",
+            description = "Distance, time, elevation, and speed in a recap card.",
             icon = Icons.Default.QueryStats,
             category = OverlayCategory.STATIC
         ),
         OverlayCatalogItem(
+            type = "moving_altitude_profile",
+            displayName = "Moving Profile",
+            description = "A runner dot advances across the full elevation chart.",
+            icon = Icons.AutoMirrored.Filled.ShowChart,
+            category = OverlayCategory.MOVING
+        ),
+        OverlayCatalogItem(
+            type = "moving_map",
+            displayName = "Moving Map",
+            description = "A travel marker moves across the whole route map.",
+            icon = Icons.Default.Map,
+            category = OverlayCategory.MOVING
+        ),
+        OverlayCatalogItem(
+            type = "moving_stat",
+            displayName = "Moving Metric",
+            description = "Animated progress-based stat tied to clip progression.",
+            icon = Icons.Default.Speed,
+            category = OverlayCategory.MOVING
+        ),
+        OverlayCatalogItem(
             type = "dynamic_altitude_profile",
             displayName = "Live Altitude",
-            description = "Animated altitude profile with current position marker",
-            icon = Icons.Default.Timeline,
-            category = OverlayCategory.DYNAMIC
+            description = "A timestamp-synced marker shows where you are on the profile.",
+            icon = Icons.AutoMirrored.Filled.ShowChart,
+            category = OverlayCategory.LIVE
         ),
         OverlayCatalogItem(
             type = "dynamic_map",
             displayName = "Live Map",
-            description = "Animated map tracking current position on route",
+            description = "Show the exact current GPX position at the active video time.",
             icon = Icons.Default.Map,
-            category = OverlayCategory.DYNAMIC
+            category = OverlayCategory.LIVE
         ),
         OverlayCatalogItem(
             type = "dynamic_stat",
-            displayName = "Live Stat",
-            description = "Single live-updating metric (speed, HR, etc.)",
+            displayName = "Live Metric",
+            description = "Display a live timestamp-linked metric like speed or heart rate.",
             icon = Icons.Default.Speed,
-            category = OverlayCategory.DYNAMIC
+            category = OverlayCategory.LIVE
         )
     )
 }

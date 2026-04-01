@@ -2,12 +2,18 @@ package com.gpxvideo.feature.overlays
 
 import android.graphics.Bitmap
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
@@ -49,10 +55,24 @@ fun OverlayPreviewLayer(
                 renderOverlayBitmap(overlay, gpxData, stats, currentPoint, pixelW, pixelH)
             }
 
-            if (bitmap != null) {
-                val widthDp = with(density) { pixelW.toDp() }
-                val heightDp = with(density) { pixelH.toDp() }
+            val widthDp = with(density) { pixelW.toDp() }
+            val heightDp = with(density) { pixelH.toDp() }
 
+            if (overlay is OverlayConfig.TextLabel) {
+                Box(
+                    modifier = Modifier
+                        .offset { IntOffset(offsetX, offsetY) }
+                        .size(width = widthDp, height = heightDp)
+                        .background(Color.Black.copy(alpha = 0.2f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = overlay.text,
+                        color = Color(overlay.style.fontColor),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+            } else if (bitmap != null) {
                 Image(
                     bitmap = bitmap.asImageBitmap(),
                     contentDescription = overlay.name,
@@ -104,6 +124,7 @@ private fun renderOverlayBitmap(
                 DynamicOverlayRenderer.renderDynamicStat(overlay, currentPoint, width, height)
             } else null
         }
+        is OverlayConfig.TextLabel -> null
     }
 }
 
@@ -114,4 +135,5 @@ private fun overlayKey(overlay: OverlayConfig, positionMs: Long): Any = when (ov
     is OverlayConfig.DynamicAltitudeProfile -> Triple(overlay.id, overlay.copy(), positionMs)
     is OverlayConfig.DynamicMap -> Triple(overlay.id, overlay.copy(), positionMs)
     is OverlayConfig.DynamicStat -> Triple(overlay.id, overlay.copy(), positionMs)
+    is OverlayConfig.TextLabel -> Triple(overlay.id, overlay.text, overlay.copy())
 }

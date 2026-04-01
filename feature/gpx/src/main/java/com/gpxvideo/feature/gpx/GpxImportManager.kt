@@ -71,14 +71,10 @@ class GpxImportManager @Inject constructor(
 
     suspend fun deleteGpxFile(gpxFileId: UUID) {
         withContext(Dispatchers.IO) {
-            gpxFileDao.delete(
-                GpxFileEntity(
-                    id = gpxFileId,
-                    projectId = UUID(0, 0),
-                    name = "",
-                    filePath = ""
-                )
-            )
+            gpxFileDao.getById(gpxFileId)?.let { entity ->
+                File(entity.filePath).delete()
+                gpxFileDao.deleteById(gpxFileId)
+            }
         }
     }
 

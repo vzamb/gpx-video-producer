@@ -54,9 +54,15 @@ fun SyncConfigSheet(
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val tabs = listOf("Auto (Timestamp)", "Manual (Keyframes)")
+    val tabs = listOf("Live", "Moving", "Manual")
     var selectedTab by remember {
-        mutableIntStateOf(if (syncMode == SyncMode.GPX_TIMESTAMP) 0 else 1)
+        mutableIntStateOf(
+            when (syncMode) {
+                SyncMode.GPX_TIMESTAMP -> 0
+                SyncMode.CLIP_PROGRESS -> 1
+                SyncMode.MANUAL_KEYFRAMES -> 2
+            }
+        )
     }
 
     ModalBottomSheet(
@@ -91,7 +97,11 @@ fun SyncConfigSheet(
                         selected = selectedTab == index,
                         onClick = {
                             selectedTab = index
-                            val mode = if (index == 0) SyncMode.GPX_TIMESTAMP else SyncMode.MANUAL_KEYFRAMES
+                            val mode = when (index) {
+                                0 -> SyncMode.GPX_TIMESTAMP
+                                1 -> SyncMode.CLIP_PROGRESS
+                                else -> SyncMode.MANUAL_KEYFRAMES
+                            }
                             onSyncModeChanged(mode)
                         },
                         text = { Text(title) }
@@ -103,11 +113,31 @@ fun SyncConfigSheet(
 
             when (selectedTab) {
                 0 -> AutoSyncTab(timeOffsetMs, onTimeOffsetChanged)
-                1 -> ManualSyncTab(keyframes, gpxData, onKeyframeAdded)
+                1 -> MovingSyncTab()
+                2 -> ManualSyncTab(keyframes, gpxData, onKeyframeAdded)
             }
 
             Spacer(modifier = Modifier.height(24.dp))
         }
+    }
+}
+
+@Composable
+private fun MovingSyncTab() {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(
+            text = "Clip Progress Sync",
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Text(
+            text = "The overlay travels from start to finish across the entire clip duration instead of matching video timestamps.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 

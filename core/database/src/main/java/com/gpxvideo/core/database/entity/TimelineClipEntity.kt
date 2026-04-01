@@ -42,6 +42,8 @@ data class TimelineClipEntity(
     val exitTransitionType: String? = null,
     @ColumnInfo(name = "exit_transition_duration_ms")
     val exitTransitionDurationMs: Long? = null,
+    @ColumnInfo(name = "content_mode")
+    val contentMode: String = "FIT",
     val volume: Float = 1.0f,
     val speed: Float = 1.0f,
     val brightness: Float = 0.0f,
