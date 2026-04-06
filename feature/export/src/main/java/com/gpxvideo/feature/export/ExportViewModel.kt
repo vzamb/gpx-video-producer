@@ -15,6 +15,7 @@ import com.gpxvideo.core.model.ExportFormat
 import com.gpxvideo.core.model.GpxData
 import com.gpxvideo.core.model.OutputSettings
 import com.gpxvideo.core.model.Resolution
+import com.gpxvideo.core.model.SocialAspectRatio
 import com.gpxvideo.core.model.SyncMode
 import com.gpxvideo.core.model.TrackType
 import com.gpxvideo.core.model.Transition
@@ -75,8 +76,20 @@ class ExportViewModel @Inject constructor(
     val uiState: StateFlow<ExportUiState> = _uiState.asStateFlow()
 
     init {
-        updateEstimatedSize()
+        viewModelScope.launch {
+            try {
+                val uuid = UUID.fromString(projectId)
+                val items = mediaItemDao.getByProjectId(uuid).first()
+                val totalDuration = items.sumOf { it.durationMs ?: 0L }
+                if (totalDuration > 0) {
+                    estimatedDurationSec = totalDuration / 1000f
+                }
+            } catch (_: Exception) {}
+            updateEstimatedSize()
+        }
     }
+
+    private var estimatedDurationSec = 60f
 
     fun updateFormat(format: ExportFormat) {
         _uiState.update { it.copy(settings = it.settings.copy(format = format)) }
@@ -85,6 +98,11 @@ class ExportViewModel @Inject constructor(
 
     fun updateResolution(resolution: Resolution) {
         _uiState.update { it.copy(settings = it.settings.copy(resolution = resolution)) }
+        updateEstimatedSize()
+    }
+
+    fun updateAspectRatio(aspectRatio: SocialAspectRatio) {
+        _uiState.update { it.copy(settings = it.settings.copy(aspectRatio = aspectRatio)) }
         updateEstimatedSize()
     }
 
@@ -100,8 +118,6 @@ class ExportViewModel @Inject constructor(
 
     private fun updateEstimatedSize() {
         val settings = _uiState.value.settings
-        // Rough estimate: bitrate * estimated_duration / 8 bytes
-        val estimatedDurationSec = 60f // Default estimate
         val sizeMb = (settings.bitrateBps * estimatedDurationSec) / (8f * 1024 * 1024)
         _uiState.update { it.copy(estimatedSizeMb = sizeMb) }
     }
@@ -224,7 +240,7 @@ class ExportViewModel @Inject constructor(
 
         val settings = _uiState.value.settings
 
-        // Build clips from video tracks
+        // Build clips from video tracks (timeline-based)
         val videoTracks = tracks.filter { it.type == TrackType.VIDEO.name }
         val clips = mutableListOf<ExportClip>()
 
@@ -262,6 +278,31 @@ class ExportViewModel @Inject constructor(
             }
         }
         clips.sortBy { it.startTimeMs }
+
+        // Fallback: if no timeline clips exist, build directly from media items
+        // (Story Creator wizard doesn't create timeline tracks/clips)
+        if (clips.isEmpty()) {
+            val videoItems = mediaItems.filter { it.type == "VIDEO" }
+            var currentTimeMs = 0L
+            for (media in videoItems) {
+                val filePath = media.localCopyPath.ifBlank { media.sourcePath }
+                if (filePath.isBlank()) continue
+                val durationMs = media.durationMs ?: 5000L
+                clips.add(
+                    ExportClip(
+                        filePath = filePath,
+                        startTimeMs = currentTimeMs,
+                        endTimeMs = currentTimeMs + durationMs,
+                        trimStartMs = 0L,
+                        trimEndMs = durationMs,
+                        speed = 1f,
+                        volume = 1f,
+                        transition = null
+                    )
+                )
+                currentTimeMs += durationMs
+            }
+        }
 
         val trackOrderById = tracks.associate { it.id to it.order }
         val exportOverlays = overlays.mapNotNull { overlay ->
@@ -310,8 +351,8 @@ class ExportViewModel @Inject constructor(
             gpxData = gpxData,
             gpxStats = gpxStats,
             syncEngine = syncEngine,
-            projectWidth = project.resolutionWidth,
-            projectHeight = project.resolutionHeight
+            projectWidth = settings.aspectRatio.width,
+            projectHeight = settings.aspectRatio.height
         )
     }
 }

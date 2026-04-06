@@ -31,6 +31,7 @@ enum class SportType(val displayName: String, val icon: String) {
 
 data class OutputSettings(
     val resolution: Resolution = Resolution.FHD_1080P,
+    val aspectRatio: SocialAspectRatio = SocialAspectRatio.LANDSCAPE_16_9,
     val frameRate: Int = 30,
     val format: ExportFormat = ExportFormat.MP4_H264,
     val bitrateBps: Long = 10_000_000L,
@@ -42,6 +43,19 @@ enum class Resolution(val width: Int, val height: Int, val displayName: String) 
     FHD_1080P(1920, 1080, "1080p Full HD"),
     QHD_1440P(2560, 1440, "1440p QHD"),
     UHD_4K(3840, 2160, "4K UHD")
+}
+
+enum class SocialAspectRatio(
+    val displayName: String,
+    val description: String,
+    val width: Int,
+    val height: Int,
+    val icon: String
+) {
+    LANDSCAPE_16_9("16:9", "YouTube, Twitter", 1920, 1080, "📺"),
+    PORTRAIT_9_16("9:16", "Reels, TikTok, Shorts", 1080, 1920, "📱"),
+    SQUARE_1_1("1:1", "Instagram Post", 1080, 1080, "⬜"),
+    PORTRAIT_4_5("4:5", "Instagram Feed", 1080, 1350, "📷")
 }
 
 enum class ExportFormat(val displayName: String, val extension: String) {

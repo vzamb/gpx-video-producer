@@ -3,9 +3,13 @@ package com.gpxvideo.feature.export
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -55,7 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.gpxvideo.core.model.ExportFormat
-import com.gpxvideo.core.model.Resolution
+import com.gpxvideo.core.model.SocialAspectRatio
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -94,7 +98,7 @@ fun ExportScreen(
                         settings = uiState.settings,
                         estimatedSizeMb = uiState.estimatedSizeMb,
                         onFormatChanged = viewModel::updateFormat,
-                        onResolutionChanged = viewModel::updateResolution,
+                        onAspectRatioChanged = viewModel::updateAspectRatio,
                         onFrameRateChanged = viewModel::updateFrameRate
                     )
 
@@ -146,13 +150,13 @@ fun ExportScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun ExportSettingsSection(
     settings: com.gpxvideo.core.model.OutputSettings,
     estimatedSizeMb: Float,
     onFormatChanged: (ExportFormat) -> Unit,
-    onResolutionChanged: (Resolution) -> Unit,
+    onAspectRatioChanged: (SocialAspectRatio) -> Unit,
     onFrameRateChanged: (Int) -> Unit
 ) {
     Card(
@@ -171,6 +175,56 @@ private fun ExportSettingsSection(
                 fontWeight = FontWeight.Bold
             )
 
+            // Aspect ratio selector (social format chips)
+            Text(
+                "Aspect Ratio",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                SocialAspectRatio.entries.forEach { ratio ->
+                    val isSelected = settings.aspectRatio == ratio
+                    Card(
+                        modifier = Modifier.clickable { onAspectRatioChanged(ratio) },
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isSelected)
+                                MaterialTheme.colorScheme.primaryContainer
+                            else MaterialTheme.colorScheme.surface
+                        ),
+                        border = if (isSelected) BorderStroke(
+                            2.dp, MaterialTheme.colorScheme.primary
+                        ) else BorderStroke(
+                            1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(ratio.icon, style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                ratio.displayName,
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            )
+                            Text(
+                                ratio.description,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                "${ratio.width}×${ratio.height}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                            )
+                        }
+                    }
+                }
+            }
+
             // Format dropdown
             DropdownSelector(
                 label = "Format",
@@ -178,16 +232,6 @@ private fun ExportSettingsSection(
                 options = ExportFormat.entries.map { it.displayName },
                 onOptionSelected = { name ->
                     ExportFormat.entries.find { it.displayName == name }?.let(onFormatChanged)
-                }
-            )
-
-            // Resolution dropdown
-            DropdownSelector(
-                label = "Resolution",
-                selectedValue = settings.resolution.displayName,
-                options = Resolution.entries.map { it.displayName },
-                onOptionSelected = { name ->
-                    Resolution.entries.find { it.displayName == name }?.let(onResolutionChanged)
                 }
             )
 

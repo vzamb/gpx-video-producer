@@ -89,6 +89,13 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.viewinterop.AndroidView
+import android.view.TextureView
+import android.net.Uri
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.gpxvideo.core.database.entity.MediaItemEntity
@@ -189,7 +196,8 @@ fun StoryCreatorScreen(
                 2 -> TemplateStep(
                     selectedTemplate = uiState.storyTemplate,
                     onTemplateSelected = viewModel::setStoryTemplate,
-                    gpxData = uiState.gpxData
+                    gpxData = uiState.gpxData,
+                    mediaItems = uiState.mediaItems
                 )
                 3 -> ReviewStep(
                     uiState = uiState,
@@ -760,7 +768,8 @@ private fun SyncModeCard(
 private fun TemplateStep(
     selectedTemplate: String,
     onTemplateSelected: (String) -> Unit,
-    gpxData: com.gpxvideo.core.model.GpxData?
+    gpxData: com.gpxvideo.core.model.GpxData?,
+    mediaItems: List<MediaItemEntity> = emptyList()
 ) {
     Column(
         modifier = Modifier
@@ -803,7 +812,8 @@ private fun TemplateStep(
             TemplatePreviewCard(
                 template = templates[page],
                 isSelected = templates[page].name == selectedTemplate,
-                gpxData = gpxData
+                gpxData = gpxData,
+                mediaItems = mediaItems
             )
         }
 
@@ -835,8 +845,14 @@ private fun TemplateStep(
 private fun TemplatePreviewCard(
     template: StoryTemplate,
     isSelected: Boolean,
-    gpxData: com.gpxvideo.core.model.GpxData?
+    gpxData: com.gpxvideo.core.model.GpxData?,
+    mediaItems: List<MediaItemEntity> = emptyList()
 ) {
+    val firstVideoPath = mediaItems
+        .firstOrNull { it.type == "VIDEO" }
+        ?.let { it.localCopyPath.ifBlank { it.sourcePath } }
+        ?.takeIf { it.isNotBlank() }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -851,20 +867,28 @@ private fun TemplatePreviewCard(
         ) else null
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            // Simulated video background gradient
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color(0xFF1A1A2E),
-                                Color(0xFF16213E),
-                                Color(0xFF0F3460)
+            if (firstVideoPath != null) {
+                // Real video background
+                VideoBackground(
+                    videoPath = firstVideoPath,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                // Fallback gradient
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color(0xFF1A1A2E),
+                                    Color(0xFF16213E),
+                                    Color(0xFF0F3460)
+                                )
                             )
                         )
-                    )
-            )
+                )
+            }
 
             // Template overlay preview
             when (template) {
@@ -1322,6 +1346,43 @@ private fun MiniElevationChart(
             )
         }
     }
+}
+
+// ── Video Background Player ──────────────────────────────────────────────
+
+@Composable
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+private fun VideoBackground(
+    videoPath: String,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val exoPlayer = remember(videoPath) {
+        androidx.media3.exoplayer.ExoPlayer.Builder(context).build().apply {
+            val uri = if (videoPath.startsWith("content://"))
+                Uri.parse(videoPath) else Uri.fromFile(java.io.File(videoPath))
+            setMediaItem(androidx.media3.common.MediaItem.fromUri(uri))
+            repeatMode = androidx.media3.common.Player.REPEAT_MODE_ALL
+            volume = 0f
+            playWhenReady = true
+            prepare()
+        }
+    }
+
+    DisposableEffect(videoPath) {
+        onDispose {
+            exoPlayer.release()
+        }
+    }
+
+    AndroidView(
+        factory = { ctx ->
+            TextureView(ctx).also { textureView ->
+                exoPlayer.setVideoTextureView(textureView)
+            }
+        },
+        modifier = modifier
+    )
 }
 
 // ── Step 3: Review ───────────────────────────────────────────────────────
