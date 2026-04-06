@@ -309,7 +309,9 @@ class ExportViewModel @Inject constructor(
             outputPath = outputPath,
             gpxData = gpxData,
             gpxStats = gpxStats,
-            syncEngine = syncEngine
+            syncEngine = syncEngine,
+            projectWidth = project.resolutionWidth,
+            projectHeight = project.resolutionHeight
         )
     }
 }

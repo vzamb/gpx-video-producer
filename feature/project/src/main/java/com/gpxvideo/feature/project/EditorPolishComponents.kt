@@ -1,6 +1,7 @@
 package com.gpxvideo.feature.project
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -163,7 +164,16 @@ internal fun GpxWorkspaceSheet(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text("GPX Data", style = MaterialTheme.typography.titleMedium)
+                Column {
+                    Text("GPX Data", style = MaterialTheme.typography.titleMedium)
+                    if (currentFile != null) {
+                        Text(
+                            currentFile.name,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilledTonalButton(onClick = onImportOrReplace, enabled = !isImporting) {
                         Text(if (currentFile == null) "Import" else "Replace")
@@ -175,13 +185,13 @@ internal fun GpxWorkspaceSheet(
             }
 
             if (gpxData != null && gpxStats != null) {
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
-                // Route map — prominent card
+                // Route map — hero visualization
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(200.dp)
+                        .height(180.dp)
                         .background(
                             Color(0xFF0D1117),
                             RoundedCornerShape(12.dp)
@@ -194,13 +204,13 @@ internal fun GpxWorkspaceSheet(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
-                // Altitude profile — prominent card
+                // Altitude profile
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(140.dp)
+                        .height(100.dp)
                         .background(
                             Color(0xFF0D1117),
                             RoundedCornerShape(12.dp)
@@ -212,19 +222,35 @@ internal fun GpxWorkspaceSheet(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
-                // Statistics in visual grid
-                Text("Activity Stats", style = MaterialTheme.typography.labelLarge)
-                Spacer(modifier = Modifier.height(8.dp))
+                // Statistics
+                Text(
+                    "Activity Stats",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(6.dp))
                 StatsGrid(
                     stats = gpxStats,
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // File info
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Metadata chips
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    MetadataChip("${gpxData.tracks.size} tracks")
+                    MetadataChip("$segmentCount segments")
+                    MetadataChip("${allPoints.size} points")
+                }
+
+                // Rename section
                 if (currentFile != null) {
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -244,18 +270,6 @@ internal fun GpxWorkspaceSheet(
                             Text("Save")
                         }
                     }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Metadata
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    MetadataChip("${gpxData.tracks.size} tracks")
-                    MetadataChip("$segmentCount segments")
-                    MetadataChip("${allPoints.size} points")
                 }
             } else {
                 Spacer(modifier = Modifier.height(24.dp))
@@ -277,7 +291,7 @@ internal fun GpxWorkspaceSheet(
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
         }
     }
 }
@@ -308,33 +322,45 @@ internal fun ClipFramingControls(
     if (!isVisualClip) return
 
     Spacer(modifier = Modifier.height(12.dp))
-    Text("Framing", style = MaterialTheme.typography.labelLarge)
+    Text(
+        "Framing",
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
     Spacer(modifier = Modifier.height(8.dp))
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         ClipContentMode.entries.forEach { mode ->
             val label = when (mode) {
-                ClipContentMode.FIT -> "Adapt"
+                ClipContentMode.FIT -> "Fit"
                 ClipContentMode.FILL -> "Fill"
                 ClipContentMode.CROP -> "Crop"
             }
-            val icon = when (mode) {
-                ClipContentMode.FIT -> "↔"
-                ClipContentMode.FILL -> "⬛"
-                ClipContentMode.CROP -> "✂"
-            }
+            val isSelected = selectedClip.contentMode == mode
             Column(
                 modifier = Modifier
                     .clickable { onContentModeChange(selectedClip.id, mode) }
                     .background(
-                        MaterialTheme.colorScheme.surfaceContainerHigh,
+                        if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                        else MaterialTheme.colorScheme.surfaceContainerHigh,
                         RoundedCornerShape(8.dp)
                     )
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                    .then(
+                        if (isSelected) Modifier.border(
+                            1.dp,
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
+                            RoundedCornerShape(8.dp)
+                        ) else Modifier
+                    )
+                    .padding(horizontal = 18.dp, vertical = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(icon, style = MaterialTheme.typography.titleMedium)
-                Text(label, style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                    color = if (isSelected) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }

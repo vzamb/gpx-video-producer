@@ -215,7 +215,8 @@ private fun rememberOverlayBitmap(
     gpxData,
     gpxStats,
     if (overlay.isDynamic()) syncEngine else null,
-    if (overlay.isDynamic()) currentPositionMs else Long.MIN_VALUE
+    // Throttle dynamic overlays: only re-render every 500ms of playback
+    if (overlay.isDynamic()) (currentPositionMs / 500L) else Long.MIN_VALUE
 ) {
     value = withContext(Dispatchers.Default) {
         renderOverlayBitmap(overlay, gpxData, gpxStats, syncEngine, currentPositionMs)?.asImageBitmap()

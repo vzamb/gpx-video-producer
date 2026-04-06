@@ -480,9 +480,9 @@ fun VideoEditorScreen(
         // Extract a clean frame from the source file so that previously applied
         // color adjustments don't bleed into filter previews.
         LaunchedEffect(Unit) {
-            frameBitmap = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                previewVm.captureCleanFrame()
-            }
+            // captureCleanFrame accesses ExoPlayer (main-thread only) then uses
+            // MediaMetadataRetriever internally — call from Main, it's fast enough.
+            frameBitmap = previewVm.captureCleanFrame()
         }
 
         EffectsSheet(

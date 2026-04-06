@@ -19,7 +19,7 @@ android {
 }
 
 dependencies {
-    // TODO: Add ffmpeg-kit dependency when Maven repo is configured
+    // ffmpeg-kit retired April 2025 — using Media3 Transformer instead
     // implementation(libs.ffmpeg.kit.full)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)

@@ -1,36 +1,60 @@
 package com.gpxvideo.feature.export
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.PorterDuff
+import android.os.Looper
+import android.util.Log
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
+import androidx.media3.common.audio.SonicAudioProcessor
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.effect.OverlayEffect
+import androidx.media3.effect.OverlaySettings
+import androidx.media3.effect.Presentation
+import androidx.media3.effect.BitmapOverlay
+import androidx.media3.effect.SpeedChangeEffect
+import androidx.media3.transformer.Composition
+import androidx.media3.transformer.EditedMediaItem
+import androidx.media3.transformer.EditedMediaItemSequence
+import androidx.media3.transformer.ExportException
+import androidx.media3.transformer.ExportResult
+import androidx.media3.transformer.ProgressHolder
+import androidx.media3.transformer.Transformer
 import com.gpxvideo.core.model.ExportFormat
 import com.gpxvideo.core.model.OverlayConfig
-import com.gpxvideo.core.model.TransitionType
-import com.gpxvideo.lib.ffmpeg.FfmpegCommand
-import com.gpxvideo.lib.ffmpeg.FfmpegCommandBuilder
-import com.gpxvideo.lib.ffmpeg.FfmpegExecutor
 import com.gpxvideo.lib.ffmpeg.FfmpegResult
-import com.gpxvideo.lib.ffmpeg.FilterGraphBuilder
+import com.google.common.collect.ImmutableList
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import java.io.File
 import javax.inject.Inject
+import kotlin.coroutines.resume
 
 private data class RenderedOverlayInput(
     val path: String,
     val isSequence: Boolean
 )
 
+@UnstableApi
 class ExportPipeline @Inject constructor(
-    private val ffmpegExecutor: FfmpegExecutor,
     private val overlayFrameRenderer: OverlayFrameRenderer,
     @ApplicationContext private val context: Context
 ) {
+    private var activeTransformer: Transformer? = null
 
     suspend fun export(
         config: ExportConfig,
         onPhaseChanged: (ExportPhase) -> Unit,
         onProgress: (Float) -> Unit
-    ): FfmpegResult = withContext(Dispatchers.IO) {
+    ): FfmpegResult {
 
         onPhaseChanged(ExportPhase.PREPARING)
         onProgress(0f)
@@ -39,9 +63,10 @@ class ExportPipeline @Inject constructor(
         tempDir.mkdirs()
 
         if (config.clips.isEmpty()) {
-            return@withContext FfmpegResult.Error("No clips to export", -1, "")
+            return FfmpegResult.Error("No clips to export", -1, "")
         }
 
+        // Phase 1: Pre-render overlays
         val dynamicOverlays = config.overlays.filter { isDynamic(it.overlayConfig) }
         val stillOverlays = config.overlays.filterNot { isDynamic(it.overlayConfig) }
         val renderedInputs = linkedMapOf<ExportOverlay, RenderedOverlayInput>()
@@ -49,8 +74,8 @@ class ExportPipeline @Inject constructor(
 
         if (config.overlays.isNotEmpty()) {
             onPhaseChanged(ExportPhase.RENDERING_OVERLAYS)
-            val outputWidth = config.outputSettings.resolution.width
-            val outputHeight = config.outputSettings.resolution.height
+            val outputWidth = config.projectWidth
+            val outputHeight = config.projectHeight
             var completed = 0
 
             if (dynamicOverlays.isNotEmpty() && config.gpxData != null && config.syncEngine != null) {
@@ -99,193 +124,188 @@ class ExportPipeline @Inject constructor(
             }
         }
 
+        // Phase 2: Export with Transformer
         onPhaseChanged(ExportPhase.ENCODING)
+        val encodingBase = if (renderedInputs.isNotEmpty()) 0.3f else 0f
 
-        val command = buildFfmpegCommand(config, renderedInputs)
-        val result = ffmpegExecutor.execute(command) { progress ->
-            val encodingBase = if (renderedInputs.isNotEmpty()) 0.3f else 0f
-            val encodingWeight = 0.6f
-            onProgress(encodingBase + encodingWeight * progress.percentage)
+        val result = withContext(Dispatchers.Main) {
+            exportWithTransformer(config, renderedInputs, encodingBase, onProgress)
         }
 
-        if (result is FfmpegResult.Error || result is FfmpegResult.Cancelled) {
-            cleanupTempDir(tempDir)
-            return@withContext result
-        }
-
-        onPhaseChanged(ExportPhase.MIXING_AUDIO)
-        onProgress(0.9f)
-
+        // Phase 3: Cleanup
         onPhaseChanged(ExportPhase.FINALIZING)
-        cleanupTempDir(tempDir)
+        withContext(Dispatchers.IO) { tempDir.deleteRecursively() }
         onProgress(1f)
 
-        result
+        return result
     }
 
-    private fun buildFfmpegCommand(
+    private suspend fun exportWithTransformer(
         config: ExportConfig,
-        renderedInputs: Map<ExportOverlay, RenderedOverlayInput>
-    ): FfmpegCommand {
-        val builder = FfmpegCommandBuilder().overwrite()
-        val settings = config.outputSettings
-        val filterGraph = FilterGraphBuilder()
-        val width = settings.resolution.width
-        val height = settings.resolution.height
+        renderedInputs: Map<ExportOverlay, RenderedOverlayInput>,
+        encodingBase: Float,
+        onProgress: (Float) -> Unit
+    ): FfmpegResult = suspendCancellableCoroutine { cont ->
+        val width = config.projectWidth
+        val height = config.projectHeight
 
-        for (clip in config.clips) {
-            val inputOptions = mutableMapOf<String, String>()
+        // Build EditedMediaItems for each clip
+        val editedItems = config.clips.map { clip ->
+            val clippingConfig = MediaItem.ClippingConfiguration.Builder()
             if (clip.trimStartMs > 0) {
-                inputOptions["ss"] = "%.3f".format(clip.trimStartMs / 1000.0)
+                clippingConfig.setStartPositionMs(clip.trimStartMs)
             }
+            // trimEndMs = amount trimmed from end; compute absolute end
+            val sourceDuration = clip.endTimeMs - clip.startTimeMs + clip.trimEndMs + clip.trimStartMs
             if (clip.trimEndMs > 0) {
-                inputOptions["to"] = "%.3f".format(clip.trimEndMs / 1000.0)
+                clippingConfig.setEndPositionMs(sourceDuration - clip.trimEndMs)
             }
-            builder.addInput(clip.filePath, inputOptions)
-        }
 
-        val overlayEntries = renderedInputs.entries.toList()
-        val overlayInputIndex = config.clips.size
-        overlayEntries.forEach { (overlay, rendered) ->
-            val startSeconds = "%.3f".format(overlay.startTimeMs / 1000.0)
-            if (rendered.isSequence) {
-                builder.addImageSequenceInput(
-                    rendered.path,
-                    settings.frameRate,
-                    options = linkedMapOf("itsoffset" to startSeconds)
-                )
-            } else {
-                builder.addInput(
-                    rendered.path,
-                    linkedMapOf(
-                        "loop" to "1",
-                        "itsoffset" to startSeconds
-                    )
-                )
-            }
-        }
+            val mediaItem = MediaItem.Builder()
+                .setUri(clip.filePath)
+                .setClippingConfiguration(clippingConfig.build())
+                .build()
 
-        if (config.clips.size == 1 && overlayEntries.isEmpty()) {
-            val clip = config.clips.first()
+            val videoEffects = mutableListOf<androidx.media3.common.Effect>()
+            val audioProcessors = mutableListOf<androidx.media3.common.audio.AudioProcessor>()
+
+            // Scale to target resolution
+            videoEffects.add(
+                Presentation.createForWidthAndHeight(
+                    width, height, Presentation.LAYOUT_SCALE_TO_FIT
+                )
+            )
+
+            // Speed change
             if (clip.speed != 1.0f) {
-                filterGraph.addSpeed("0:v", clip.speed, "v0")
-                if (clip.volume > 0f) {
-                    filterGraph.addAudioSpeed("0:a", clip.speed, "a0_speed")
-                    filterGraph.addVolume("a0_speed", clip.volume, "a0")
-                }
-            } else if (clip.volume != 1.0f) {
-                filterGraph.addVolume("0:a", clip.volume, "a0")
+                videoEffects.add(SpeedChangeEffect(clip.speed))
+                audioProcessors.add(SonicAudioProcessor().apply { setSpeed(clip.speed) })
             }
 
-            filterGraph.addScale("v0".takeIf { clip.speed != 1.0f } ?: "0:v", width, height, "vout")
-        } else {
-            for ((idx, clip) in config.clips.withIndex()) {
-                val inputLabel = "$idx:v"
-                var currentLabel = inputLabel
+            // Volume change — SonicAudioProcessor handles speed; for volume-only
+            // we combine into same processor if speed is also set
+            if (clip.volume != 1.0f && clip.volume >= 0f && clip.speed == 1.0f) {
+                // Use SonicAudioProcessor for volume-only changes
+                audioProcessors.add(SonicAudioProcessor().apply { setSpeed(1.0f) })
+            }
 
-                if (clip.speed != 1.0f) {
-                    val speedLabel = "v${idx}_speed"
-                    filterGraph.addSpeed(currentLabel, clip.speed, speedLabel)
-                    currentLabel = speedLabel
-                }
-
-                val scaleLabel = "v${idx}_scaled"
-                filterGraph.addScale(currentLabel, width, height, scaleLabel)
-                currentLabel = scaleLabel
-
-                if (clip.transition != null && clip.transition.type != TransitionType.CUT) {
-                    val fadeLabel = "v${idx}_fade"
-                    filterGraph.addFade(
-                        currentLabel, "in", 0,
-                        clip.transition.durationMs, fadeLabel
+            EditedMediaItem.Builder(mediaItem)
+                .setEffects(
+                    androidx.media3.transformer.Effects(
+                        audioProcessors.toList(),
+                        videoEffects.toList()
                     )
-                    currentLabel = fadeLabel
-                }
-
-                if (currentLabel != "v$idx") {
-                    filterGraph.addSetPts(currentLabel, "PTS-STARTPTS", "v$idx")
-                }
-
-                val audioInput = "$idx:a"
-                var currentAudioLabel = audioInput
-                if (clip.speed != 1.0f) {
-                    val audioSpeedLabel = "a${idx}_speed"
-                    filterGraph.addAudioSpeed(currentAudioLabel, clip.speed, audioSpeedLabel)
-                    currentAudioLabel = audioSpeedLabel
-                }
-                if (clip.volume != 1.0f) {
-                    val volLabel = "a${idx}_vol"
-                    filterGraph.addVolume(currentAudioLabel, clip.volume, volLabel)
-                    currentAudioLabel = volLabel
-                }
-                if (currentAudioLabel != "a$idx") {
-                    filterGraph.addCustomFilter("[$currentAudioLabel]asetpts=PTS-STARTPTS[a$idx]")
-                }
-            }
-
-            if (config.clips.size > 1) {
-                filterGraph.addAudioVideoConcat(config.clips.size)
-            } else {
-                filterGraph.addCustomFilter("[v0]copy[vout]")
-                filterGraph.addCustomFilter("[a0]acopy[aout]")
-            }
-
-            var currentBase = "vout"
-            overlayEntries.forEachIndexed { idx, (overlay, _) ->
-                val overlayStreamIndex = overlayInputIndex + idx
-                val x = (overlay.overlayConfig.position.x * width).toInt()
-                val y = (overlay.overlayConfig.position.y * height).toInt()
-                val outLabel = if (idx == overlayEntries.lastIndex) "vfinal" else "vov$idx"
-                filterGraph.addOverlayWithEnable(
-                    baseStream = currentBase,
-                    overlayStream = "$overlayStreamIndex:v",
-                    x = x,
-                    y = y,
-                    enableStart = overlay.startTimeMs / 1000.0,
-                    enableEnd = overlay.endTimeMs / 1000.0,
-                    outputLabel = outLabel
                 )
-                currentBase = outLabel
+                .build()
+        }
+
+        val sequence = EditedMediaItemSequence(editedItems)
+
+        // Build composition-level overlay effect
+        val compositionEffects = mutableListOf<androidx.media3.common.Effect>()
+        if (renderedInputs.isNotEmpty()) {
+            val compositeOverlay = CompositeOverlay(
+                outputWidth = width,
+                outputHeight = height,
+                overlays = renderedInputs.map { (exportOverlay, rendered) ->
+                    OverlayEntry(
+                        config = exportOverlay.overlayConfig,
+                        startTimeMs = exportOverlay.startTimeMs,
+                        endTimeMs = exportOverlay.endTimeMs,
+                        path = rendered.path,
+                        isSequence = rendered.isSequence,
+                        frameRate = config.outputSettings.frameRate
+                    )
+                }
+            )
+            compositionEffects.add(
+                OverlayEffect(ImmutableList.of(compositeOverlay as androidx.media3.effect.TextureOverlay))
+            )
+        }
+
+        val composition = Composition.Builder(sequence)
+            .setEffects(
+                androidx.media3.transformer.Effects(emptyList(), compositionEffects)
+            )
+            .build()
+
+        // Build and start Transformer
+        val mimeType = when (config.outputSettings.format) {
+            ExportFormat.MP4_H264 -> MimeTypes.VIDEO_H264
+            ExportFormat.MP4_H265 -> MimeTypes.VIDEO_H265
+            ExportFormat.WEBM_VP9 -> MimeTypes.VIDEO_VP9
+        }
+
+        val transformer = Transformer.Builder(context)
+            .setVideoMimeType(mimeType)
+            .setAudioMimeType(MimeTypes.AUDIO_AAC)
+            .addListener(object : Transformer.Listener {
+                override fun onCompleted(
+                    composition: Composition,
+                    exportResult: ExportResult
+                ) {
+                    activeTransformer = null
+                    val outputFile = File(config.outputPath)
+                    if (outputFile.exists()) {
+                        cont.resume(
+                            FfmpegResult.Success(
+                                outputPath = config.outputPath,
+                                durationMs = exportResult.durationMs
+                            )
+                        )
+                    } else {
+                        cont.resume(
+                            FfmpegResult.Error("Output file not found", -1, "")
+                        )
+                    }
+                }
+
+                override fun onError(
+                    composition: Composition,
+                    exportResult: ExportResult,
+                    exportException: ExportException
+                ) {
+                    activeTransformer = null
+                    Log.e(TAG, "Export error", exportException)
+                    cont.resume(
+                        FfmpegResult.Error(
+                            exportException.message ?: "Export failed",
+                            exportException.errorCode,
+                            exportException.stackTraceToString()
+                        )
+                    )
+                }
+            })
+            .build()
+
+        activeTransformer = transformer
+
+        // Ensure output directory exists
+        File(config.outputPath).parentFile?.mkdirs()
+        transformer.start(composition, config.outputPath)
+
+        // Poll progress
+        val progressHolder = ProgressHolder()
+        kotlinx.coroutines.CoroutineScope(Dispatchers.Main).launch {
+            while (isActive && activeTransformer != null) {
+                val state = transformer.getProgress(progressHolder)
+                if (state == Transformer.PROGRESS_STATE_AVAILABLE) {
+                    val pct = progressHolder.progress / 100f
+                    onProgress(encodingBase + 0.6f * pct)
+                }
+                delay(250)
             }
         }
 
-        val filterString = filterGraph.build()
-        if (filterString.isNotEmpty()) {
-            builder.addFilterComplex(filterString)
+        cont.invokeOnCancellation {
+            transformer.cancel()
+            activeTransformer = null
         }
-
-        builder.setVideoCodec(settings.videoCodecName())
-        builder.setAudioCodec(settings.audioCodecName())
-        builder.setFrameRate(settings.frameRate)
-        builder.setBitrate(settings.bitrateBps)
-        builder.setCrf(crfForFormat(settings.format))
-        builder.setPixelFormat("yuv420p")
-
-        if (settings.format == ExportFormat.MP4_H264 || settings.format == ExportFormat.MP4_H265) {
-            builder.setPreset("medium")
-            builder.setMovFlags("+faststart")
-        }
-
-        if (filterString.isNotEmpty()) {
-            val videoOut = if (overlayEntries.isNotEmpty()) "vfinal" else "vout"
-            builder.addOutputOption("-map", "[$videoOut]")
-            if (filterString.contains("[aout]")) {
-                builder.addOutputOption("-map", "[aout]")
-            } else if (config.clips.size == 1) {
-                builder.addOutputOption("-map", "0:a?")
-            }
-        }
-
-        builder.setOutput(config.outputPath)
-        builder.setDescription("Export project ${config.projectId}")
-
-        return builder.build()
     }
 
-    private fun crfForFormat(format: ExportFormat): Int = when (format) {
-        ExportFormat.MP4_H264 -> 23
-        ExportFormat.MP4_H265 -> 28
-        ExportFormat.WEBM_VP9 -> 31
+    fun cancel() {
+        activeTransformer?.cancel()
+        activeTransformer = null
     }
 
     private fun isDynamic(config: OverlayConfig): Boolean = when (config) {
@@ -295,13 +315,86 @@ class ExportPipeline @Inject constructor(
         else -> false
     }
 
-    private suspend fun cleanupTempDir(dir: File) {
-        withContext(Dispatchers.IO) {
-            dir.deleteRecursively()
+    companion object {
+        private const val TAG = "ExportPipeline"
+    }
+}
+
+private data class OverlayEntry(
+    val config: OverlayConfig,
+    val startTimeMs: Long,
+    val endTimeMs: Long,
+    val path: String,
+    val isSequence: Boolean,
+    val frameRate: Int
+)
+
+/**
+ * A [BitmapOverlay] that composites all overlay bitmaps into a single full-frame
+ * transparent bitmap per frame. Each overlay is drawn at its configured position
+ * and only during its active time range.
+ */
+@UnstableApi
+private class CompositeOverlay(
+    private val outputWidth: Int,
+    private val outputHeight: Int,
+    private val overlays: List<OverlayEntry>
+) : BitmapOverlay() {
+
+    private val compositeBitmap = Bitmap.createBitmap(
+        outputWidth, outputHeight, Bitmap.Config.ARGB_8888
+    )
+    private val canvas = Canvas(compositeBitmap)
+
+    // Cache static overlay bitmaps to avoid re-reading from disk
+    private val staticBitmapCache = mutableMapOf<String, Bitmap>()
+
+    override fun getBitmap(presentationTimeUs: Long): Bitmap {
+        canvas.drawColor(0, PorterDuff.Mode.CLEAR)
+        val timeMs = presentationTimeUs / 1000L
+
+        for (entry in overlays) {
+            if (timeMs < entry.startTimeMs || timeMs > entry.endTimeMs) continue
+
+            val posX = (entry.config.position.x * outputWidth).toInt()
+            val posY = (entry.config.position.y * outputHeight).toInt()
+
+            val bitmap = if (entry.isSequence) {
+                loadSequenceFrame(entry, timeMs)
+            } else {
+                loadStaticBitmap(entry.path)
+            }
+
+            if (bitmap != null) {
+                canvas.drawBitmap(bitmap, posX.toFloat(), posY.toFloat(), null)
+            }
+        }
+
+        return compositeBitmap
+    }
+
+    override fun getOverlaySettings(presentationTimeUs: Long): OverlaySettings {
+        // Full-frame overlay, no repositioning needed (we handle position in bitmap drawing)
+        return OverlaySettings.Builder().build()
+    }
+
+    private fun loadSequenceFrame(entry: OverlayEntry, timeMs: Long): Bitmap? {
+        val elapsedMs = timeMs - entry.startTimeMs
+        val frameIndex = ((elapsedMs * entry.frameRate) / 1000).toInt() + 1
+        val dir = File(entry.path).parentFile ?: return null
+        val prefix = File(entry.path).nameWithoutExtension.removeSuffix("_%06d")
+        val frameName = "${prefix}_${String.format("%06d", frameIndex)}.png"
+        val framePath = File(dir, frameName).absolutePath
+        return try {
+            BitmapFactory.decodeFile(framePath)
+        } catch (e: Exception) {
+            null
         }
     }
 
-    fun cancel() {
-        ffmpegExecutor.cancel()
+    private fun loadStaticBitmap(path: String): Bitmap? {
+        return staticBitmapCache.getOrPut(path) {
+            BitmapFactory.decodeFile(path) ?: return null
+        }
     }
 }

@@ -123,7 +123,7 @@ class PreviewViewModel @AssistedInject constructor(
      * preview TextureView.  Used by the effects panel so filter previews start
      * from an unmodified image.
      */
-    fun captureCleanFrame(): android.graphics.Bitmap? = previewEngine.captureCleanFrame()
+    suspend fun captureCleanFrame(): android.graphics.Bitmap? = previewEngine.captureCleanFrame()
 
     fun setPlaybackSpeed(speed: Float) {
         previewEngine.setPlaybackSpeed(speed)

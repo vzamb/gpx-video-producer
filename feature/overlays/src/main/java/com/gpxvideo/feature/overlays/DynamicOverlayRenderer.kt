@@ -38,6 +38,12 @@ object DynamicOverlayRenderer {
 
         if (allPoints.size < 2) return bitmap
 
+        // Downsample for performance: keep at most 2× pixel width points
+        val maxSamples = (width * 2).coerceAtLeast(200)
+        val sampled = downsample(allPoints, maxSamples)
+        val sampledDistances = computeDistances(sampled.points)
+        val sampledElevations = sampled.points.map { it.elevation ?: 0.0 }
+
         val leftPad = width * 0.05f
         val rightPad = width * 0.05f
         val topPad = height * 0.12f
@@ -45,11 +51,9 @@ object DynamicOverlayRenderer {
         val drawW = width - leftPad - rightPad
         val drawH = height - topPad - bottomPad
 
-        val distances = computeDistances(allPoints)
-        val totalDist = distances.last()
-        val elevations = allPoints.map { it.elevation ?: 0.0 }
-        val minEle = elevations.min()
-        val maxEle = elevations.max()
+        val totalDist = sampledDistances.last()
+        val minEle = sampledElevations.min()
+        val maxEle = sampledElevations.max()
         val eleRange = (maxEle - minEle).coerceAtLeast(1.0)
 
         fun xPos(dist: Double) = leftPad + (dist / totalDist * drawW).toFloat()
@@ -60,9 +64,9 @@ object DynamicOverlayRenderer {
 
         // Full profile line in faded color
         val fadedLinePath = Path().apply {
-            moveTo(xPos(distances[0]), yPos(elevations[0]))
-            for (i in 1 until allPoints.size) {
-                lineTo(xPos(distances[i]), yPos(elevations[i]))
+            moveTo(xPos(sampledDistances[0]), yPos(sampledElevations[0]))
+            for (i in 1 until sampled.points.size) {
+                lineTo(xPos(sampledDistances[i]), yPos(sampledElevations[i]))
             }
         }
         val fadedPaint = Paint().apply {
@@ -78,20 +82,20 @@ object DynamicOverlayRenderer {
         val trailFillPath = Path()
         val trailLinePath = Path()
         var trailStarted = false
-        for (i in allPoints.indices) {
-            val d = distances[i]
+        for (i in sampled.points.indices) {
+            val d = sampledDistances[i]
             if (d > currentDist) {
                 // Interpolate the cutoff point
                 if (i > 0 && !trailStarted) {
-                    trailFillPath.moveTo(xPos(distances[0]), yPos(elevations[0]))
-                    trailLinePath.moveTo(xPos(distances[0]), yPos(elevations[0]))
+                    trailFillPath.moveTo(xPos(sampledDistances[0]), yPos(sampledElevations[0]))
+                    trailLinePath.moveTo(xPos(sampledDistances[0]), yPos(sampledElevations[0]))
                     trailStarted = true
                 }
                 if (i > 0) {
-                    val prevD = distances[i - 1]
+                    val prevD = sampledDistances[i - 1]
                     val frac = if (d - prevD > 0) (currentDist - prevD) / (d - prevD) else 0.0
                     val cutX = xPos(currentDist)
-                    val cutEle = elevations[i - 1] + (elevations[i] - elevations[i - 1]) * frac
+                    val cutEle = sampledElevations[i - 1] + (sampledElevations[i] - sampledElevations[i - 1]) * frac
                     val cutY = yPos(cutEle)
                     trailFillPath.lineTo(cutX, cutY)
                     trailLinePath.lineTo(cutX, cutY)
@@ -99,12 +103,12 @@ object DynamicOverlayRenderer {
                 break
             }
             if (!trailStarted) {
-                trailFillPath.moveTo(xPos(d), yPos(elevations[i]))
-                trailLinePath.moveTo(xPos(d), yPos(elevations[i]))
+                trailFillPath.moveTo(xPos(d), yPos(sampledElevations[i]))
+                trailLinePath.moveTo(xPos(d), yPos(sampledElevations[i]))
                 trailStarted = true
             } else {
-                trailFillPath.lineTo(xPos(d), yPos(elevations[i]))
-                trailLinePath.lineTo(xPos(d), yPos(elevations[i]))
+                trailFillPath.lineTo(xPos(d), yPos(sampledElevations[i]))
+                trailLinePath.lineTo(xPos(d), yPos(sampledElevations[i]))
             }
         }
 
@@ -112,7 +116,7 @@ object DynamicOverlayRenderer {
             // Close fill path to bottom
             val cutoffX = xPos(currentDist.coerceAtMost(totalDist))
             trailFillPath.lineTo(cutoffX, topPad + drawH)
-            trailFillPath.lineTo(xPos(distances[0]), topPad + drawH)
+            trailFillPath.lineTo(xPos(sampledDistances[0]), topPad + drawH)
             trailFillPath.close()
 
             val trailFillPaint = Paint().apply {
@@ -207,6 +211,10 @@ object DynamicOverlayRenderer {
 
         if (allPoints.size < 2) return bitmap
 
+        // Downsample for performance
+        val maxSamples = (width * 2).coerceAtLeast(200)
+        val sampled = downsample(allPoints, maxSamples)
+
         val padding = width * 0.08f
         val drawW = width - 2 * padding
         val drawH = height - 2 * padding
@@ -230,11 +238,11 @@ object DynamicOverlayRenderer {
         fun projectX(lon: Double) = (offsetX + (lon - viewBounds.minLongitude) * scale).toFloat()
         fun projectY(lat: Double) = (offsetY + (viewBounds.maxLatitude - lat) * scale).toFloat()
 
-        // Full route in faded color
+        // Full route in faded color (use downsampled points)
         val fullRoutePath = Path().apply {
-            moveTo(projectX(allPoints[0].longitude), projectY(allPoints[0].latitude))
-            for (i in 1 until allPoints.size) {
-                lineTo(projectX(allPoints[i].longitude), projectY(allPoints[i].latitude))
+            moveTo(projectX(sampled.points[0].longitude), projectY(sampled.points[0].latitude))
+            for (i in 1 until sampled.points.size) {
+                lineTo(projectX(sampled.points[i].longitude), projectY(sampled.points[i].latitude))
             }
         }
         val fadedRoutePaint = Paint().apply {
@@ -247,28 +255,28 @@ object DynamicOverlayRenderer {
         }
         canvas.drawPath(fullRoutePath, fadedRoutePaint)
 
-        // Highlighted trail up to current position
+        // Highlighted trail up to current position (use downsampled points)
         if (overlay.showTrail) {
-            val distances = computeDistances(allPoints)
+            val trailDistances = computeDistances(sampled.points)
             val currentDist = currentPoint.elapsedDistance
             val trailPath = Path()
             var started = false
 
-            for (i in allPoints.indices) {
-                val d = distances[i]
+            for (i in sampled.points.indices) {
+                val d = trailDistances[i]
                 if (d > currentDist && i > 0) {
-                    val prevD = distances[i - 1]
+                    val prevD = trailDistances[i - 1]
                     val frac = if (d - prevD > 0) (currentDist - prevD) / (d - prevD) else 0.0
-                    val interpLat = allPoints[i - 1].latitude + (allPoints[i].latitude - allPoints[i - 1].latitude) * frac
-                    val interpLon = allPoints[i - 1].longitude + (allPoints[i].longitude - allPoints[i - 1].longitude) * frac
+                    val interpLat = sampled.points[i - 1].latitude + (sampled.points[i].latitude - sampled.points[i - 1].latitude) * frac
+                    val interpLon = sampled.points[i - 1].longitude + (sampled.points[i].longitude - sampled.points[i - 1].longitude) * frac
                     trailPath.lineTo(projectX(interpLon), projectY(interpLat))
                     break
                 }
                 if (!started) {
-                    trailPath.moveTo(projectX(allPoints[i].longitude), projectY(allPoints[i].latitude))
+                    trailPath.moveTo(projectX(sampled.points[i].longitude), projectY(sampled.points[i].latitude))
                     started = true
                 } else {
-                    trailPath.lineTo(projectX(allPoints[i].longitude), projectY(allPoints[i].latitude))
+                    trailPath.lineTo(projectX(sampled.points[i].longitude), projectY(sampled.points[i].latitude))
                 }
             }
 
@@ -339,50 +347,77 @@ object DynamicOverlayRenderer {
         val unit = field.defaultUnit
         val zoneColor = getZoneColor(field, currentPoint)
 
-        val shadowRadius = width * 0.01f
-        val shadowColor = Color.argb(200, 0, 0, 0)
+        val shadowRadius = width * 0.012f
+        val shadowColor = Color.argb(220, 0, 0, 0)
 
         val valuePaint = Paint().apply {
             color = zoneColor ?: colorFromLong(overlay.style.fontColor)
-            textSize = (height * 0.42f).coerceAtMost(width * 0.22f).coerceAtLeast(14f)
+            textSize = (height * 0.44f).coerceAtLeast(16f)
             isAntiAlias = true
             textAlign = Paint.Align.CENTER
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            setShadowLayer(shadowRadius * 2f, 2f, 2f, shadowColor)
+            setShadowLayer(shadowRadius * 2.5f, 2f, 2f, shadowColor)
         }
 
         val labelPaint = Paint().apply {
-            color = Color.argb(210, 255, 255, 255)
-            textSize = (height * 0.16f).coerceAtMost(width * 0.08f).coerceAtLeast(10f)
+            color = Color.argb(200, 255, 255, 255)
+            textSize = (height * 0.17f).coerceAtLeast(10f)
             isAntiAlias = true
             textAlign = Paint.Align.CENTER
             letterSpacing = 0.06f
-            setShadowLayer(shadowRadius, 1f, 1f, shadowColor)
+            setShadowLayer(shadowRadius * 1.5f, 1f, 1f, shadowColor)
         }
 
         val unitPaint = Paint().apply {
-            color = Color.argb(170, 255, 255, 255)
-            textSize = (height * 0.14f).coerceAtMost(width * 0.07f).coerceAtLeast(9f)
+            color = Color.argb(160, 255, 255, 255)
+            textSize = (height * 0.14f).coerceAtLeast(9f)
             isAntiAlias = true
             textAlign = Paint.Align.CENTER
             setShadowLayer(shadowRadius, 1f, 1f, shadowColor)
         }
 
+        // Auto-shrink value text if it would overflow the width
+        val valueWidth = valuePaint.measureText(value)
+        if (valueWidth > width * 0.88f) {
+            valuePaint.textSize = valuePaint.textSize * (width * 0.84f) / valueWidth
+        }
+
         val cx = width / 2f
-        val totalTextH = labelPaint.textSize + valuePaint.textSize * 1.1f +
-                (if (unit.isNotEmpty()) unitPaint.textSize * 1.2f else 0f)
-        val baseY = (height - totalTextH) / 2f + labelPaint.textSize
+        val labelH = labelPaint.textSize
+        val valueH = valuePaint.textSize
+        val unitH = if (unit.isNotEmpty()) unitPaint.textSize else 0f
+        val spacing = height * 0.04f
+        val totalH = labelH + spacing + valueH + (if (unitH > 0) spacing * 0.4f + unitH else 0f)
+        val baseY = (height - totalH) / 2f + labelH
 
         canvas.drawText(label.uppercase(), cx, baseY, labelPaint)
-        canvas.drawText(value, cx, baseY + valuePaint.textSize * 1.05f, valuePaint)
+        canvas.drawText(value, cx, baseY + spacing + valueH, valuePaint)
         if (unit.isNotEmpty()) {
-            canvas.drawText(unit, cx, baseY + valuePaint.textSize * 1.05f + unitPaint.textSize * 1.2f, unitPaint)
+            canvas.drawText(unit, cx, baseY + spacing + valueH + spacing * 0.4f + unitH, unitPaint)
         }
 
         return bitmap
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────
+
+    private data class DownsampledData(
+        val points: List<GpxPoint>
+    )
+
+    /** Reduce point count by picking every Nth point, always keeping first and last. */
+    private fun downsample(points: List<GpxPoint>, maxSamples: Int): DownsampledData {
+        if (points.size <= maxSamples) return DownsampledData(points)
+        val step = points.size.toFloat() / maxSamples
+        val result = ArrayList<GpxPoint>(maxSamples + 1)
+        var idx = 0f
+        while (idx < points.size - 1) {
+            result.add(points[idx.toInt()])
+            idx += step
+        }
+        result.add(points.last())
+        return DownsampledData(result)
+    }
 
     private fun computeDistances(points: List<GpxPoint>): List<Double> {
         if (points.size < 2) return if (points.isNotEmpty()) listOf(0.0) else emptyList()

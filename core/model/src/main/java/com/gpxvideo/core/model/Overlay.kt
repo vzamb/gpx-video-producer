@@ -76,10 +76,10 @@ sealed class OverlayConfig {
         override val name: String = "Statistics",
         override val timelineClipId: UUID,
         override val position: OverlayPosition = OverlayPosition(),
-        override val size: OverlaySize = OverlaySize(0.3f, 0.2f),
+        override val size: OverlaySize = OverlaySize(0.35f, 0.12f),
         override val style: OverlayStyle = OverlayStyle(),
         val fields: List<StatField> = listOf(StatField.TOTAL_DISTANCE, StatField.TOTAL_TIME),
-        val layout: StatsLayout = StatsLayout.GRID_2X2
+        val layout: StatsLayout = StatsLayout.GRID_2X1
     ) : OverlayConfig()
 
     data class DynamicAltitudeProfile(
@@ -117,7 +117,7 @@ sealed class OverlayConfig {
         override val name: String = "Live Stat",
         override val timelineClipId: UUID,
         override val position: OverlayPosition = OverlayPosition(),
-        override val size: OverlaySize = OverlaySize(0.15f, 0.08f),
+        override val size: OverlaySize = OverlaySize(0.14f, 0.1f),
         override val style: OverlayStyle = OverlayStyle(),
         val field: DynamicField = DynamicField.CURRENT_SPEED,
         val syncMode: SyncMode = SyncMode.GPX_TIMESTAMP,

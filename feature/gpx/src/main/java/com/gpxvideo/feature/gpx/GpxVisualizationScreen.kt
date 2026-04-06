@@ -36,16 +36,17 @@ fun GpxVisualizationScreen(
     ) {
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Route map — hero card
+        // Route map
         Text(
             text = "Route",
             style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)
         )
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(240.dp)
+                .height(220.dp)
                 .background(Color(0xFF0D1117), RoundedCornerShape(12.dp))
         ) {
             GpxRouteCanvas(
@@ -55,18 +56,19 @@ fun GpxVisualizationScreen(
             )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
         // Altitude profile
         Text(
             text = "Altitude Profile",
             style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)
         )
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(180.dp)
+                .height(140.dp)
                 .background(Color(0xFF0D1117), RoundedCornerShape(12.dp))
         ) {
             AltitudeProfileCanvas(
@@ -75,12 +77,13 @@ fun GpxVisualizationScreen(
             )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
         // Statistics grid
         Text(
             text = "Statistics",
             style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)
         )
         StatsGrid(

@@ -24,7 +24,7 @@ room = "2.7.0"
 
 # Media
 media3 = "1.5.1"
-ffmpegKit = "6.0-2"
+ffmpegKit = "6.0.LTS"
 coil = "3.0.4"
 
 # Kotlinx
@@ -77,6 +77,8 @@ room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 media3-exoplayer = { group = "androidx.media3", name = "media3-exoplayer", version.ref = "media3" }
 media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "media3" }
 media3-common = { group = "androidx.media3", name = "media3-common", version.ref = "media3" }
+media3-transformer = { group = "androidx.media3", name = "media3-transformer", version.ref = "media3" }
+media3-effect = { group = "androidx.media3", name = "media3-effect", version.ref = "media3" }
 
 # FFmpeg
 ffmpeg-kit-full = { group = "com.arthenica", name = "ffmpeg-kit-full", version.ref = "ffmpegKit" }

@@ -76,6 +76,17 @@ fun VideoPreview(
             factory = { context ->
                 TextureView(context).apply {
                     isOpaque = false
+                    // Re-apply transform on every layout size change so canvas
+                    // aspect-ratio switches take effect immediately.
+                    addOnLayoutChangeListener { _, left, top, right, bottom,
+                                                 oldLeft, oldTop, oldRight, oldBottom ->
+                        val newW = right - left; val newH = bottom - top
+                        val oldW = oldRight - oldLeft; val oldH = oldBottom - oldTop
+                        if ((newW != oldW || newH != oldH) && isAvailable) {
+                            applyVideoTransform(currentAR, currentTransform)
+                            applyVideoColorAdjustments(currentTransform)
+                        }
+                    }
                     surfaceTextureListener = object : TextureView.SurfaceTextureListener {
                         override fun onSurfaceTextureAvailable(
                             surface: SurfaceTexture,

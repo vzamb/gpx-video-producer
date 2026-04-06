@@ -313,9 +313,6 @@ class TimelineViewModel @AssistedInject constructor(
             return
         }
 
-        viewModelScope.launch {
-            overlayDao.deleteByTimelineClipId(clipId)
-        }
         executeAction(TimelineAction.RemoveClip(clip, track.id))
         if (track.type.isSequentialVisualTrack()) {
             normalizeTrackLayout(track.id)
@@ -440,11 +437,6 @@ class TimelineViewModel @AssistedInject constructor(
 
     fun deleteTrack(trackId: UUID) {
         val track = _state.value.tracks.find { it.id == trackId } ?: return
-        if (track.type == TrackType.OVERLAY || track.type == TrackType.TEXT) {
-            viewModelScope.launch {
-                track.clips.forEach { overlayDao.deleteByTimelineClipId(it.id) }
-            }
-        }
         executeAction(TimelineAction.RemoveTrack(track))
     }
 
@@ -644,7 +636,10 @@ class TimelineViewModel @AssistedInject constructor(
                 }
             }
 
-            // Delete clips/tracks that were removed from state
+            // Delete clips/tracks that were removed from state.
+            // NOTE: Overlays are intentionally NOT deleted here so that undo can
+            // restore them.  Orphan overlays (pointing to deleted clips) are
+            // invisible and harmless.
             val dbTracks = trackDao.getByProjectId(projectId).first()
             for (dbTrack in dbTracks) {
                 if (dbTrack.id !in allCurrentTrackIds) {
@@ -749,7 +744,8 @@ class TimelineViewModel @AssistedInject constructor(
                 timelineClipId = clipId,
                 name = displayName,
                 fields = listOf(field),
-                layout = StatsLayout.SINGLE
+                layout = StatsLayout.SINGLE,
+                size = OverlaySize(0.18f, 0.09f)
             )
         }
         overlayType == "moving_altitude_profile" -> OverlayConfig.DynamicAltitudeProfile(
@@ -978,18 +974,22 @@ private fun OverlayConfig.applyFormatPreset(formatPreset: OverlayFormatPreset): 
             OverlayFormatPreset.WIDE -> OverlaySize(0.40f, 0.24f)
         }
     )
-    is OverlayConfig.StaticStats -> copy(
-        size = when (formatPreset) {
-            OverlayFormatPreset.COMPACT -> OverlaySize(0.26f, 0.14f)
-            OverlayFormatPreset.CARD -> OverlaySize(0.32f, 0.18f)
-            OverlayFormatPreset.WIDE -> OverlaySize(0.46f, 0.18f)
-        },
-        layout = when (formatPreset) {
-            OverlayFormatPreset.COMPACT -> StatsLayout.GRID_2X1
-            OverlayFormatPreset.CARD -> StatsLayout.GRID_2X2
-            OverlayFormatPreset.WIDE -> StatsLayout.GRID_4X2
-        }
-    )
+    is OverlayConfig.StaticStats -> {
+        // Preserve single-field layout/size — don't override with multi-stat grid
+        if (fields.size <= 1) this
+        else copy(
+            size = when (formatPreset) {
+                OverlayFormatPreset.COMPACT -> OverlaySize(0.26f, 0.14f)
+                OverlayFormatPreset.CARD -> OverlaySize(0.32f, 0.18f)
+                OverlayFormatPreset.WIDE -> OverlaySize(0.46f, 0.18f)
+            },
+            layout = when (formatPreset) {
+                OverlayFormatPreset.COMPACT -> StatsLayout.GRID_2X1
+                OverlayFormatPreset.CARD -> StatsLayout.GRID_2X2
+                OverlayFormatPreset.WIDE -> StatsLayout.GRID_4X2
+            }
+        )
+    }
     is OverlayConfig.DynamicAltitudeProfile -> copy(
         size = when (formatPreset) {
             OverlayFormatPreset.COMPACT -> OverlaySize(0.42f, 0.16f)

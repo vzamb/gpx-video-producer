@@ -34,6 +34,10 @@ object OverlayRenderer {
 
         if (allPoints.size < 2) return bitmap
 
+        // Downsample for performance with long GPX files
+        val maxSamples = (width * 2).coerceAtLeast(200)
+        val sampledPoints = downsample(allPoints, maxSamples)
+
         val leftPad = if (overlay.showLabels) width * 0.12f else width * 0.05f
         val rightPad = width * 0.05f
         val topPad = height * 0.1f
@@ -41,9 +45,9 @@ object OverlayRenderer {
         val drawW = width - leftPad - rightPad
         val drawH = height - topPad - bottomPad
 
-        val distances = computeDistances(allPoints)
+        val distances = computeDistances(sampledPoints)
         val totalDist = distances.last()
-        val elevations = allPoints.map { it.elevation ?: 0.0 }
+        val elevations = sampledPoints.map { it.elevation ?: 0.0 }
         val minEle = elevations.min()
         val maxEle = elevations.max()
         val eleRange = (maxEle - minEle).coerceAtLeast(1.0)
@@ -70,7 +74,7 @@ object OverlayRenderer {
         // Gradient fill
         val fillPath = Path().apply {
             moveTo(xPos(distances[0]), yPos(elevations[0]))
-            for (i in 1 until allPoints.size) {
+            for (i in 1 until sampledPoints.size) {
                 lineTo(xPos(distances[i]), yPos(elevations[i]))
             }
             lineTo(xPos(distances.last()), topPad + drawH)
@@ -94,7 +98,7 @@ object OverlayRenderer {
         // Line
         val linePath = Path().apply {
             moveTo(xPos(distances[0]), yPos(elevations[0]))
-            for (i in 1 until allPoints.size) {
+            for (i in 1 until sampledPoints.size) {
                 lineTo(xPos(distances[i]), yPos(elevations[i]))
             }
         }
@@ -139,6 +143,10 @@ object OverlayRenderer {
 
         if (allPoints.size < 2) return bitmap
 
+        // Downsample for performance
+        val maxSamples = (width * 2).coerceAtLeast(200)
+        val sampledPoints = downsample(allPoints, maxSamples)
+
         val bounds = gpxData.bounds
         val padding = width * 0.08f
         val drawW = width - 2 * padding
@@ -158,9 +166,9 @@ object OverlayRenderer {
         fun projectY(lat: Double) = (offsetY + (bounds.maxLatitude - lat) * scale).toFloat()
 
         val routePath = Path().apply {
-            moveTo(projectX(allPoints[0].longitude), projectY(allPoints[0].latitude))
-            for (i in 1 until allPoints.size) {
-                lineTo(projectX(allPoints[i].longitude), projectY(allPoints[i].latitude))
+            moveTo(projectX(sampledPoints[0].longitude), projectY(sampledPoints[0].latitude))
+            for (i in 1 until sampledPoints.size) {
+                lineTo(projectX(sampledPoints[i].longitude), projectY(sampledPoints[i].latitude))
             }
         }
         val routePaint = Paint().apply {
@@ -208,35 +216,47 @@ object OverlayRenderer {
         val values = fields.map { it to getStatValue(it, stats) }
 
         val (cols, rows) = layoutDimensions(overlay.layout, values.size)
-        val cellW = width.toFloat() / cols
-        val cellH = height.toFloat() / rows
+        val hPad = width * 0.04f
+        val vPad = height * 0.06f
+        val gap = width * 0.02f
+        val cellW = (width - 2 * hPad - (cols - 1) * gap) / cols
+        val cellH = (height - 2 * vPad - (rows - 1) * gap) / rows
 
         val shadowRadius = width * 0.008f
-        val shadowColor = Color.argb(180, 0, 0, 0)
+        val shadowColor = Color.argb(220, 0, 0, 0)
 
+        // Scale text to fill the cell — remove tight caps so single-stat overlays look good
         val labelPaint = Paint().apply {
-            color = Color.argb(200, 255, 255, 255)
-            textSize = (cellH * 0.22f).coerceAtMost(width * 0.045f).coerceAtLeast(10f)
+            color = Color.argb(180, 255, 255, 255)
+            textSize = (cellH * 0.22f).coerceAtLeast(9f)
             isAntiAlias = true
             textAlign = Paint.Align.CENTER
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
-            letterSpacing = 0.04f
+            letterSpacing = 0.06f
             setShadowLayer(shadowRadius, 1f, 1f, shadowColor)
         }
         val valuePaint = Paint().apply {
             color = colorFromLong(overlay.style.fontColor)
-            textSize = (cellH * 0.38f).coerceAtMost(width * 0.08f).coerceAtLeast(14f)
+            textSize = (cellH * 0.42f).coerceAtLeast(14f)
             isAntiAlias = true
             textAlign = Paint.Align.CENTER
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            setShadowLayer(shadowRadius * 1.5f, 1.5f, 1.5f, shadowColor)
+            setShadowLayer(shadowRadius * 2f, 1.5f, 1.5f, shadowColor)
         }
         val unitPaint = Paint().apply {
-            color = Color.argb(160, 255, 255, 255)
-            textSize = (cellH * 0.16f).coerceAtMost(width * 0.035f).coerceAtLeast(8f)
+            color = Color.argb(140, 255, 255, 255)
+            textSize = (cellH * 0.16f).coerceAtLeast(8f)
             isAntiAlias = true
             textAlign = Paint.Align.CENTER
             setShadowLayer(shadowRadius, 1f, 1f, shadowColor)
+        }
+
+        // Auto-shrink value text if it would overflow the cell width
+        values.forEach { (_, value) ->
+            val valueWidth = valuePaint.measureText(value)
+            if (valueWidth > cellW * 0.92f) {
+                valuePaint.textSize = valuePaint.textSize * (cellW * 0.88f) / valueWidth
+            }
         }
 
         values.forEachIndexed { index, (field, value) ->
@@ -244,13 +264,21 @@ object OverlayRenderer {
             val row = index / cols
             if (row >= rows) return@forEachIndexed
 
-            val cx = cellW * col + cellW / 2
-            val cy = cellH * row + cellH / 2
+            val cx = hPad + cellW * col + col * gap + cellW / 2
+            val cellTop = vPad + cellH * row + row * gap
 
-            canvas.drawText(field.displayName.uppercase(), cx, cy - cellH * 0.18f, labelPaint)
-            canvas.drawText(value, cx, cy + cellH * 0.12f, valuePaint)
+            // Measure actual text heights for tight vertical centering
+            val labelH = labelPaint.textSize
+            val valueH = valuePaint.textSize
+            val unitH = if (field.unit.isNotEmpty()) unitPaint.textSize else 0f
+            val spacing = cellH * 0.06f
+            val totalH = labelH + spacing + valueH + (if (unitH > 0) spacing * 0.5f + unitH else 0f)
+            val startY = cellTop + (cellH - totalH) / 2f + labelH
+
+            canvas.drawText(field.displayName.uppercase(), cx, startY, labelPaint)
+            canvas.drawText(value, cx, startY + spacing + valueH, valuePaint)
             if (field.unit.isNotEmpty()) {
-                canvas.drawText(field.unit, cx, cy + cellH * 0.32f, unitPaint)
+                canvas.drawText(field.unit, cx, startY + spacing + valueH + spacing * 0.5f + unitH, unitPaint)
             }
         }
 
@@ -269,6 +297,20 @@ object OverlayRenderer {
             )
         }
         return dists
+    }
+
+    /** Reduce point count by picking every Nth point, always keeping first and last. */
+    private fun downsample(points: List<GpxPoint>, maxSamples: Int): List<GpxPoint> {
+        if (points.size <= maxSamples) return points
+        val step = points.size.toFloat() / maxSamples
+        val result = ArrayList<GpxPoint>(maxSamples + 1)
+        var idx = 0f
+        while (idx < points.size - 1) {
+            result.add(points[idx.toInt()])
+            idx += step
+        }
+        result.add(points.last())
+        return result
     }
 
     private fun drawBackground(canvas: Canvas, width: Int, height: Int, bgColor: Long?, cornerRadius: Float) {

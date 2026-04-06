@@ -33,6 +33,10 @@ dependencies {
     implementation(project(":lib:gpx-parser"))
     implementation(project(":feature:overlays"))
 
+    implementation(libs.media3.transformer)
+    implementation(libs.media3.effect)
+    implementation(libs.media3.common)
+
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)

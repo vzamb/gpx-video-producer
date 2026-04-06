@@ -260,33 +260,42 @@ class PreviewEngine @Inject constructor(
      * color adjustments.  Uses [android.media.MediaMetadataRetriever] on the
      * source file so the hardware-layer paint applied to the [TextureView] is
      * bypassed entirely.  Falls back to [captureFrame] when retrieval fails.
+     *
+     * This is a suspend function: ExoPlayer properties are read on the calling
+     * (main) thread, then the heavy MediaMetadataRetriever work runs on
+     * [kotlinx.coroutines.Dispatchers.IO].
      */
-    fun captureCleanFrame(): android.graphics.Bitmap? {
+    suspend fun captureCleanFrame(): android.graphics.Bitmap? {
         val player = exoPlayer ?: return captureFrame()
         val idx = player.currentMediaItemIndex
         if (idx < 0 || idx >= player.mediaItemCount) return captureFrame()
 
         val uri = player.getMediaItemAt(idx).localConfiguration?.uri
             ?: return captureFrame()
+        val positionUs = player.currentPosition * 1000L
 
-        return try {
-            val retriever = android.media.MediaMetadataRetriever()
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
-                if (uri.scheme.let { it == "file" || it == null }) {
-                    retriever.setDataSource(uri.path)
-                } else {
-                    retriever.setDataSource(context, uri)
+                val retriever = android.media.MediaMetadataRetriever()
+                try {
+                    when {
+                        uri.scheme == "file" || uri.scheme == null ->
+                            retriever.setDataSource(uri.path)
+                        uri.scheme == "content" ->
+                            retriever.setDataSource(context, uri)
+                        else ->
+                            retriever.setDataSource(uri.toString(), HashMap())
+                    }
+                    retriever.getFrameAtTime(
+                        positionUs,
+                        android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC
+                    )
+                } finally {
+                    retriever.release()
                 }
-                val positionUs = player.currentPosition * 1000L
-                retriever.getFrameAtTime(
-                    positionUs,
-                    android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC
-                )
-            } finally {
-                retriever.release()
+            } catch (_: Exception) {
+                captureFrame()
             }
-        } catch (_: Exception) {
-            captureFrame()
         }
     }
 
