@@ -15,6 +15,7 @@ import com.gpxvideo.core.database.entity.GpxFileEntity
 import com.gpxvideo.core.database.entity.MediaItemEntity
 import com.gpxvideo.core.database.entity.ProjectEntity
 import com.gpxvideo.core.model.GpxData
+import com.gpxvideo.core.model.SocialAspectRatio
 import com.gpxvideo.feature.gpx.GpxImportManager
 import com.gpxvideo.lib.gpxparser.GpxStatistics
 import com.gpxvideo.lib.gpxparser.GpxStats
@@ -44,7 +45,8 @@ data class ProjectEditorUiState(
     val gpxFiles: List<GpxFileEntity> = emptyList(),
     val isImportingGpx: Boolean = false,
     val storyMode: String = "HYPER_LAPSE",
-    val storyTemplate: String = "CINEMATIC"
+    val storyTemplate: String = "CINEMATIC",
+    val selectedAspectRatio: SocialAspectRatio = SocialAspectRatio.PORTRAIT_9_16
 )
 
 @HiltViewModel
@@ -68,6 +70,7 @@ class ProjectEditorViewModel @Inject constructor(
     private val _isImportingGpx = MutableStateFlow(false)
     private val _storyMode = MutableStateFlow("HYPER_LAPSE")
     private val _storyTemplate = MutableStateFlow("CINEMATIC")
+    private val _selectedAspectRatio = MutableStateFlow(SocialAspectRatio.PORTRAIT_9_16)
 
     init {
         viewModelScope.launch {
@@ -99,7 +102,8 @@ class ProjectEditorViewModel @Inject constructor(
         _gpxStats,
         _isImportingGpx,
         _storyMode,
-        _storyTemplate
+        _storyTemplate,
+        _selectedAspectRatio
     ) { values ->
         val project = values[0] as ProjectEntity?
         val mediaItems = @Suppress("UNCHECKED_CAST") (values[1] as List<MediaItemEntity>)
@@ -110,6 +114,7 @@ class ProjectEditorViewModel @Inject constructor(
         val importingGpx = values[6] as Boolean
         val storyMode = values[7] as String
         val storyTemplate = values[8] as String
+        val aspectRatio = values[9] as SocialAspectRatio
         ProjectEditorUiState(
             project = project,
             mediaItems = mediaItems,
@@ -120,7 +125,8 @@ class ProjectEditorViewModel @Inject constructor(
             gpxFiles = gpxFiles,
             isImportingGpx = importingGpx,
             storyMode = storyMode,
-            storyTemplate = storyTemplate
+            storyTemplate = storyTemplate,
+            selectedAspectRatio = aspectRatio
         )
     }.stateIn(
         scope = viewModelScope,
@@ -307,6 +313,10 @@ class ProjectEditorViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             projectDao.updateStoryTemplate(projectId, template)
         }
+    }
+
+    fun setAspectRatio(ratio: SocialAspectRatio) {
+        _selectedAspectRatio.value = ratio
     }
 
     /** Check if any imported video has Exif creation timestamps (enables Documentary mode). */

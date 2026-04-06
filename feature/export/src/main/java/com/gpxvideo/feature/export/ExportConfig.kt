@@ -19,7 +19,8 @@ data class ExportConfig(
     val gpxStats: GpxStats?,
     val syncEngine: GpxTimeSyncEngine?,
     val projectWidth: Int = 1920,
-    val projectHeight: Int = 1080
+    val projectHeight: Int = 1080,
+    val storyTemplate: String? = null
 )
 
 data class ExportClip(

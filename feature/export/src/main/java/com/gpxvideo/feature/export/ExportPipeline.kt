@@ -128,8 +128,19 @@ class ExportPipeline @Inject constructor(
         onPhaseChanged(ExportPhase.ENCODING)
         val encodingBase = if (renderedInputs.isNotEmpty()) 0.3f else 0f
 
+        // Render story template overlay if present
+        val templateBitmap = config.storyTemplate?.let { template ->
+            StoryTemplateRenderer.render(
+                template = template,
+                width = config.projectWidth,
+                height = config.projectHeight,
+                gpxData = config.gpxData,
+                gpxStats = config.gpxStats
+            )
+        }
+
         val result = withContext(Dispatchers.Main) {
-            exportWithTransformer(config, renderedInputs, encodingBase, onProgress)
+            exportWithTransformer(config, renderedInputs, templateBitmap, encodingBase, onProgress)
         }
 
         // Phase 3: Cleanup
@@ -143,6 +154,7 @@ class ExportPipeline @Inject constructor(
     private suspend fun exportWithTransformer(
         config: ExportConfig,
         renderedInputs: Map<ExportOverlay, RenderedOverlayInput>,
+        templateBitmap: Bitmap?,
         encodingBase: Float,
         onProgress: (Float) -> Unit
     ): FfmpegResult = suspendCancellableCoroutine { cont ->
@@ -203,23 +215,37 @@ class ExportPipeline @Inject constructor(
 
         // Build composition-level overlay effect
         val compositionEffects = mutableListOf<androidx.media3.common.Effect>()
+
+        // Collect all texture overlays
+        val textureOverlays = mutableListOf<androidx.media3.effect.TextureOverlay>()
+
         if (renderedInputs.isNotEmpty()) {
-            val compositeOverlay = CompositeOverlay(
-                outputWidth = width,
-                outputHeight = height,
-                overlays = renderedInputs.map { (exportOverlay, rendered) ->
-                    OverlayEntry(
-                        config = exportOverlay.overlayConfig,
-                        startTimeMs = exportOverlay.startTimeMs,
-                        endTimeMs = exportOverlay.endTimeMs,
-                        path = rendered.path,
-                        isSequence = rendered.isSequence,
-                        frameRate = config.outputSettings.frameRate
-                    )
-                }
+            textureOverlays.add(
+                CompositeOverlay(
+                    outputWidth = width,
+                    outputHeight = height,
+                    overlays = renderedInputs.map { (exportOverlay, rendered) ->
+                        OverlayEntry(
+                            config = exportOverlay.overlayConfig,
+                            startTimeMs = exportOverlay.startTimeMs,
+                            endTimeMs = exportOverlay.endTimeMs,
+                            path = rendered.path,
+                            isSequence = rendered.isSequence,
+                            frameRate = config.outputSettings.frameRate
+                        )
+                    }
+                )
             )
+        }
+
+        // Add story template overlay (static bitmap for entire duration)
+        if (templateBitmap != null) {
+            textureOverlays.add(StaticBitmapOverlay(templateBitmap))
+        }
+
+        if (textureOverlays.isNotEmpty()) {
             compositionEffects.add(
-                OverlayEffect(ImmutableList.of(compositeOverlay as androidx.media3.effect.TextureOverlay))
+                OverlayEffect(ImmutableList.copyOf(textureOverlays))
             )
         }
 
@@ -396,5 +422,20 @@ private class CompositeOverlay(
         return staticBitmapCache.getOrPut(path) {
             BitmapFactory.decodeFile(path) ?: return null
         }
+    }
+}
+
+/**
+ * A simple [BitmapOverlay] that returns the same bitmap for every frame.
+ * Used for story template overlays rendered by [StoryTemplateRenderer].
+ */
+@UnstableApi
+private class StaticBitmapOverlay(
+    private val bitmap: Bitmap
+) : BitmapOverlay() {
+    override fun getBitmap(presentationTimeUs: Long): Bitmap = bitmap
+
+    override fun getOverlaySettings(presentationTimeUs: Long): OverlaySettings {
+        return OverlaySettings.Builder().build()
     }
 }

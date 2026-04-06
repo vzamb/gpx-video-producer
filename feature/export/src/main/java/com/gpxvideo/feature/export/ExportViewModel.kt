@@ -352,7 +352,8 @@ class ExportViewModel @Inject constructor(
             gpxStats = gpxStats,
             syncEngine = syncEngine,
             projectWidth = settings.aspectRatio.width,
-            projectHeight = settings.aspectRatio.height
+            projectHeight = settings.aspectRatio.height,
+            storyTemplate = project.storyTemplate
         )
     }
 }

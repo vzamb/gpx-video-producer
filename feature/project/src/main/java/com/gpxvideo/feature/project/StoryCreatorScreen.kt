@@ -86,21 +86,25 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.viewinterop.AndroidView
-import android.view.TextureView
 import android.net.Uri
+import android.graphics.Bitmap
+import android.media.MediaMetadataRetriever
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.gpxvideo.core.database.entity.MediaItemEntity
 import com.gpxvideo.core.model.StoryMode
 import com.gpxvideo.core.model.StoryTemplate
+import com.gpxvideo.core.model.SocialAspectRatio
 import com.gpxvideo.core.ui.component.GpxVideoTopAppBar
 import com.gpxvideo.core.ui.component.LoadingIndicator
 import com.gpxvideo.core.ui.theme.AthleticCondensed
@@ -187,7 +191,8 @@ fun StoryCreatorScreen(
                         )
                     },
                     onPickGpx = { gpxPickerLauncher.launch(arrayOf("*/*")) },
-                    onDeleteMedia = viewModel::deleteMedia
+                    onDeleteMedia = viewModel::deleteMedia,
+                    onAspectRatioChanged = viewModel::setAspectRatio
                 )
                 1 -> SyncModeStep(
                     selectedMode = uiState.storyMode,
@@ -197,7 +202,8 @@ fun StoryCreatorScreen(
                     selectedTemplate = uiState.storyTemplate,
                     onTemplateSelected = viewModel::setStoryTemplate,
                     gpxData = uiState.gpxData,
-                    mediaItems = uiState.mediaItems
+                    mediaItems = uiState.mediaItems,
+                    aspectRatio = uiState.selectedAspectRatio
                 )
                 3 -> ReviewStep(
                     uiState = uiState,
@@ -231,6 +237,7 @@ private fun StoryTopBar(
         modifier = Modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surface)
+            .statusBarsPadding()
     ) {
         Row(
             modifier = Modifier
@@ -347,6 +354,7 @@ private fun StoryBottomBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .navigationBarsPadding()
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
@@ -403,11 +411,13 @@ private fun ImportStep(
     uiState: ProjectEditorUiState,
     onPickMedia: () -> Unit,
     onPickGpx: () -> Unit,
-    onDeleteMedia: (java.util.UUID) -> Unit
+    onDeleteMedia: (java.util.UUID) -> Unit,
+    onAspectRatioChanged: (SocialAspectRatio) -> Unit
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
         Text(
@@ -476,6 +486,58 @@ private fun ImportStep(
         if (uiState.gpxStats != null) {
             Spacer(Modifier.height(12.dp))
             GpxStatsPreview(uiState.gpxStats!!)
+        }
+
+        // Aspect ratio selector
+        Spacer(Modifier.height(20.dp))
+        Text(
+            "Output Format",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            "Choose aspect ratio for your story",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 2.dp, bottom = 12.dp)
+        )
+
+        // 2x2 grid of aspect ratio options
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                AspectRatioChip(
+                    ratio = SocialAspectRatio.PORTRAIT_9_16,
+                    isSelected = uiState.selectedAspectRatio == SocialAspectRatio.PORTRAIT_9_16,
+                    onClick = { onAspectRatioChanged(SocialAspectRatio.PORTRAIT_9_16) },
+                    modifier = Modifier.weight(1f)
+                )
+                AspectRatioChip(
+                    ratio = SocialAspectRatio.LANDSCAPE_16_9,
+                    isSelected = uiState.selectedAspectRatio == SocialAspectRatio.LANDSCAPE_16_9,
+                    onClick = { onAspectRatioChanged(SocialAspectRatio.LANDSCAPE_16_9) },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                AspectRatioChip(
+                    ratio = SocialAspectRatio.SQUARE_1_1,
+                    isSelected = uiState.selectedAspectRatio == SocialAspectRatio.SQUARE_1_1,
+                    onClick = { onAspectRatioChanged(SocialAspectRatio.SQUARE_1_1) },
+                    modifier = Modifier.weight(1f)
+                )
+                AspectRatioChip(
+                    ratio = SocialAspectRatio.PORTRAIT_4_5,
+                    isSelected = uiState.selectedAspectRatio == SocialAspectRatio.PORTRAIT_4_5,
+                    onClick = { onAspectRatioChanged(SocialAspectRatio.PORTRAIT_4_5) },
+                    modifier = Modifier.weight(1f)
+                )
+            }
         }
     }
 }
@@ -632,6 +694,57 @@ private fun StatChip(emoji: String, value: String) {
     }
 }
 
+@Composable
+private fun AspectRatioChip(
+    ratio: SocialAspectRatio,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected)
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+            else MaterialTheme.colorScheme.surfaceContainerHigh
+        ),
+        border = if (isSelected) BorderStroke(
+            2.dp, MaterialTheme.colorScheme.primary
+        ) else BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(ratio.icon, fontSize = 18.sp)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    ratio.displayName,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    ratio.description,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1
+                )
+            }
+            if (isSelected) {
+                Icon(
+                    Icons.Default.Check,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+    }
+}
+
 // ── Step 1: Sync Mode ────────────────────────────────────────────────────
 
 @Composable
@@ -769,7 +882,8 @@ private fun TemplateStep(
     selectedTemplate: String,
     onTemplateSelected: (String) -> Unit,
     gpxData: com.gpxvideo.core.model.GpxData?,
-    mediaItems: List<MediaItemEntity> = emptyList()
+    mediaItems: List<MediaItemEntity> = emptyList(),
+    aspectRatio: SocialAspectRatio = SocialAspectRatio.PORTRAIT_9_16
 ) {
     Column(
         modifier = Modifier
@@ -807,13 +921,15 @@ private fun TemplateStep(
                 .fillMaxWidth()
                 .weight(1f),
             contentPadding = PaddingValues(horizontal = 24.dp),
-            pageSpacing = 16.dp
+            pageSpacing = 16.dp,
+            beyondViewportPageCount = 0
         ) { page ->
             TemplatePreviewCard(
                 template = templates[page],
                 isSelected = templates[page].name == selectedTemplate,
                 gpxData = gpxData,
-                mediaItems = mediaItems
+                mediaItems = mediaItems,
+                aspectRatio = aspectRatio
             )
         }
 
@@ -846,17 +962,20 @@ private fun TemplatePreviewCard(
     template: StoryTemplate,
     isSelected: Boolean,
     gpxData: com.gpxvideo.core.model.GpxData?,
-    mediaItems: List<MediaItemEntity> = emptyList()
+    mediaItems: List<MediaItemEntity> = emptyList(),
+    aspectRatio: SocialAspectRatio = SocialAspectRatio.PORTRAIT_9_16
 ) {
     val firstVideoPath = mediaItems
         .firstOrNull { it.type == "VIDEO" }
         ?.let { it.localCopyPath.ifBlank { it.sourcePath } }
         ?.takeIf { it.isNotBlank() }
 
+    val cardAspectRatio = aspectRatio.width.toFloat() / aspectRatio.height.toFloat()
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(9f / 16f),
+            .aspectRatio(cardAspectRatio),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = Color(0xFF1A1A2E)
@@ -868,13 +987,11 @@ private fun TemplatePreviewCard(
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             if (firstVideoPath != null) {
-                // Real video background
-                VideoBackground(
+                VideoThumbnailBackground(
                     videoPath = firstVideoPath,
                     modifier = Modifier.fillMaxSize()
                 )
             } else {
-                // Fallback gradient
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -1351,38 +1468,47 @@ private fun MiniElevationChart(
 // ── Video Background Player ──────────────────────────────────────────────
 
 @Composable
-@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-private fun VideoBackground(
+private fun VideoThumbnailBackground(
     videoPath: String,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val exoPlayer = remember(videoPath) {
-        androidx.media3.exoplayer.ExoPlayer.Builder(context).build().apply {
-            val uri = if (videoPath.startsWith("content://"))
-                Uri.parse(videoPath) else Uri.fromFile(java.io.File(videoPath))
-            setMediaItem(androidx.media3.common.MediaItem.fromUri(uri))
-            repeatMode = androidx.media3.common.Player.REPEAT_MODE_ALL
-            volume = 0f
-            playWhenReady = true
-            prepare()
-        }
-    }
-
-    DisposableEffect(videoPath) {
-        onDispose {
-            exoPlayer.release()
-        }
-    }
-
-    AndroidView(
-        factory = { ctx ->
-            TextureView(ctx).also { textureView ->
-                exoPlayer.setVideoTextureView(textureView)
+    val thumbnail = remember(videoPath) {
+        try {
+            val retriever = MediaMetadataRetriever()
+            if (videoPath.startsWith("content://")) {
+                retriever.setDataSource(context, Uri.parse(videoPath))
+            } else {
+                retriever.setDataSource(videoPath)
             }
-        },
-        modifier = modifier
-    )
+            val frame = retriever.getFrameAtTime(1_000_000)
+            retriever.release()
+            frame
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    if (thumbnail != null) {
+        Image(
+            bitmap = thumbnail.asImageBitmap(),
+            contentDescription = null,
+            modifier = modifier,
+            contentScale = ContentScale.Crop
+        )
+    } else {
+        Box(
+            modifier = modifier.background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFF1A1A2E),
+                        Color(0xFF16213E),
+                        Color(0xFF0F3460)
+                    )
+                )
+            )
+        )
+    }
 }
 
 // ── Step 3: Review ───────────────────────────────────────────────────────
@@ -1422,6 +1548,7 @@ private fun ReviewStep(
         )
         ReviewItem("🔄", "Sync Mode", mode.displayName)
         ReviewItem("🎨", "Template", template.displayName)
+        ReviewItem("📐", "Format", uiState.selectedAspectRatio.displayName + " " + uiState.selectedAspectRatio.description)
 
         Spacer(Modifier.height(16.dp))
 
@@ -1429,7 +1556,9 @@ private fun ReviewStep(
         TemplatePreviewCard(
             template = template,
             isSelected = true,
-            gpxData = uiState.gpxData
+            gpxData = uiState.gpxData,
+            mediaItems = uiState.mediaItems,
+            aspectRatio = uiState.selectedAspectRatio
         )
         
         Spacer(Modifier.height(16.dp))
