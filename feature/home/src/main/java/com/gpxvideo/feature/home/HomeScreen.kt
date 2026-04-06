@@ -58,7 +58,7 @@ fun HomeScreen(
     Scaffold(
         topBar = {
             GpxVideoTopAppBar(
-                title = "GPX Video Producer",
+                title = "GPX Story",
                 actions = {
                     IconButton(onClick = onNavigateToSettings) {
                         Icon(

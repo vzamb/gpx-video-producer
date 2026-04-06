@@ -14,10 +14,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.DeviceFontFamilyName
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
+
+// Athletic condensed font for hero metrics and sport data display
+val AthleticCondensed = FontFamily(
+    Font(DeviceFontFamilyName("sans-serif-condensed"), FontWeight.Light),
+    Font(DeviceFontFamilyName("sans-serif-condensed"), FontWeight.Normal),
+    Font(DeviceFontFamilyName("sans-serif-condensed"), FontWeight.Medium),
+    Font(DeviceFontFamilyName("sans-serif-condensed"), FontWeight.Bold),
+)
 
 // Primary accent — a sporty blue that pops on dark surfaces
 val AccentBlue = Color(0xFF448AFF)
@@ -143,6 +154,40 @@ val GpxVideoTypography = Typography(
         letterSpacing = 0.5.sp
     )
 )
+
+// Athletic text styles for sport overlays and hero metrics
+object AthleticType {
+    val heroMetric = TextStyle(
+        fontFamily = AthleticCondensed,
+        fontWeight = FontWeight.Bold,
+        fontSize = 64.sp,
+        letterSpacing = (-3).sp
+    )
+    val largeMetric = TextStyle(
+        fontFamily = AthleticCondensed,
+        fontWeight = FontWeight.Bold,
+        fontSize = 28.sp,
+        letterSpacing = (-1).sp
+    )
+    val mediumMetric = TextStyle(
+        fontFamily = AthleticCondensed,
+        fontWeight = FontWeight.Bold,
+        fontSize = 18.sp,
+        letterSpacing = (-0.5).sp
+    )
+    val smallMetric = TextStyle(
+        fontFamily = AthleticCondensed,
+        fontWeight = FontWeight.Medium,
+        fontSize = 13.sp,
+        letterSpacing = 0.sp
+    )
+    val metricLabel = TextStyle(
+        fontFamily = AthleticCondensed,
+        fontWeight = FontWeight.Normal,
+        fontSize = 9.sp,
+        letterSpacing = 2.sp
+    )
+}
 
 val GpxVideoShapes = Shapes(
     small = RoundedCornerShape(6.dp),

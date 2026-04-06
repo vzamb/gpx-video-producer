@@ -42,7 +42,9 @@ data class ProjectEditorUiState(
     val gpxData: GpxData? = null,
     val gpxStats: GpxStats? = null,
     val gpxFiles: List<GpxFileEntity> = emptyList(),
-    val isImportingGpx: Boolean = false
+    val isImportingGpx: Boolean = false,
+    val storyMode: String = "HYPER_LAPSE",
+    val storyTemplate: String = "CINEMATIC"
 )
 
 @HiltViewModel
@@ -64,10 +66,17 @@ class ProjectEditorViewModel @Inject constructor(
     private val _gpxData = MutableStateFlow<GpxData?>(null)
     private val _gpxStats = MutableStateFlow<GpxStats?>(null)
     private val _isImportingGpx = MutableStateFlow(false)
+    private val _storyMode = MutableStateFlow("HYPER_LAPSE")
+    private val _storyTemplate = MutableStateFlow("CINEMATIC")
 
     init {
         viewModelScope.launch {
-            _project.value = projectDao.getById(projectId)
+            val project = projectDao.getById(projectId)
+            _project.value = project
+            project?.let {
+                _storyMode.value = it.storyMode
+                _storyTemplate.value = it.storyTemplate
+            }
         }
         viewModelScope.launch {
             val existingFiles = gpxFileDao.getByProjectId(projectId).first()
@@ -88,7 +97,9 @@ class ProjectEditorViewModel @Inject constructor(
         gpxFileDao.getByProjectId(projectId),
         _gpxData,
         _gpxStats,
-        _isImportingGpx
+        _isImportingGpx,
+        _storyMode,
+        _storyTemplate
     ) { values ->
         val project = values[0] as ProjectEntity?
         val mediaItems = @Suppress("UNCHECKED_CAST") (values[1] as List<MediaItemEntity>)
@@ -97,6 +108,8 @@ class ProjectEditorViewModel @Inject constructor(
         val gpxData = values[4] as GpxData?
         val gpxStats = values[5] as GpxStats?
         val importingGpx = values[6] as Boolean
+        val storyMode = values[7] as String
+        val storyTemplate = values[8] as String
         ProjectEditorUiState(
             project = project,
             mediaItems = mediaItems,
@@ -105,7 +118,9 @@ class ProjectEditorViewModel @Inject constructor(
             gpxData = gpxData,
             gpxStats = gpxStats,
             gpxFiles = gpxFiles,
-            isImportingGpx = importingGpx
+            isImportingGpx = importingGpx,
+            storyMode = storyMode,
+            storyTemplate = storyTemplate
         )
     }.stateIn(
         scope = viewModelScope,
@@ -278,5 +293,25 @@ class ProjectEditorViewModel @Inject constructor(
             // Delete from Room
             mediaItemDao.deleteById(mediaItemId)
         }
+    }
+
+    fun setStoryMode(mode: String) {
+        _storyMode.value = mode
+        viewModelScope.launch(Dispatchers.IO) {
+            projectDao.updateStoryMode(projectId, mode)
+        }
+    }
+
+    fun setStoryTemplate(template: String) {
+        _storyTemplate.value = template
+        viewModelScope.launch(Dispatchers.IO) {
+            projectDao.updateStoryTemplate(projectId, template)
+        }
+    }
+
+    /** Check if any imported video has Exif creation timestamps (enables Documentary mode). */
+    fun hasVideoTimestamps(): Boolean {
+        // For now, always allow both modes; Exif extraction will be enhanced later
+        return true
     }
 }

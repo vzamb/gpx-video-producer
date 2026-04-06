@@ -13,27 +13,18 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.gpxvideo.core.model.ExportFormat
-import com.gpxvideo.core.model.Resolution
 import com.gpxvideo.core.model.SportType
 import com.gpxvideo.core.ui.component.GpxVideoTopAppBar
 import java.util.UUID
@@ -50,7 +41,7 @@ fun CreateProjectScreen(
     Scaffold(
         topBar = {
             GpxVideoTopAppBar(
-                title = "Create Project",
+                title = "New Story",
                 onNavigateBack = onNavigateBack
             )
         }
@@ -91,40 +82,6 @@ fun CreateProjectScreen(
                 }
             }
 
-            Spacer(Modifier.height(24.dp))
-
-            // Output settings
-            Text("Output Settings", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(8.dp))
-
-            DropdownSelector(
-                label = "Resolution",
-                options = Resolution.entries,
-                selectedOption = uiState.resolution,
-                onOptionSelected = viewModel::onResolutionSelected,
-                optionLabel = { it.displayName }
-            )
-
-            Spacer(Modifier.height(12.dp))
-
-            DropdownSelector(
-                label = "Frame Rate",
-                options = listOf(24, 30, 60),
-                selectedOption = uiState.frameRate,
-                onOptionSelected = viewModel::onFrameRateSelected,
-                optionLabel = { "${it} fps" }
-            )
-
-            Spacer(Modifier.height(12.dp))
-
-            DropdownSelector(
-                label = "Format",
-                options = ExportFormat.entries,
-                selectedOption = uiState.exportFormat,
-                onOptionSelected = viewModel::onExportFormatSelected,
-                optionLabel = { it.displayName }
-            )
-
             Spacer(Modifier.height(32.dp))
 
             // Create button
@@ -140,53 +97,8 @@ fun CreateProjectScreen(
                         strokeWidth = 2.dp
                     )
                 } else {
-                    Text("Create Project")
+                    Text("Create Story")
                 }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun <T> DropdownSelector(
-    label: String,
-    options: List<T>,
-    selectedOption: T,
-    onOptionSelected: (T) -> Unit,
-    optionLabel: (T) -> String,
-    modifier: Modifier = Modifier
-) {
-    var expanded by remember { mutableStateOf(false) }
-
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = { expanded = it },
-        modifier = modifier
-    ) {
-        OutlinedTextField(
-            value = optionLabel(selectedOption),
-            onValueChange = {},
-            readOnly = true,
-            label = { Text(label) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
-        )
-
-        ExposedDropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false }
-        ) {
-            options.forEach { option ->
-                DropdownMenuItem(
-                    text = { Text(optionLabel(option)) },
-                    onClick = {
-                        onOptionSelected(option)
-                        expanded = false
-                    }
-                )
             }
         }
     }

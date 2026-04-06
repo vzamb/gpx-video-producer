@@ -33,4 +33,10 @@ interface ProjectDao {
 
     @Query("SELECT * FROM projects WHERE name LIKE '%' || :query || '%' ORDER BY updated_at DESC")
     fun searchByName(query: String): Flow<List<ProjectEntity>>
+
+    @Query("UPDATE projects SET story_mode = :storyMode WHERE id = :id")
+    suspend fun updateStoryMode(id: UUID, storyMode: String)
+
+    @Query("UPDATE projects SET story_template = :storyTemplate WHERE id = :id")
+    suspend fun updateStoryTemplate(id: UUID, storyTemplate: String)
 }
