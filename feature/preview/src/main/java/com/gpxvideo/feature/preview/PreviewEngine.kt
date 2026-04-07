@@ -234,6 +234,27 @@ class PreviewEngine @Inject constructor(
         }
     }
 
+    /**
+     * Update only the display transforms (brightness, contrast, saturation, etc.)
+     * without reloading ExoPlayer media items or resetting playback position.
+     */
+    fun updateDisplayTransforms(clips: List<PreviewClip>) {
+        val validClips = clips.filter { it.endMs > it.startMs }
+        if (validClips.size != clipRanges.size) return // structural mismatch — use setMediaSources
+        clipRanges = clipRanges.zip(validClips) { range, clip ->
+            range.copy(displayTransform = clip.displayTransform)
+        }
+        val currentPos = _currentPositionMs.value
+        val activeRange = clipRanges.firstOrNull { currentPos < it.timelineEndMs }
+            ?: clipRanges.lastOrNull()
+        activeRange?.let {
+            _activeDisplayTransform.value = it.displayTransform
+            if (it.displayTransform.sourceVideoAspectRatio > 0f) {
+                _videoAspectRatio.value = it.displayTransform.sourceVideoAspectRatio
+            }
+        }
+    }
+
     fun setPlaybackSpeed(speed: Float) {
         exoPlayer?.setPlaybackParameters(PlaybackParameters(speed))
     }

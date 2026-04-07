@@ -55,8 +55,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -72,6 +72,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -121,7 +122,7 @@ private val SurfaceBg = Color(0xFF16162A)
 private val AccentBlue = Color(0xFF448AFF)
 private val PlayheadRed = Color(0xFFFF3D3D)
 
-private const val DP_PER_SECOND = 50f
+private const val DP_PER_SECOND = 30f
 
 // ── Effect presets ──────────────────────────────────────────────────────────
 
@@ -211,10 +212,10 @@ fun VideoAssemblyScreen(
         }
         val mediaItems = uiState.mediaItems
 
-        // Sync timeline clips to PreviewEngine — FIX: compute sourceVideoAspectRatio
-        LaunchedEffect(videoClips, mediaItems) {
+        // Helper to build PreviewClips from timeline state
+        fun buildPreviewClips(): List<PreviewClip> {
             val mediaMap = mediaItems.associateBy { it.id }
-            val previewClips = videoClips.mapNotNull { clip ->
+            return videoClips.mapNotNull { clip ->
                 val media = clip.mediaItemId?.let { mediaMap[it] } ?: return@mapNotNull null
                 val path = media.localCopyPath.ifBlank { media.sourcePath }
                 val uri = if (path.startsWith("content://")) Uri.parse(path)
@@ -243,7 +244,29 @@ fun VideoAssemblyScreen(
                     )
                 )
             }
-            viewModel.previewEngine.setMediaSources(previewClips)
+        }
+
+        // Structural key: only changes when clip list, URIs, trim, or speed change
+        // (NOT when brightness/contrast/saturation change)
+        val clipStructureKey = remember(videoClips) {
+            videoClips.map { c ->
+                listOf(c.mediaItemId, c.trimStartMs, c.endTimeMs - c.startTimeMs, c.speed)
+            }
+        }
+
+        // Reload ExoPlayer media only on structural changes
+        LaunchedEffect(clipStructureKey, mediaItems) {
+            viewModel.previewEngine.setMediaSources(buildPreviewClips())
+        }
+
+        // Update display transforms (effects) without resetting playback position
+        val clipDisplayKey = remember(videoClips) {
+            videoClips.map { c ->
+                listOf(c.brightness, c.contrast, c.saturation, c.contentMode, c.scale, c.rotation)
+            }
+        }
+        LaunchedEffect(clipDisplayKey) {
+            viewModel.previewEngine.updateDisplayTransforms(buildPreviewClips())
         }
 
         // Sync preview position → timeline playhead
@@ -336,40 +359,6 @@ private fun TimelineAssemblyContent(
                 onAspectRatioSelected = onAspectRatioSelected,
                 onNavigateBack = onNavigateBack
             )
-        },
-        floatingActionButton = {
-            Box(modifier = Modifier.navigationBarsPadding()) {
-                val hasMedia = uiState.mediaItems.isNotEmpty()
-                when {
-                    hasMedia && uiState.gpxData != null -> {
-                        ExtendedFloatingActionButton(
-                            onClick = onGoToStyle,
-                            containerColor = AccentBlue,
-                            contentColor = Color.White
-                        ) {
-                            Icon(Icons.Default.Route, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("Overlays", fontWeight = FontWeight.Bold)
-                        }
-                    }
-                    hasMedia -> {
-                        ExtendedFloatingActionButton(
-                            onClick = { if (!uiState.isImportingGpx) onAddActivity() },
-                            containerColor = if (uiState.isImportingGpx) Color(0xFF00C853).copy(alpha = 0.5f) else Color(0xFF00C853),
-                            contentColor = Color.White
-                        ) {
-                            if (uiState.isImportingGpx) {
-                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = Color.White)
-                            } else {
-                                Icon(Icons.Default.Route, contentDescription = null, modifier = Modifier.size(18.dp))
-                            }
-                            Spacer(Modifier.width(8.dp))
-                            Text(if (uiState.isImportingGpx) "Importing…" else "Add GPX Activity", fontWeight = FontWeight.Bold)
-                        }
-                    }
-                    // No media: no FAB — the empty timeline has a prominent add-video button
-                }
-            }
         }
     ) { padding ->
         Column(
@@ -459,7 +448,49 @@ private fun TimelineAssemblyContent(
                 }
             }
 
-            Spacer(Modifier.height(8.dp))
+            // Bottom CTA — fixed below everything
+            if (uiState.mediaItems.isNotEmpty()) {
+                val hasGpx = uiState.gpxData != null
+                Button(
+                    onClick = { if (hasGpx) onGoToStyle() else onAddActivity() },
+                    enabled = !uiState.isImportingGpx,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .navigationBarsPadding()
+                        .padding(bottom = 8.dp)
+                        .height(48.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (hasGpx) AccentBlue else Color(0xFF00C853),
+                        disabledContainerColor = Color(0xFF00C853).copy(alpha = 0.4f)
+                    )
+                ) {
+                    if (uiState.isImportingGpx) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = Color.White
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("Importing GPX…", fontWeight = FontWeight.Bold)
+                    } else {
+                        Icon(
+                            if (hasGpx) Icons.Default.Route else Icons.Default.Route,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            if (hasGpx) "Continue to Overlays →" else "Next: Add GPX Activity",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(4.dp))
         }
     }
 }
@@ -1012,7 +1043,10 @@ private fun FrameClipBlock(
     val widthDp = (clipDurationMs / 1000f * DP_PER_SECOND).dp.coerceAtLeast(24.dp)
     val borderColor = if (isSelected) AccentBlue else Color.White.copy(alpha = 0.12f)
     val borderWidth = if (isSelected) 2.dp else 1.dp
-    val pxPerDp = LocalDensity.current.density
+    val density = LocalDensity.current
+
+    // rememberUpdatedState so drag gestures always see the latest clip values
+    val currentClip by rememberUpdatedState(clip)
 
     val path = mediaItem?.let { it.localCopyPath.ifBlank { it.sourcePath } }
     val frames = if (path != null && clipDurationMs > 0) {
@@ -1025,6 +1059,8 @@ private fun FrameClipBlock(
     } else {
         emptyList()
     }
+
+    val handleWidth = 16.dp
 
     Box(
         modifier = Modifier
@@ -1065,7 +1101,7 @@ private fun FrameClipBlock(
             clip.label,
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .padding(start = 10.dp, bottom = 2.dp)
+                .padding(start = handleWidth + 2.dp, bottom = 2.dp)
                 .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(3.dp))
                 .padding(horizontal = 4.dp, vertical = 1.dp),
             style = MaterialTheme.typography.labelSmall,
@@ -1080,28 +1116,33 @@ private fun FrameClipBlock(
             formatDurationMs(clipDurationMs),
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = 10.dp, bottom = 2.dp)
+                .padding(end = handleWidth + 2.dp, bottom = 2.dp)
                 .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(3.dp))
                 .padding(horizontal = 4.dp, vertical = 1.dp),
             fontSize = 8.sp,
             color = Color.White.copy(alpha = 0.7f)
         )
 
-        // Left trim handle
+        // Left trim handle — wider, with proper drag tracking
         Box(
             modifier = Modifier
                 .align(Alignment.CenterStart)
-                .width(8.dp)
+                .width(handleWidth)
                 .fillMaxHeight()
                 .clip(RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp))
-                .background(Color.White.copy(alpha = 0.25f))
+                .background(
+                    if (isSelected) AccentBlue.copy(alpha = 0.5f)
+                    else Color.White.copy(alpha = 0.2f)
+                )
                 .pointerInput(clip.id) {
                     detectHorizontalDragGestures { _, dragAmount ->
-                        val deltaMs =
-                            (dragAmount / pxPerDp / DP_PER_SECOND * 1000f).toLong()
-                        val newStartMs =
-                            (clip.startTimeMs + deltaMs).coerceAtLeast(0L)
-                        onTrimClip(clip.id, newStartMs, clip.endTimeMs)
+                        val c = currentClip
+                        val deltaMs = with(density) {
+                            (dragAmount / density.density / DP_PER_SECOND * 1000f).toLong()
+                        }
+                        val maxStart = c.endTimeMs - 500L
+                        val newStart = (c.startTimeMs + deltaMs).coerceIn(0L, maxStart)
+                        onTrimClip(c.id, newStart, c.endTimeMs)
                     }
                 },
             contentAlignment = Alignment.Center
@@ -1113,29 +1154,34 @@ private fun FrameClipBlock(
                 repeat(3) {
                     Box(
                         modifier = Modifier
-                            .size(2.dp)
+                            .size(3.dp)
                             .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.6f))
+                            .background(Color.White.copy(alpha = 0.8f))
                     )
                 }
             }
         }
 
-        // Right trim handle
+        // Right trim handle — wider, with proper drag tracking
         Box(
             modifier = Modifier
                 .align(Alignment.CenterEnd)
-                .width(8.dp)
+                .width(handleWidth)
                 .fillMaxHeight()
                 .clip(RoundedCornerShape(topEnd = 8.dp, bottomEnd = 8.dp))
-                .background(Color.White.copy(alpha = 0.25f))
+                .background(
+                    if (isSelected) AccentBlue.copy(alpha = 0.5f)
+                    else Color.White.copy(alpha = 0.2f)
+                )
                 .pointerInput(clip.id) {
                     detectHorizontalDragGestures { _, dragAmount ->
-                        val deltaMs =
-                            (dragAmount / pxPerDp / DP_PER_SECOND * 1000f).toLong()
-                        val newEndMs =
-                            (clip.endTimeMs + deltaMs).coerceAtLeast(clip.startTimeMs + 500L)
-                        onTrimClip(clip.id, clip.startTimeMs, newEndMs)
+                        val c = currentClip
+                        val deltaMs = with(density) {
+                            (dragAmount / density.density / DP_PER_SECOND * 1000f).toLong()
+                        }
+                        val minEnd = c.startTimeMs + 500L
+                        val newEnd = (c.endTimeMs + deltaMs).coerceAtLeast(minEnd)
+                        onTrimClip(c.id, c.startTimeMs, newEnd)
                     }
                 },
             contentAlignment = Alignment.Center
@@ -1147,9 +1193,9 @@ private fun FrameClipBlock(
                 repeat(3) {
                     Box(
                         modifier = Modifier
-                            .size(2.dp)
+                            .size(3.dp)
                             .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.6f))
+                            .background(Color.White.copy(alpha = 0.8f))
                     )
                 }
             }
@@ -1411,7 +1457,7 @@ private fun rememberClipFrames(
     durationMs: Long,
     trimStartMs: Long,
     trimEndMs: Long,
-    frameCount: Int = 8
+    frameCount: Int = 4
 ): List<ImageBitmap?> {
     val context = LocalContext.current
     var frames by remember(uri, durationMs, trimStartMs, trimEndMs) {
