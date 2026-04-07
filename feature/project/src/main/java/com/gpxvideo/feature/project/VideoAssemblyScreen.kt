@@ -1,25 +1,21 @@
 package com.gpxvideo.feature.project
 
-import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,12 +23,10 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -45,14 +39,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.DirectionsBike
-import androidx.compose.material.icons.filled.DirectionsRun
-import androidx.compose.material.icons.filled.Hiking
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Route
-import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -61,47 +52,43 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.gpxvideo.core.database.entity.MediaItemEntity
 import com.gpxvideo.core.model.SocialAspectRatio
 import com.gpxvideo.core.ui.component.LoadingIndicator
+import com.gpxvideo.feature.preview.PreviewEngine
+import com.gpxvideo.feature.preview.VideoPreview
 
 /**
  * Screen 1: "The Cut" — Video Assembly
- * Simplified single-track editor with clip strip, aspect ratio, and "+ Add Activity" bridge.
+ * Single-track editor with live video preview, clip strip, aspect ratio, and "+ Add Activity" bridge.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -111,10 +98,12 @@ fun VideoAssemblyScreen(
     viewModel: ProjectEditorViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val isPlaying by viewModel.isPlaying.collectAsStateWithLifecycle()
+    val currentPositionMs by viewModel.currentPositionMs.collectAsStateWithLifecycle()
+    val videoDuration by viewModel.videoDuration.collectAsStateWithLifecycle()
     val projectIdStr = uiState.project?.id?.toString() ?: ""
 
     var showAspectRatioMenu by remember { mutableStateOf(false) }
-    var showInfoSheet by rememberSaveable { mutableStateOf(false) }
 
     val pickMedia = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickMultipleVisualMedia()
@@ -127,11 +116,15 @@ fun VideoAssemblyScreen(
     ) { uri ->
         uri?.let {
             viewModel.importGpxFile(it)
-            // Auto-navigate to Style screen after GPX import
             if (projectIdStr.isNotBlank()) {
                 onNavigateToStyle(projectIdStr)
             }
         }
+    }
+
+    // Pause preview when leaving the screen
+    DisposableEffect(Unit) {
+        onDispose { viewModel.pause() }
     }
 
     if (uiState.isLoading) {
@@ -151,77 +144,68 @@ fun VideoAssemblyScreen(
                     viewModel.setAspectRatio(it)
                     showAspectRatioMenu = false
                 },
-                onInfoClick = { showInfoSheet = true },
-                hasGpxData = uiState.gpxData != null,
                 onNavigateBack = onNavigateBack
             )
         }
     ) { padding ->
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // Video preview area
-                VideoPreviewArea(
-                    mediaItems = uiState.mediaItems,
-                    aspectRatio = uiState.selectedAspectRatio,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                )
+            // Live video preview area
+            VideoPreviewArea(
+                previewEngine = viewModel.previewEngine,
+                mediaItems = uiState.mediaItems,
+                aspectRatio = uiState.selectedAspectRatio,
+                isPlaying = isPlaying,
+                currentPositionMs = currentPositionMs,
+                videoDuration = videoDuration,
+                onTogglePlayback = viewModel::togglePlayback,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            )
 
-                // Clip strip + controls
-                ClipStripSection(
-                    mediaItems = uiState.mediaItems,
-                    isImporting = uiState.isImporting,
-                    onAddClips = {
-                        pickMedia.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
-                        )
-                    },
-                    onDeleteMedia = viewModel::deleteMedia,
-                    onReorder = viewModel::reorderMedia
-                )
+            // Clip strip
+            ClipStripSection(
+                mediaItems = uiState.mediaItems,
+                isImporting = uiState.isImporting,
+                onAddClips = {
+                    pickMedia.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
+                    )
+                },
+                onDeleteMedia = viewModel::deleteMedia,
+                onReorder = viewModel::reorderMedia
+            )
 
-                Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(8.dp))
 
-                // "+ Add Activity" primary CTA
-                AddActivityButton(
-                    hasGpxData = uiState.gpxData != null,
-                    hasMedia = uiState.mediaItems.isNotEmpty(),
-                    isImportingGpx = uiState.isImportingGpx,
-                    onAddActivity = {
-                        gpxPickerLauncher.launch(arrayOf("*/*"))
-                    },
-                    onGoToStyle = {
-                        if (projectIdStr.isNotBlank()) onNavigateToStyle(projectIdStr)
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .navigationBarsPadding()
-                        .padding(bottom = 12.dp)
-                )
-            }
+            // Bottom action buttons
+            AddActivityButton(
+                hasGpxData = uiState.gpxData != null,
+                hasMedia = uiState.mediaItems.isNotEmpty(),
+                isImportingGpx = uiState.isImportingGpx,
+                onAddActivity = {
+                    gpxPickerLauncher.launch(arrayOf("*/*"))
+                },
+                onGoToStyle = {
+                    if (projectIdStr.isNotBlank()) onNavigateToStyle(projectIdStr)
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .navigationBarsPadding()
+                    .padding(bottom = 12.dp)
+            )
         }
-    }
-
-    // Info Bottom Sheet
-    if (showInfoSheet) {
-        ActivityInfoBottomSheet(
-            gpxStats = uiState.gpxStats,
-            gpxData = uiState.gpxData,
-            mediaItems = uiState.mediaItems,
-            sportType = uiState.project?.sportType ?: "CYCLING",
-            onDismiss = { showInfoSheet = false }
-        )
     }
 }
 
-// ── Top Bar ──────────────────────────────────────────────────────────────
+// ── Top Bar ──────────────────────────────────────────────────────────────────
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AssemblyTopBar(
     title: String,
@@ -229,8 +213,6 @@ private fun AssemblyTopBar(
     showAspectRatioMenu: Boolean,
     onToggleAspectRatioMenu: () -> Unit,
     onAspectRatioSelected: (SocialAspectRatio) -> Unit,
-    onInfoClick: () -> Unit,
-    hasGpxData: Boolean,
     onNavigateBack: () -> Unit
 ) {
     Surface(
@@ -319,71 +301,61 @@ private fun AssemblyTopBar(
                     }
                 }
             }
-
-            // Info button
-            if (hasGpxData) {
-                IconButton(onClick = onInfoClick) {
-                    Icon(
-                        Icons.Default.Info,
-                        contentDescription = "Activity Info",
-                        tint = Color.White.copy(alpha = 0.7f)
-                    )
-                }
-            }
         }
     }
 }
 
-// ── Video Preview ────────────────────────────────────────────────────────
+// ── Video Preview ────────────────────────────────────────────────────────────
 
 @Composable
 private fun VideoPreviewArea(
+    previewEngine: PreviewEngine,
     mediaItems: List<MediaItemEntity>,
     aspectRatio: SocialAspectRatio,
+    isPlaying: Boolean,
+    currentPositionMs: Long,
+    videoDuration: Long,
+    onTogglePlayback: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val ratio = aspectRatio.width.toFloat() / aspectRatio.height.toFloat()
-    val firstVideoPath = mediaItems
-        .firstOrNull { it.type == "VIDEO" }
-        ?.let { it.localCopyPath.ifBlank { it.sourcePath } }
-        ?.takeIf { it.isNotBlank() }
+    val canvasRatio = aspectRatio.width.toFloat() / aspectRatio.height.toFloat()
 
     Box(
         modifier = modifier,
         contentAlignment = Alignment.Center
     ) {
         if (mediaItems.isEmpty()) {
-            // Empty state — invite to add clips
             EmptyPreviewState()
         } else {
-            // Video canvas with correct aspect ratio
+            // Canvas box with the selected aspect ratio and black background for letterbox/pillarbox
             Box(
                 modifier = Modifier
                     .padding(horizontal = 24.dp, vertical = 12.dp)
-                    .aspectRatio(ratio)
+                    .aspectRatio(canvasRatio)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFF1A1A2E))
+                    .background(Color.Black)
             ) {
-                if (firstVideoPath != null) {
-                    AssemblyVideoThumbnail(
-                        videoPath = firstVideoPath,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(
-                                Brush.verticalGradient(
-                                    listOf(
-                                        Color(0xFF1A1A2E),
-                                        Color(0xFF16213E),
-                                        Color(0xFF0F3460)
-                                    )
-                                )
-                            )
-                    )
-                }
+                // Live video preview — fills the canvas; VideoPreview handles fit/letterbox internally
+                VideoPreview(
+                    previewEngine = previewEngine,
+                    modifier = Modifier.fillMaxSize()
+                )
+
+                // Play/pause overlay
+                PlayPauseOverlay(
+                    isPlaying = isPlaying,
+                    onToggle = onTogglePlayback,
+                    modifier = Modifier.fillMaxSize()
+                )
+
+                // Thin progress bar at the bottom
+                PlaybackProgressBar(
+                    currentPositionMs = currentPositionMs,
+                    durationMs = videoDuration,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                )
 
                 // Subtle border frame
                 Box(
@@ -398,6 +370,70 @@ private fun VideoPreviewArea(
             }
         }
     }
+}
+
+@Composable
+private fun PlayPauseOverlay(
+    isPlaying: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    // Tap the entire preview area to toggle playback
+    Box(
+        modifier = modifier.clickable(
+            indication = null,
+            interactionSource = remember { MutableInteractionSource() },
+            onClick = onToggle
+        ),
+        contentAlignment = Alignment.Center
+    ) {
+        // Show the button with a fade — visible when paused, fades out shortly after play resumes
+        AnimatedVisibility(
+            visible = !isPlaying,
+            enter = fadeIn(animationSpec = tween(200)),
+            exit = fadeOut(animationSpec = tween(400))
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.55f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    contentDescription = if (isPlaying) "Pause" else "Play",
+                    modifier = Modifier.size(32.dp),
+                    tint = Color.White
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlaybackProgressBar(
+    currentPositionMs: Long,
+    durationMs: Long,
+    modifier: Modifier = Modifier
+) {
+    val progress = if (durationMs > 0) {
+        (currentPositionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
+    } else {
+        0f
+    }
+    val animatedProgress by animateFloatAsState(
+        targetValue = progress,
+        animationSpec = tween(durationMillis = 150),
+        label = "progress"
+    )
+
+    LinearProgressIndicator(
+        progress = { animatedProgress },
+        modifier = modifier.height(3.dp),
+        color = Color(0xFF448AFF),
+        trackColor = Color.White.copy(alpha = 0.15f)
+    )
 }
 
 @Composable
@@ -438,7 +474,7 @@ private fun EmptyPreviewState() {
     }
 }
 
-// ── Clip Strip ───────────────────────────────────────────────────────────
+// ── Clip Strip ───────────────────────────────────────────────────────────────
 
 @Composable
 private fun ClipStripSection(
@@ -652,7 +688,7 @@ private fun AddClipButton(isImporting: Boolean, onClick: () -> Unit) {
     }
 }
 
-// ── Add Activity Button ──────────────────────────────────────────────────
+// ── Add Activity Button ─────────────────────────────────────────────────────
 
 @Composable
 private fun AddActivityButton(
@@ -664,7 +700,6 @@ private fun AddActivityButton(
     modifier: Modifier = Modifier
 ) {
     if (hasGpxData && hasMedia) {
-        // GPX already loaded — show "Continue to Style" button
         Button(
             onClick = onGoToStyle,
             modifier = modifier.height(54.dp),
@@ -686,7 +721,6 @@ private fun AddActivityButton(
             )
         }
     } else {
-        // Primary CTA — "+ Add Activity"
         Button(
             onClick = onAddActivity,
             modifier = modifier.height(54.dp),
@@ -722,227 +756,7 @@ private fun AddActivityButton(
     }
 }
 
-// ── Info Bottom Sheet ────────────────────────────────────────────────────
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ActivityInfoBottomSheet(
-    gpxStats: com.gpxvideo.lib.gpxparser.GpxStats?,
-    gpxData: com.gpxvideo.core.model.GpxData?,
-    mediaItems: List<MediaItemEntity>,
-    sportType: String,
-    onDismiss: () -> Unit
-) {
-    val sheetState = rememberModalBottomSheetState()
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = Color(0xFF1A1A2E),
-        dragHandle = { BottomSheetDefaults.DragHandle(color = Color.White.copy(alpha = 0.3f)) }
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 32.dp)
-                .navigationBarsPadding()
-        ) {
-            // Sport icon + title
-            val sportIcon = when (sportType.uppercase()) {
-                "RUNNING" -> Icons.Default.DirectionsRun
-                "HIKING" -> Icons.Default.Hiking
-                else -> Icons.Default.DirectionsBike
-            }
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(bottom = 20.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(Color(0xFF448AFF).copy(alpha = 0.15f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        sportIcon,
-                        contentDescription = null,
-                        modifier = Modifier.size(24.dp),
-                        tint = Color(0xFF448AFF)
-                    )
-                }
-                Spacer(Modifier.width(12.dp))
-                Column {
-                    Text(
-                        "Activity Details",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                    Text(
-                        sportType.lowercase().replaceFirstChar { it.uppercase() },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.5f)
-                    )
-                }
-            }
-
-            if (gpxStats != null) {
-                // Stats grid
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    InfoStatCard(
-                        label = "Distance",
-                        value = "%.1f".format(gpxStats.totalDistance / 1000.0),
-                        unit = "km",
-                        modifier = Modifier.weight(1f)
-                    )
-                    InfoStatCard(
-                        label = "Elevation",
-                        value = "%.0f".format(gpxStats.totalElevationGain),
-                        unit = "m",
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                Spacer(Modifier.height(12.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    InfoStatCard(
-                        label = "Duration",
-                        value = formatDurationMs(gpxStats.movingDuration.toMillis()),
-                        unit = "",
-                        modifier = Modifier.weight(1f)
-                    )
-                    InfoStatCard(
-                        label = "Avg Speed",
-                        value = if (gpxStats.avgSpeed > 0) "%.1f".format(gpxStats.avgSpeed * 3.6) else "—",
-                        unit = if (gpxStats.avgSpeed > 0) "km/h" else "",
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                Spacer(Modifier.height(12.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    InfoStatCard(
-                        label = "Clips",
-                        value = "${mediaItems.size}",
-                        unit = "video${if (mediaItems.size != 1) "s" else ""}",
-                        modifier = Modifier.weight(1f)
-                    )
-                    InfoStatCard(
-                        label = "Clip Duration",
-                        value = formatDurationMs(mediaItems.mapNotNull { it.durationMs }.sum()),
-                        unit = "",
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            } else {
-                Text(
-                    "No activity data loaded yet.\nImport a GPX file to see stats.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White.copy(alpha = 0.4f),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 24.dp)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun InfoStatCard(
-    label: String,
-    value: String,
-    unit: String,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(14.dp),
-        color = Color.White.copy(alpha = 0.06f),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
-    ) {
-        Column(
-            modifier = Modifier.padding(14.dp)
-        ) {
-            Text(
-                label.uppercase(),
-                style = MaterialTheme.typography.labelSmall,
-                color = Color.White.copy(alpha = 0.4f),
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp
-            )
-            Spacer(Modifier.height(4.dp))
-            Row(
-                verticalAlignment = Alignment.Bottom,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    value,
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-                if (unit.isNotEmpty()) {
-                    Text(
-                        unit,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.4f),
-                        modifier = Modifier.padding(bottom = 3.dp)
-                    )
-                }
-            }
-        }
-    }
-}
-
-// ── Video Thumbnail ──────────────────────────────────────────────────────
-
-@Composable
-private fun AssemblyVideoThumbnail(
-    videoPath: String,
-    modifier: Modifier = Modifier
-) {
-    val context = LocalContext.current
-    val thumbnail = remember(videoPath) {
-        try {
-            val retriever = MediaMetadataRetriever()
-            if (videoPath.startsWith("content://")) {
-                retriever.setDataSource(context, Uri.parse(videoPath))
-            } else {
-                retriever.setDataSource(videoPath)
-            }
-            val frame = retriever.getFrameAtTime(1_000_000)
-            retriever.release()
-            frame
-        } catch (_: Exception) { null }
-    }
-
-    if (thumbnail != null) {
-        Image(
-            bitmap = thumbnail.asImageBitmap(),
-            contentDescription = null,
-            modifier = modifier,
-            contentScale = ContentScale.Crop
-        )
-    }
-}
-
-// ── Utilities ────────────────────────────────────────────────────────────
+// ── Utilities ────────────────────────────────────────────────────────────────
 
 private fun formatDurationMs(ms: Long): String {
     val totalSeconds = ms / 1000

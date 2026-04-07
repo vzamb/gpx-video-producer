@@ -17,6 +17,9 @@ import com.gpxvideo.core.database.entity.ProjectEntity
 import com.gpxvideo.core.model.GpxData
 import com.gpxvideo.core.model.SocialAspectRatio
 import com.gpxvideo.feature.gpx.GpxImportManager
+import com.gpxvideo.feature.preview.PreviewClip
+import com.gpxvideo.feature.preview.PreviewDisplayTransform
+import com.gpxvideo.feature.preview.PreviewEngine
 import com.gpxvideo.lib.gpxparser.GpxStatistics
 import com.gpxvideo.lib.gpxparser.GpxStats
 import com.gpxvideo.lib.mediautils.MediaProber
@@ -58,6 +61,7 @@ class ProjectEditorViewModel @Inject constructor(
     private val mediaItemDao: MediaItemDao,
     private val gpxFileDao: GpxFileDao,
     private val gpxImportManager: GpxImportManager,
+    val previewEngine: PreviewEngine,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -77,13 +81,13 @@ class ProjectEditorViewModel @Inject constructor(
     private val _activityTitle = MutableStateFlow("")
 
     init {
+        previewEngine.initialize()
         viewModelScope.launch {
             val project = projectDao.getById(projectId)
             _project.value = project
             project?.let {
                 _storyMode.value = it.storyMode
                 _storyTemplate.value = it.storyTemplate
-                // Restore aspect ratio from saved resolution
                 val savedRatio = SocialAspectRatio.entries.find { r ->
                     r.width == it.resolutionWidth && r.height == it.resolutionHeight
                 } ?: SocialAspectRatio.PORTRAIT_9_16
@@ -100,6 +104,48 @@ class ProjectEditorViewModel @Inject constructor(
                 }
             }
         }
+        // Auto-load preview when media items change
+        viewModelScope.launch {
+            mediaItemDao.getByProjectId(projectId).collect { items ->
+                loadPreviewClips(items)
+            }
+        }
+    }
+
+    // ── Preview playback ─────────────────────────────────────────────────
+    val currentPositionMs = previewEngine.currentPositionMs
+    val isPlaying = previewEngine.isPlaying
+    val videoDuration = previewEngine.duration
+
+    fun play() = previewEngine.play()
+    fun pause() = previewEngine.pause()
+    fun togglePlayback() { if (previewEngine.isPlaying.value) pause() else play() }
+    fun seekTo(positionMs: Long) = previewEngine.seekTo(positionMs)
+
+    private fun loadPreviewClips(items: List<MediaItemEntity>) {
+        val videoItems = items.filter { it.type == "VIDEO" }
+        if (videoItems.isEmpty()) {
+            previewEngine.setMediaSources(emptyList())
+            return
+        }
+        val clips = videoItems.map { media ->
+            val path = media.localCopyPath.ifBlank { media.sourcePath }
+            val uri = if (path.startsWith("content://")) Uri.parse(path) else Uri.fromFile(File(path))
+            val durationMs = media.durationMs ?: 5000L
+            val sourceAR = if (media.height > 0) {
+                val r = media.rotation % 360
+                if (r == 90 || r == 270) media.height.toFloat() / media.width.toFloat()
+                else media.width.toFloat() / media.height.toFloat()
+            } else 0f
+            PreviewClip(
+                uri = uri,
+                startMs = 0L,
+                endMs = durationMs,
+                speed = 1f,
+                displayTransform = PreviewDisplayTransform(sourceVideoAspectRatio = sourceAR)
+            )
+        }
+        previewEngine.setMediaSources(clips)
     }
 
     val uiState: StateFlow<ProjectEditorUiState> = combine(
