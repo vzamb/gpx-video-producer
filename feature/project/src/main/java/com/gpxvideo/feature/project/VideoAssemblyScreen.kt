@@ -787,18 +787,37 @@ private fun TransitionOverlay(
     currentPositionMs: Long,
     videoClips: List<TimelineClipState>
 ) {
-    // Find active transition at the current playhead position
+    // Transitions span BOTH clips:
+    //   last half of clip N (fade-out, progress 0→0.5)
+    //   first half of clip N+1 (fade-in, progress 0.5→1.0)
     val transitionInfo = remember(currentPositionMs, videoClips) {
-        videoClips.firstNotNullOfOrNull { clip ->
+        for (i in videoClips.indices) {
+            val clip = videoClips[i]
             val type = clip.entryTransitionType
-            val duration = clip.entryTransitionDurationMs ?: 500L
-            if (type != null && type != "CUT" && duration > 0) {
-                val transEnd = clip.startTimeMs + duration
-                if (currentPositionMs >= clip.startTimeMs && currentPositionMs < transEnd) {
-                    type to ((currentPositionMs - clip.startTimeMs).toFloat() / duration)
-                } else null
-            } else null
+            val duration = clip.entryTransitionDurationMs ?: 800L
+            if (type == null || type == "CUT" || duration <= 0) continue
+            val halfDur = duration / 2
+
+            // Phase 2: first half of this clip → fade-in (progress 0.5→1.0)
+            val fadeInEnd = clip.startTimeMs + halfDur
+            if (currentPositionMs >= clip.startTimeMs && currentPositionMs < fadeInEnd) {
+                val elapsed = currentPositionMs - clip.startTimeMs
+                val progress = 0.5f + (elapsed.toFloat() / halfDur) * 0.5f
+                return@remember type to progress.coerceIn(0f, 1f)
+            }
+
+            // Phase 1: last half of previous clip → fade-out (progress 0→0.5)
+            if (i > 0) {
+                val prevClip = videoClips[i - 1]
+                val fadeOutStart = prevClip.endTimeMs - halfDur
+                if (currentPositionMs >= fadeOutStart && currentPositionMs < prevClip.endTimeMs) {
+                    val elapsed = currentPositionMs - fadeOutStart
+                    val progress = (elapsed.toFloat() / halfDur) * 0.5f
+                    return@remember type to progress.coerceIn(0f, 1f)
+                }
+            }
         }
+        null
     }
 
     if (transitionInfo != null) {
@@ -815,7 +834,12 @@ private fun TransitionOverlay(
 
 @Composable
 private fun FadeTransitionEffect(progress: Float) {
-    val alpha = (1f - progress).coerceIn(0f, 1f)
+    // 0→0.5: fade to black (alpha 0→1), 0.5→1: fade from black (alpha 1→0)
+    val alpha = if (progress <= 0.5f) {
+        (progress / 0.5f).coerceIn(0f, 1f)
+    } else {
+        ((1f - progress) / 0.5f).coerceIn(0f, 1f)
+    }
     if (alpha > 0.01f) {
         Box(
             modifier = Modifier
@@ -827,11 +851,11 @@ private fun FadeTransitionEffect(progress: Float) {
 
 @Composable
 private fun DissolveTransitionEffect(progress: Float) {
-    // Two-phase dissolve: white flash that fades in then out
-    val alpha = if (progress < 0.4f) {
-        (progress / 0.4f).coerceIn(0f, 1f) * 0.5f
+    // 0→0.5: white flash increases, 0.5→1: white flash decreases
+    val alpha = if (progress <= 0.5f) {
+        (progress / 0.5f).coerceIn(0f, 1f) * 0.6f
     } else {
-        ((1f - progress) / 0.6f).coerceIn(0f, 1f) * 0.5f
+        ((1f - progress) / 0.5f).coerceIn(0f, 1f) * 0.6f
     }
     if (alpha > 0.01f) {
         Box(
@@ -844,8 +868,14 @@ private fun DissolveTransitionEffect(progress: Float) {
 
 @Composable
 private fun SlideTransitionEffect(progress: Float) {
+    // 0→0.5: black curtain slides in from right, 0.5→1: slides out to left
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val offsetPx = with(LocalDensity.current) { maxWidth.toPx() * progress }
+        val widthPx = with(LocalDensity.current) { maxWidth.toPx() }
+        val offsetPx = if (progress <= 0.5f) {
+            widthPx * (1f - progress / 0.5f) // slides in from right: width→0
+        } else {
+            -widthPx * ((progress - 0.5f) / 0.5f) // slides out to left: 0→-width
+        }
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -857,14 +887,19 @@ private fun SlideTransitionEffect(progress: Float) {
 
 @Composable
 private fun WipeTransitionEffect(progress: Float) {
-    val coverFraction = (1f - progress).coerceIn(0f, 1f)
+    // 0→0.5: wipe closes from right, 0.5→1: wipe opens from left
+    val coverFraction = if (progress <= 0.5f) {
+        (progress / 0.5f).coerceIn(0f, 1f) // 0→1 (closing)
+    } else {
+        ((1f - progress) / 0.5f).coerceIn(0f, 1f) // 1→0 (opening)
+    }
     if (coverFraction > 0.01f) {
         Box(modifier = Modifier.fillMaxSize()) {
             Box(
                 modifier = Modifier
                     .fillMaxHeight()
                     .fillMaxWidth(fraction = coverFraction)
-                    .align(Alignment.CenterEnd)
+                    .align(if (progress <= 0.5f) Alignment.CenterEnd else Alignment.CenterStart)
                     .background(Color.Black)
             )
         }

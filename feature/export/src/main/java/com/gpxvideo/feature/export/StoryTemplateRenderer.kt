@@ -14,26 +14,38 @@ import com.gpxvideo.lib.gpxparser.GpxStats
 
 /**
  * Renders story template overlays as bitmaps for the export pipeline.
- * Replicates the Compose template previews using Android Canvas API.
+ * Supports both static (summary) and dynamic (per-frame) rendering to match
+ * the Compose preview overlays in StyleTelemetryScreen.
  */
 object StoryTemplateRenderer {
+
+    data class FrameData(
+        val distance: Double = 0.0,
+        val elevation: Double = 0.0,
+        val speed: Double = 0.0,
+        val heartRate: Int? = null,
+        val progress: Float = 0f
+    )
 
     fun render(
         template: String,
         width: Int,
         height: Int,
         gpxData: GpxData?,
-        gpxStats: GpxStats?
+        gpxStats: GpxStats?,
+        frameData: FrameData? = null
     ): Bitmap {
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        // Transparent background - only draw overlay elements
         canvas.drawColor(Color.TRANSPARENT)
 
+        val isPortrait = height > width
+        val isLandscape = width.toFloat() / height > 1.4f
+
         when (template) {
-            "CINEMATIC" -> renderCinematic(canvas, width, height, gpxData, gpxStats)
-            "HERO" -> renderHero(canvas, width, height, gpxData, gpxStats)
-            "PRO_DASHBOARD" -> renderProDashboard(canvas, width, height, gpxData, gpxStats)
+            "CINEMATIC" -> renderCinematic(canvas, width, height, gpxData, gpxStats, frameData, isPortrait, isLandscape)
+            "HERO" -> renderHero(canvas, width, height, gpxData, gpxStats, frameData, isPortrait, isLandscape)
+            "PRO_DASHBOARD" -> renderProDashboard(canvas, width, height, gpxData, gpxStats, frameData, isPortrait, isLandscape)
         }
 
         return bitmap
@@ -41,294 +53,382 @@ object StoryTemplateRenderer {
 
     private fun renderCinematic(
         canvas: Canvas, w: Int, h: Int,
-        gpxData: GpxData?, gpxStats: GpxStats?
+        gpxData: GpxData?, gpxStats: GpxStats?,
+        frameData: FrameData?,
+        isPortrait: Boolean, isLandscape: Boolean
     ) {
         val scale = w / 1080f
+        val isLive = frameData != null
 
         // Bottom gradient scrim
+        val scrimH = if (isPortrait) h * 0.35f else h * 0.4f
         val gradientPaint = Paint().apply {
             shader = LinearGradient(
-                0f, h * 0.6f, 0f, h.toFloat(),
-                Color.TRANSPARENT, Color.argb(200, 0, 0, 0),
+                0f, h - scrimH, 0f, h.toFloat(),
+                Color.TRANSPARENT, Color.argb(180, 0, 0, 0),
                 Shader.TileMode.CLAMP
             )
         }
-        canvas.drawRect(0f, h * 0.6f, w.toFloat(), h.toFloat(), gradientPaint)
-
-        val margin = 40f * scale
-        var y = h - margin
-
-        // Glassmorphic card background
-        val cardPaint = Paint().apply {
-            color = Color.argb(20, 255, 255, 255)
-            isAntiAlias = true
-        }
-        val borderPaint = Paint().apply {
-            color = Color.argb(38, 255, 255, 255)
-            style = Paint.Style.STROKE
-            strokeWidth = 1.5f * scale
-            isAntiAlias = true
-        }
+        canvas.drawRect(0f, h - scrimH, w.toFloat(), h.toFloat(), gradientPaint)
 
         val condensed = Typeface.create("sans-serif-condensed", Typeface.BOLD)
-        val labelPaint = Paint().apply {
-            color = Color.argb(153, 255, 255, 255)
-            textSize = 22f * scale
-            typeface = condensed
-            isAntiAlias = true
-            letterSpacing = 0.1f
-        }
-        val valuePaint = Paint().apply {
-            color = Color.WHITE
-            textSize = 48f * scale
-            typeface = condensed
-            isAntiAlias = true
-        }
-        val unitPaint = Paint().apply {
-            color = Color.argb(128, 255, 255, 255)
-            textSize = 24f * scale
-            typeface = condensed
-            isAntiAlias = true
-        }
+        val accent = Color.argb(200, 100, 180, 255)
 
-        val distKm = gpxData?.let { "%.1f".format(it.totalDistance / 1000.0) } ?: "42.5"
-        val elevGain = gpxData?.let { "%.0f".format(it.totalElevationGain) } ?: "820"
-        val duration = gpxData?.let { formatDuration(it.totalDuration.toMillis()) } ?: "3:42:15"
+        val distKm = if (isLive) "%.1f".format(frameData!!.distance / 1000.0)
+        else gpxData?.let { "%.1f".format(it.totalDistance / 1000.0) } ?: "—"
 
-        // Draw 3 metric cards at bottom-left
-        val cardH = 120f * scale
-        val cardW = 160f * scale
-        val cardSpacing = 12f * scale
-        val cards = listOf(
-            Triple("DISTANCE", distKm, "km"),
-            Triple("ELEVATION", elevGain, "m"),
-            Triple("TIME", duration, "")
-        )
+        val elev = if (isLive) "%.0f".format(frameData!!.elevation)
+        else gpxData?.let { "%.0f".format(it.totalElevationGain) } ?: "—"
 
-        y -= cardH
-        for ((i, card) in cards.withIndex()) {
-            val cx = margin + i * (cardW + cardSpacing)
-            val rect = RectF(cx, y, cx + cardW, y + cardH)
-            canvas.drawRoundRect(rect, 24f * scale, 24f * scale, cardPaint)
-            canvas.drawRoundRect(rect, 24f * scale, 24f * scale, borderPaint)
+        val pace = if (isLive) formatPace(frameData!!.speed)
+        else gpxData?.let {
+            val s = if (it.totalDuration.seconds > 0) it.totalDistance / it.totalDuration.seconds.toDouble() else 0.0
+            formatPace(s)
+        } ?: "—"
 
-            canvas.drawText(card.first, cx + 16f * scale, y + 36f * scale, labelPaint)
-            canvas.drawText(card.second, cx + 16f * scale, y + 80f * scale, valuePaint)
-            if (card.third.isNotEmpty()) {
-                canvas.drawText(card.third, cx + 16f * scale + valuePaint.measureText(card.second) + 6f * scale, y + 80f * scale, unitPaint)
-            }
-        }
+        val progress = frameData?.progress ?: 1f
+        val margin = if (isLandscape) 32f * scale else 20f * scale
+        val bottom = h - margin
+
+        // Glass cards
+        val cardPaint = glassCardPaint()
+        val borderPaint = glassCardBorder(scale)
+
+        val labelPaint = labelPaint(scale, condensed, accent)
+        val valuePaint = valuePaint(scale * (if (isLandscape) 1f else 0.8f), condensed)
+        val unitPaint = unitPaint(scale, condensed)
+
+        val cardH = (if (isLandscape) 110f else 85f) * scale
+        val bigCardW = (if (isLandscape) 160f else 120f) * scale
+        val smallCardW = (if (isLandscape) 100f else 75f) * scale
+        val spacing = 8f * scale
+
+        // Big card: DISTANCE
+        val bigY = bottom - cardH - (cardH + spacing) * 0f - 60f * scale // leave room for elev chart
+        drawGlassCard(canvas, margin, bigY, bigCardW, cardH, cardPaint, borderPaint, scale)
+        canvas.drawText("DISTANCE", margin + 12f * scale, bigY + 28f * scale, labelPaint)
+        canvas.drawText(distKm, margin + 12f * scale, bigY + 64f * scale, valuePaint)
+        canvas.drawText("km", margin + 12f * scale + valuePaint.measureText(distKm) + 4f * scale, bigY + 64f * scale, unitPaint)
+
+        // Small cards: ELEV + PACE
+        val smallY = bigY + cardH + spacing
+        drawGlassCard(canvas, margin, smallY, smallCardW, cardH * 0.8f, cardPaint, borderPaint, scale)
+        canvas.drawText("ELEV", margin + 10f * scale, smallY + 24f * scale, labelPaint)
+        canvas.drawText("$elev m", margin + 10f * scale, smallY + 52f * scale,
+            valuePaint.also { it.textSize = 28f * scale })
+
+        drawGlassCard(canvas, margin + smallCardW + spacing, smallY, smallCardW, cardH * 0.8f, cardPaint, borderPaint, scale)
+        canvas.drawText("PACE", margin + smallCardW + spacing + 10f * scale, smallY + 24f * scale, labelPaint)
+        canvas.drawText(pace, margin + smallCardW + spacing + 10f * scale, smallY + 52f * scale,
+            valuePaint.also { it.textSize = 28f * scale })
+
+        // Mini elevation chart at bottom
+        val chartH = 50f * scale
+        val chartBottom = bottom
+        val chartTop = chartBottom - chartH
+        renderElevationChartInRect(canvas, gpxData, margin, chartTop, w - margin, chartBottom, scale, progress, accent)
     }
 
     private fun renderHero(
         canvas: Canvas, w: Int, h: Int,
-        gpxData: GpxData?, gpxStats: GpxStats?
+        gpxData: GpxData?, gpxStats: GpxStats?,
+        frameData: FrameData?,
+        isPortrait: Boolean, isLandscape: Boolean
     ) {
         val scale = w / 1080f
-
-        // Centered distance
+        val isLive = frameData != null
         val condensed = Typeface.create("sans-serif-condensed", Typeface.BOLD)
-        val distKm = gpxData?.let { "%.1f".format(it.totalDistance / 1000.0) } ?: "42.5"
-        val elevGain = gpxData?.let { "%.0f".format(it.totalElevationGain) } ?: "820"
-        val duration = gpxData?.let { formatDuration(it.totalDuration.toMillis()) } ?: "3:42:15"
-        val avgHr = gpxData?.tracks?.flatMap { it.segments }?.flatMap { it.points }
-            ?.mapNotNull { it.heartRate }?.takeIf { it.isNotEmpty() }?.average()?.let { "%.0f".format(it) }
+        val accent = Color.argb(200, 100, 180, 255)
 
+        val distKm = if (isLive) "%.1f".format(frameData!!.distance / 1000.0)
+        else gpxData?.let { "%.1f".format(it.totalDistance / 1000.0) } ?: "—"
+
+        val elevVal = if (isLive) "%.0f".format(frameData!!.elevation)
+        else gpxData?.let { "%.0f".format(it.totalElevationGain) } ?: "—"
+
+        val duration = gpxData?.let { formatDuration(it.totalDuration.toMillis()) } ?: "—"
+
+        val hrVal = if (isLive) frameData!!.heartRate?.toString() ?: "—"
+        else gpxData?.tracks?.flatMap { it.segments }?.flatMap { it.points }
+            ?.mapNotNull { it.heartRate }?.takeIf { it.isNotEmpty() }?.let { "%.0f".format(it.average()) } ?: "—"
+
+        val progress = frameData?.progress ?: 1f
         val centerY = h * 0.42f
 
         // "DISTANCE" label
-        val labelPaint = Paint().apply {
+        val centerLabelPaint = Paint().apply {
             color = Color.argb(128, 255, 255, 255)
-            textSize = 22f * scale
+            textSize = 18f * scale
             typeface = condensed
             isAntiAlias = true
             textAlign = Paint.Align.CENTER
             letterSpacing = 0.15f
         }
-        canvas.drawText("DISTANCE", w / 2f, centerY - 80f * scale, labelPaint)
+        canvas.drawText("DISTANCE", w / 2f, centerY - 70f * scale, centerLabelPaint)
 
         // Big number
+        val heroFontSize = when {
+            isLandscape -> 100f * scale
+            isPortrait -> 80f * scale
+            else -> 90f * scale
+        }
         val heroPaint = Paint().apply {
             color = Color.WHITE
-            textSize = 120f * scale
+            textSize = heroFontSize
             typeface = condensed
             isAntiAlias = true
             textAlign = Paint.Align.CENTER
         }
-        canvas.drawText(distKm, w / 2f, centerY + 30f * scale, heroPaint)
+        canvas.drawText(distKm, w / 2f, centerY + 20f * scale, heroPaint)
 
         // "KM" label
         val kmPaint = Paint().apply {
-            color = Color.argb(200, 100, 180, 255) // primary-like color
-            textSize = 36f * scale
+            color = accent
+            textSize = 28f * scale
             typeface = condensed
             isAntiAlias = true
             textAlign = Paint.Align.CENTER
             letterSpacing = 0.2f
         }
-        canvas.drawText("KM", w / 2f, centerY + 70f * scale, kmPaint)
+        canvas.drawText("KM", w / 2f, centerY + 52f * scale, kmPaint)
 
-        // Secondary metrics row (glassmorphic cards)
-        val cardPaint = Paint().apply {
-            color = Color.argb(20, 255, 255, 255)
+        // Secondary metric cards
+        val cardPaint = glassCardPaint()
+        val borderPaint = glassCardBorder(scale)
+
+        val cardW = (if (isLandscape) 160f else 120f) * scale
+        val cardH = 85f * scale
+        val cardSpacing = 12f * scale
+
+        val metrics = mutableListOf(
+            Triple(elevVal, if (isLive) "m alt" else "m gain", "⬆"),
+            Triple(duration, "time", "⏱"),
+            Triple(hrVal, "avg bpm", "❤")
+        )
+
+        val totalW = metrics.size * cardW + (metrics.size - 1) * cardSpacing
+        var cx = (w - totalW) / 2f
+        val metricsY = centerY + 90f * scale
+
+        val metricValuePaint = Paint().apply {
+            color = Color.WHITE
+            textSize = 30f * scale
+            typeface = condensed
             isAntiAlias = true
-        }
-        val borderPaint = Paint().apply {
-            color = Color.argb(38, 255, 255, 255)
-            style = Paint.Style.STROKE
-            strokeWidth = 1.5f * scale
-            isAntiAlias = true
+            textAlign = Paint.Align.CENTER
         }
         val metricLabelPaint = Paint().apply {
             color = Color.argb(128, 255, 255, 255)
-            textSize = 20f * scale
+            textSize = 16f * scale
             typeface = condensed
             isAntiAlias = true
             textAlign = Paint.Align.CENTER
         }
-        val metricValuePaint = Paint().apply {
-            color = Color.WHITE
-            textSize = 36f * scale
-            typeface = condensed
-            isAntiAlias = true
-            textAlign = Paint.Align.CENTER
-        }
-
-        val metricsY = centerY + 130f * scale
-        val cardW = 180f * scale
-        val cardH = 110f * scale
-        val metrics = mutableListOf(
-            Triple("⬆️", elevGain, "m gain"),
-            Triple("⏱️", duration, "time")
-        )
-        if (avgHr != null) metrics.add(Triple("💓", avgHr, "avg bpm"))
-
-        val totalW = metrics.size * cardW + (metrics.size - 1) * 16f * scale
-        var cx = (w - totalW) / 2f
 
         for (m in metrics) {
-            val rect = RectF(cx, metricsY, cx + cardW, metricsY + cardH)
-            canvas.drawRoundRect(rect, 24f * scale, 24f * scale, cardPaint)
-            canvas.drawRoundRect(rect, 24f * scale, 24f * scale, borderPaint)
-
+            drawGlassCard(canvas, cx, metricsY, cardW, cardH, cardPaint, borderPaint, scale)
             val cardCenterX = cx + cardW / 2f
-            // Emoji not rendered well in Canvas; just show the value/label
-            canvas.drawText(m.second, cardCenterX, metricsY + 50f * scale, metricValuePaint)
-            canvas.drawText(m.third, cardCenterX, metricsY + 82f * scale, metricLabelPaint)
-
-            cx += cardW + 16f * scale
+            canvas.drawText(m.first, cardCenterX, metricsY + 40f * scale, metricValuePaint)
+            canvas.drawText(m.second, cardCenterX, metricsY + 65f * scale, metricLabelPaint)
+            cx += cardW + cardSpacing
         }
 
         // Elevation chart at bottom
-        renderElevationChart(canvas, w, h, gpxData, scale, 0.65f)
+        val margin = 24f * scale
+        val chartH = 55f * scale
+        val chartBottom = h - margin
+        val chartTop = chartBottom - chartH
+        renderElevationChartInRect(canvas, gpxData, margin, chartTop, w - margin, chartBottom, scale, progress, accent)
     }
 
     private fun renderProDashboard(
         canvas: Canvas, w: Int, h: Int,
-        gpxData: GpxData?, gpxStats: GpxStats?
+        gpxData: GpxData?, gpxStats: GpxStats?,
+        frameData: FrameData?,
+        isPortrait: Boolean, isLandscape: Boolean
     ) {
         val scale = w / 1080f
-        val panelW = (w * 0.38f).toInt()
-        val panelX = w - panelW
-
-        // Semi-transparent dark panel on right
-        val panelPaint = Paint().apply {
-            color = Color.argb(200, 15, 15, 30)
-        }
-        canvas.drawRect(panelX.toFloat(), 0f, w.toFloat(), h.toFloat(), panelPaint)
-
-        // Divider line
-        val dividerPaint = Paint().apply {
-            color = Color.argb(51, 255, 255, 255)
-            strokeWidth = 2f
-        }
-        canvas.drawLine(panelX.toFloat(), 0f, panelX.toFloat(), h.toFloat(), dividerPaint)
-
+        val isLive = frameData != null
         val condensed = Typeface.create("sans-serif-condensed", Typeface.BOLD)
-        val distKm = gpxData?.let { "%.1f".format(it.totalDistance / 1000.0) } ?: "42.5"
-        val elevGain = gpxData?.let { "%.0f".format(it.totalElevationGain) } ?: "820"
-        val duration = gpxData?.let { formatDuration(it.totalDuration.toMillis()) } ?: "3:42:15"
-        val speed = gpxData?.let {
+        val accent = Color.argb(200, 100, 180, 255)
+
+        val distKm = if (isLive) "%.1f".format(frameData!!.distance / 1000.0)
+        else gpxData?.let { "%.1f".format(it.totalDistance / 1000.0) } ?: "—"
+
+        val elevGain = if (isLive) "%.0f".format(frameData!!.elevation)
+        else gpxData?.let { "%.0f".format(it.totalElevationGain) } ?: "—"
+
+        val speed = if (isLive) "%.1f".format(frameData!!.speed * 3.6)
+        else gpxData?.let {
             val s = it.totalDistance / it.totalDuration.seconds.toDouble()
             "%.1f".format(s * 3.6)
-        } ?: "28.5"
-        val avgHr = gpxData?.tracks?.flatMap { it.segments }?.flatMap { it.points }
-            ?.mapNotNull { it.heartRate }?.takeIf { it.isNotEmpty() }?.average()?.let { "%.0f".format(it) }
+        } ?: "—"
 
-        val labelPaint = Paint().apply {
-            color = Color.argb(128, 255, 255, 255)
-            textSize = 20f * scale
-            typeface = condensed
-            isAntiAlias = true
-            letterSpacing = 0.1f
-        }
-        val valuePaint = Paint().apply {
-            color = Color.WHITE
-            textSize = 40f * scale
-            typeface = condensed
-            isAntiAlias = true
-        }
-        val unitPaint = Paint().apply {
-            color = Color.argb(128, 255, 255, 255)
-            textSize = 22f * scale
-            typeface = condensed
-            isAntiAlias = true
-        }
+        val hrVal = if (isLive) frameData!!.heartRate?.toString() ?: "—"
+        else gpxData?.tracks?.flatMap { it.segments }?.flatMap { it.points }
+            ?.mapNotNull { it.heartRate }?.takeIf { it.isNotEmpty() }?.let { "%.0f".format(it.average()) } ?: "—"
 
-        val mx = panelX + 24f * scale
-        var my = 80f * scale
-        val rowSpacing = 120f * scale
+        val duration = gpxData?.let { formatDuration(it.totalDuration.toMillis()) } ?: "—"
+        val progress = frameData?.progress ?: 1f
 
-        val metrics = mutableListOf(
-            Triple("DISTANCE", distKm, "km"),
-            Triple("SPEED", speed, "km/h"),
-            Triple("ELEVATION", elevGain, "m"),
-            Triple("TIME", duration, "")
+        val metrics = listOf(
+            Triple("DISTANCE", "$distKm km", accent),
+            Triple("ELEVATION", "$elevGain m", Color.argb(200, 102, 187, 106)),
+            Triple("SPEED", "$speed km/h", Color.argb(200, 255, 171, 64)),
+            Triple("HEART RATE", "$hrVal bpm", Color.argb(200, 239, 83, 80)),
+            Triple("TIME", duration, Color.argb(200, 38, 166, 154))
         )
-        if (avgHr != null) metrics.add(Triple("HEART RATE", avgHr, "bpm"))
 
-        for (m in metrics) {
-            canvas.drawText(m.first, mx, my, labelPaint)
-            canvas.drawText(m.second, mx, my + 44f * scale, valuePaint)
-            if (m.third.isNotEmpty()) {
-                canvas.drawText(
-                    m.third,
-                    mx + valuePaint.measureText(m.second) + 8f * scale,
-                    my + 44f * scale,
-                    unitPaint
-                )
+        if (isPortrait) {
+            // Dashboard at bottom
+            val panelH = (h * 0.38f).toInt()
+            val panelY = h - panelH
+
+            val panelPaint = Paint().apply { color = Color.argb(140, 0, 0, 0) }
+            canvas.drawRect(0f, panelY.toFloat(), w.toFloat(), h.toFloat(), panelPaint)
+
+            // 2-column grid
+            val mx = 16f * scale
+            val cellW = (w - mx * 3) / 2
+            val cellH = (panelH - 24f * scale) / 3 // 3 rows
+
+            val labelPaint = Paint().apply {
+                color = Color.argb(128, 255, 255, 255)
+                textSize = 16f * scale
+                typeface = condensed
+                isAntiAlias = true
+                letterSpacing = 0.1f
             }
-            my += rowSpacing
-        }
 
-        // Mini elevation chart at bottom of panel
-        val chartLeft = panelX + 16f * scale
-        val chartRight = w - 16f * scale
-        val chartBottom = h - 30f * scale
-        val chartTop = chartBottom - 80f * scale
-        renderElevationChartInRect(canvas, gpxData, chartLeft, chartTop, chartRight, chartBottom, scale)
+            for ((i, m) in metrics.withIndex()) {
+                val col = i % 2
+                val row = i / 2
+                val cx = mx + col * (cellW + mx)
+                val cy = panelY + 16f * scale + row * cellH
+
+                // Accent color indicator
+                val indicatorPaint = Paint().apply { color = m.third; isAntiAlias = true }
+                canvas.drawRoundRect(RectF(cx, cy + 4f * scale, cx + 4f * scale, cy + 36f * scale), 2f, 2f, indicatorPaint)
+
+                labelPaint.color = Color.argb(128, 255, 255, 255)
+                canvas.drawText(m.first, cx + 12f * scale, cy + 18f * scale, labelPaint)
+
+                val vp = Paint().apply {
+                    color = Color.WHITE
+                    textSize = 32f * scale
+                    typeface = condensed
+                    isAntiAlias = true
+                }
+                canvas.drawText(m.second, cx + 12f * scale, cy + 52f * scale, vp)
+            }
+
+            // Elevation chart at very bottom
+            val chartH = 40f * scale
+            val chartBottom = h - 8f * scale
+            val chartTop = chartBottom - chartH
+            renderElevationChartInRect(canvas, gpxData, mx, chartTop, w - mx, chartBottom, scale, progress, accent)
+
+        } else {
+            // Landscape: panel on right side
+            val panelW = (w * 0.38f).toInt()
+            val panelX = w - panelW
+
+            val panelPaint = Paint().apply { color = Color.argb(180, 15, 15, 30) }
+            canvas.drawRect(panelX.toFloat(), 0f, w.toFloat(), h.toFloat(), panelPaint)
+
+            val dividerPaint = Paint().apply {
+                color = Color.argb(51, 255, 255, 255)
+                strokeWidth = 2f
+            }
+            canvas.drawLine(panelX.toFloat(), 0f, panelX.toFloat(), h.toFloat(), dividerPaint)
+
+            val mx = panelX + 20f * scale
+            var my = 50f * scale
+            val rowSpacing = (h - 100f * scale - 80f * scale) / metrics.size // leave room for chart
+
+            val labelPaint = labelPaint(scale, condensed, accent)
+            val valuePaint = valuePaint(scale, condensed)
+            val unitPaint = unitPaint(scale, condensed)
+
+            for (m in metrics) {
+                // Accent indicator
+                val indicatorPaint = Paint().apply { color = m.third; isAntiAlias = true }
+                canvas.drawRoundRect(RectF(mx - 8f * scale, my - 2f * scale, mx - 4f * scale, my + 40f * scale), 2f, 2f, indicatorPaint)
+
+                labelPaint.color = Color.argb(128, 255, 255, 255)
+                canvas.drawText(m.first, mx, my + 14f * scale, labelPaint)
+
+                valuePaint.textSize = 36f * scale
+                canvas.drawText(m.second, mx, my + 50f * scale, valuePaint)
+
+                my += rowSpacing
+            }
+
+            // Mini elevation chart at bottom of panel
+            val chartLeft = panelX + 12f * scale
+            val chartRight = w - 12f * scale
+            val chartBottom = h - 16f * scale
+            val chartTop = chartBottom - 60f * scale
+            renderElevationChartInRect(canvas, gpxData, chartLeft, chartTop, chartRight, chartBottom, scale, progress, accent)
+        }
     }
 
-    private fun renderElevationChart(
-        canvas: Canvas, w: Int, h: Int,
-        gpxData: GpxData?, scale: Float, progress: Float
+    // ── Shared helpers ──
+
+    private fun drawGlassCard(
+        canvas: Canvas, x: Float, y: Float, w: Float, h: Float,
+        cardPaint: Paint, borderPaint: Paint, scale: Float
     ) {
-        val margin = 32f * scale
-        val chartH = 80f * scale
-        val chartBottom = h - margin
-        val chartTop = chartBottom - chartH
-        renderElevationChartInRect(canvas, gpxData, margin, chartTop, w - margin, chartBottom, scale)
+        val r = 16f * scale
+        val rect = RectF(x, y, x + w, y + h)
+        canvas.drawRoundRect(rect, r, r, cardPaint)
+        canvas.drawRoundRect(rect, r, r, borderPaint)
+    }
+
+    private fun glassCardPaint() = Paint().apply {
+        color = Color.argb(25, 255, 255, 255)
+        isAntiAlias = true
+    }
+
+    private fun glassCardBorder(scale: Float) = Paint().apply {
+        color = Color.argb(40, 255, 255, 255)
+        style = Paint.Style.STROKE
+        strokeWidth = 1.5f * scale
+        isAntiAlias = true
+    }
+
+    private fun labelPaint(scale: Float, tf: Typeface, accent: Int) = Paint().apply {
+        color = Color.argb(android.graphics.Color.alpha(accent), android.graphics.Color.red(accent), android.graphics.Color.green(accent), android.graphics.Color.blue(accent))
+        this.color = Color.argb(153, 255, 255, 255)
+        textSize = 18f * scale
+        typeface = tf
+        isAntiAlias = true
+        letterSpacing = 0.1f
+    }
+
+    private fun valuePaint(scale: Float, tf: Typeface) = Paint().apply {
+        color = Color.WHITE
+        textSize = 40f * scale
+        typeface = tf
+        isAntiAlias = true
+    }
+
+    private fun unitPaint(scale: Float, tf: Typeface) = Paint().apply {
+        color = Color.argb(128, 255, 255, 255)
+        textSize = 20f * scale
+        typeface = tf
+        isAntiAlias = true
     }
 
     private fun renderElevationChartInRect(
         canvas: Canvas, gpxData: GpxData?,
-        left: Float, top: Float, right: Float, bottom: Float, scale: Float
+        left: Float, top: Float, right: Float, bottom: Float,
+        scale: Float, progress: Float, accentColor: Int
     ) {
         val elevations = gpxData?.tracks?.flatMap { it.segments }?.flatMap { it.points }
             ?.mapNotNull { it.elevation } ?: return
         if (elevations.size < 2) return
 
-        // Downsample to ~80 points
         val step = (elevations.size / 80).coerceAtLeast(1)
         val sampled = elevations.filterIndexed { i, _ -> i % step == 0 }
         val minElev = sampled.min()
@@ -339,36 +439,83 @@ object StoryTemplateRenderer {
         val chartH = bottom - top
 
         val path = Path()
+        val filledPath = Path()
+        val progressIndex = (progress * (sampled.size - 1)).toInt().coerceIn(0, sampled.size - 1)
+
         sampled.forEachIndexed { i, elev ->
             val x = left + (i.toFloat() / (sampled.size - 1)) * chartW
             val y = bottom - ((elev - minElev) / range).toFloat() * chartH * 0.85f
-            if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+            if (i == 0) {
+                path.moveTo(x, y)
+                filledPath.moveTo(x, y)
+            } else {
+                path.lineTo(x, y)
+                filledPath.lineTo(x, y)
+            }
         }
 
-        // Draw line
-        val linePaint = Paint().apply {
-            color = Color.argb(200, 100, 180, 255)
+        // Unvisited part: faint line
+        val faintLinePaint = Paint().apply {
+            color = Color.argb(60, 255, 255, 255)
             style = Paint.Style.STROKE
-            strokeWidth = 2.5f * scale
+            strokeWidth = 2f * scale
             isAntiAlias = true
         }
-        canvas.drawPath(path, linePaint)
+        canvas.drawPath(path, faintLinePaint)
 
-        // Fill below
-        val fillPath = Path(path)
-        fillPath.lineTo(right, bottom)
-        fillPath.lineTo(left, bottom)
-        fillPath.close()
+        // Visited part: filled with gradient up to progress
+        if (progress > 0.01f) {
+            val visitedPath = Path()
+            val visitedFill = Path()
+            sampled.take(progressIndex + 1).forEachIndexed { i, elev ->
+                val x = left + (i.toFloat() / (sampled.size - 1)) * chartW
+                val y = bottom - ((elev - minElev) / range).toFloat() * chartH * 0.85f
+                if (i == 0) {
+                    visitedPath.moveTo(x, y)
+                    visitedFill.moveTo(x, y)
+                } else {
+                    visitedPath.lineTo(x, y)
+                    visitedFill.lineTo(x, y)
+                }
+            }
 
-        val fillPaint = Paint().apply {
-            shader = LinearGradient(
-                0f, top, 0f, bottom,
-                Color.argb(80, 100, 180, 255), Color.argb(10, 100, 180, 255),
-                Shader.TileMode.CLAMP
-            )
-            isAntiAlias = true
+            // Bright accent line for visited portion
+            val visitedLinePaint = Paint().apply {
+                color = accentColor
+                style = Paint.Style.STROKE
+                strokeWidth = 2.5f * scale
+                isAntiAlias = true
+            }
+            canvas.drawPath(visitedPath, visitedLinePaint)
+
+            // Fill below visited portion
+            val lastX = left + (progressIndex.toFloat() / (sampled.size - 1)) * chartW
+            visitedFill.lineTo(lastX, bottom)
+            visitedFill.lineTo(left, bottom)
+            visitedFill.close()
+
+            val fillPaint = Paint().apply {
+                shader = LinearGradient(
+                    0f, top, 0f, bottom,
+                    Color.argb(80, Color.red(accentColor), Color.green(accentColor), Color.blue(accentColor)),
+                    Color.argb(10, Color.red(accentColor), Color.green(accentColor), Color.blue(accentColor)),
+                    Shader.TileMode.CLAMP
+                )
+                isAntiAlias = true
+            }
+            canvas.drawPath(visitedFill, fillPaint)
+
+            // Progress indicator dot
+            if (progressIndex < sampled.size) {
+                val dotElev = sampled[progressIndex]
+                val dotX = left + (progressIndex.toFloat() / (sampled.size - 1)) * chartW
+                val dotY = bottom - ((dotElev - minElev) / range).toFloat() * chartH * 0.85f
+                val dotPaint = Paint().apply { color = accentColor; isAntiAlias = true }
+                canvas.drawCircle(dotX, dotY, 4f * scale, dotPaint)
+                val glowPaint = Paint().apply { color = Color.argb(60, Color.red(accentColor), Color.green(accentColor), Color.blue(accentColor)); isAntiAlias = true }
+                canvas.drawCircle(dotX, dotY, 8f * scale, glowPaint)
+            }
         }
-        canvas.drawPath(fillPath, fillPaint)
     }
 
     private fun formatDuration(ms: Long): String {
@@ -378,5 +525,11 @@ object StoryTemplateRenderer {
         val seconds = totalSeconds % 60
         return if (hours > 0) "%d:%02d:%02d".format(hours, minutes, seconds)
         else "%d:%02d".format(minutes, seconds)
+    }
+
+    private fun formatPace(speedMs: Double): String {
+        if (speedMs <= 0.1) return "—"
+        val kmh = speedMs * 3.6
+        return "%.1f".format(kmh)
     }
 }
