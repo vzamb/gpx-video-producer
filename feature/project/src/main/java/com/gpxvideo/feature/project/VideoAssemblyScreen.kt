@@ -351,6 +351,18 @@ private fun TimelineAssemblyContent(
     }
     val mediaMap = remember(uiState.mediaItems) { uiState.mediaItems.associateBy { it.id } }
 
+    // Auto-select the clip under the playhead during playback
+    val clipUnderPlayhead = remember(currentPositionMs, videoClips) {
+        if (videoClips.isEmpty()) null
+        else videoClips.find { currentPositionMs >= it.startTimeMs && currentPositionMs < it.endTimeMs }
+            ?: videoClips.lastOrNull { currentPositionMs >= it.startTimeMs }
+    }
+    LaunchedEffect(clipUnderPlayhead?.id, isPlaying) {
+        if (isPlaying && clipUnderPlayhead != null && clipUnderPlayhead.id != timelineState.selectedClipId) {
+            timelineViewModel.selectClip(clipUnderPlayhead.id)
+        }
+    }
+
     Scaffold(
         containerColor = DarkBg,
         topBar = {
@@ -377,6 +389,7 @@ private fun TimelineAssemblyContent(
                 isPlaying = isPlaying,
                 currentPositionMs = currentPositionMs,
                 videoDuration = videoDuration,
+                videoClips = videoClips,
                 onTogglePlayback = {
                     viewModel.togglePlayback()
                     timelineViewModel.togglePlayback()
@@ -612,6 +625,7 @@ private fun VideoPreviewArea(
     isPlaying: Boolean,
     currentPositionMs: Long,
     videoDuration: Long,
+    videoClips: List<TimelineClipState>,
     onTogglePlayback: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -631,6 +645,12 @@ private fun VideoPreviewArea(
                 VideoPreview(
                     previewEngine = previewEngine,
                     modifier = Modifier.fillMaxSize()
+                )
+
+                // Transition overlay on top of video
+                TransitionOverlay(
+                    currentPositionMs = currentPositionMs,
+                    videoClips = videoClips
                 )
 
                 PlayPauseOverlay(
@@ -755,6 +775,99 @@ private fun EmptyPreviewState() {
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 6.dp)
         )
+    }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 4b. TransitionOverlay — renders fade/dissolve/slide/wipe in video preview
+// ═════════════════════════════════════════════════════════════════════════════
+
+@Composable
+private fun TransitionOverlay(
+    currentPositionMs: Long,
+    videoClips: List<TimelineClipState>
+) {
+    // Find active transition at the current playhead position
+    val transitionInfo = remember(currentPositionMs, videoClips) {
+        videoClips.firstNotNullOfOrNull { clip ->
+            val type = clip.entryTransitionType
+            val duration = clip.entryTransitionDurationMs ?: 500L
+            if (type != null && type != "CUT" && duration > 0) {
+                val transEnd = clip.startTimeMs + duration
+                if (currentPositionMs >= clip.startTimeMs && currentPositionMs < transEnd) {
+                    type to ((currentPositionMs - clip.startTimeMs).toFloat() / duration)
+                } else null
+            } else null
+        }
+    }
+
+    if (transitionInfo != null) {
+        val (type, progress) = transitionInfo
+        val upper = type.uppercase()
+        when {
+            upper == "FADE" -> FadeTransitionEffect(progress)
+            upper == "DISSOLVE" -> DissolveTransitionEffect(progress)
+            upper.startsWith("SLIDE") -> SlideTransitionEffect(progress)
+            upper.startsWith("WIPE") -> WipeTransitionEffect(progress)
+        }
+    }
+}
+
+@Composable
+private fun FadeTransitionEffect(progress: Float) {
+    val alpha = (1f - progress).coerceIn(0f, 1f)
+    if (alpha > 0.01f) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = alpha))
+        )
+    }
+}
+
+@Composable
+private fun DissolveTransitionEffect(progress: Float) {
+    // Two-phase dissolve: white flash that fades in then out
+    val alpha = if (progress < 0.4f) {
+        (progress / 0.4f).coerceIn(0f, 1f) * 0.5f
+    } else {
+        ((1f - progress) / 0.6f).coerceIn(0f, 1f) * 0.5f
+    }
+    if (alpha > 0.01f) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.White.copy(alpha = alpha))
+        )
+    }
+}
+
+@Composable
+private fun SlideTransitionEffect(progress: Float) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val offsetPx = with(LocalDensity.current) { maxWidth.toPx() * progress }
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .offset { IntOffset(offsetPx.roundToInt(), 0) }
+                .background(Color.Black)
+        )
+    }
+}
+
+@Composable
+private fun WipeTransitionEffect(progress: Float) {
+    val coverFraction = (1f - progress).coerceIn(0f, 1f)
+    if (coverFraction > 0.01f) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(fraction = coverFraction)
+                    .align(Alignment.CenterEnd)
+                    .background(Color.Black)
+            )
+        }
     }
 }
 
@@ -1431,7 +1544,7 @@ private fun TransitionPickerPopup(
                     )
                 },
                 onClick = {
-                    onSelect(option.type, if (option.type != null) 500L else null)
+                    onSelect(option.type, if (option.type != null) 800L else null)
                     onDismiss()
                 }
             )
