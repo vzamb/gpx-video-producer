@@ -407,6 +407,20 @@ private fun TimelineAssemblyContent(
                 }
             }
 
+            // Effect presets (when clip selected) — above timeline for stable layout
+            AnimatedVisibility(visible = selectedClip != null) {
+                selectedClip?.let { clip ->
+                    val mediaItem = clip.mediaItemId?.let { mediaMap[it] }
+                    EffectPresetRow(
+                        clip = clip,
+                        mediaItem = mediaItem,
+                        onApplyPreset = { b, c, s ->
+                            timelineViewModel.updateClipColorAdjustments(clip.id, b, c, s)
+                        }
+                    )
+                }
+            }
+
             // Timeline
             FrameTimeline(
                 videoClips = videoClips,
@@ -435,20 +449,6 @@ private fun TimelineAssemblyContent(
                     timelineViewModel.setPlayheadPosition(ms)
                 }
             )
-
-            // Effect presets (when clip selected)
-            AnimatedVisibility(visible = selectedClip != null) {
-                selectedClip?.let { clip ->
-                    val mediaItem = clip.mediaItemId?.let { mediaMap[it] }
-                    EffectPresetRow(
-                        clip = clip,
-                        mediaItem = mediaItem,
-                        onApplyPreset = { b, c, s ->
-                            timelineViewModel.updateClipColorAdjustments(clip.id, b, c, s)
-                        }
-                    )
-                }
-            }
 
             // Bottom CTA — fixed below everything
             if (uiState.mediaItems.isNotEmpty()) {
@@ -868,6 +868,26 @@ private fun FrameTimeline(
     val mediaMap = remember(mediaItems) { mediaItems.associateBy { it.id } }
     val scrollState = rememberScrollState()
     var transitionPopupClipId by remember { mutableStateOf<UUID?>(null) }
+    val density = LocalDensity.current
+
+    // Auto-scroll to keep the playhead visible in the timeline
+    LaunchedEffect(currentPositionMs) {
+        if (videoClips.isEmpty()) return@LaunchedEffect
+        val playheadPx = with(density) {
+            (currentPositionMs / 1000f * DP_PER_SECOND).dp.toPx() + 16.dp.toPx()
+        }
+        val viewportStart = scrollState.value.toFloat()
+        val viewportEnd = viewportStart + scrollState.viewportSize.toFloat()
+        val margin = with(density) { 32.dp.toPx() }
+        when {
+            playheadPx > viewportEnd - margin ->
+                scrollState.animateScrollTo(
+                    (playheadPx - scrollState.viewportSize + margin).toInt().coerceAtLeast(0)
+                )
+            playheadPx < viewportStart + margin ->
+                scrollState.animateScrollTo((playheadPx - margin).toInt().coerceAtLeast(0))
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -950,6 +970,7 @@ private fun FrameTimeline(
                             clip = clip,
                             mediaItem = mediaItem,
                             isSelected = clip.id == selectedClipId,
+                            anyClipSelected = selectedClipId != null,
                             showTransitionButton = index > 0,
                             transitionPopupClipId = transitionPopupClipId,
                             onToggleTransitionPopup = {
@@ -1036,6 +1057,7 @@ private fun FrameClipBlock(
     clip: TimelineClipState,
     mediaItem: MediaItemEntity?,
     isSelected: Boolean,
+    anyClipSelected: Boolean = false,
     showTransitionButton: Boolean = false,
     transitionPopupClipId: UUID? = null,
     onToggleTransitionPopup: () -> Unit = {},
@@ -1132,104 +1154,102 @@ private fun FrameClipBlock(
             color = Color.White.copy(alpha = 0.7f)
         )
 
-        // Left trim handle — atomic drag with proper clamping
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterStart)
-                .zIndex(4f)
-                .width(handleWidth)
-                .fillMaxHeight()
-                .clip(RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp))
-                .background(
-                    if (isSelected) AccentBlue.copy(alpha = 0.5f)
-                    else Color.White.copy(alpha = 0.2f)
-                )
-                .pointerInput(clip.id) {
-                    detectHorizontalDragGestures(
-                        onDragStart = { onBeginTrimDrag(currentClip.id) },
-                        onDragEnd = { onCommitTrimDrag(currentClip.id) },
-                        onDragCancel = { onCommitTrimDrag(currentClip.id) },
-                        onHorizontalDrag = { _, dragAmount ->
-                            val c = currentClip
-                            val deltaMs = with(density) {
-                                (dragAmount / density.density / DP_PER_SECOND * 1000f).toLong()
+        // Left trim handle — only active when selected
+        if (isSelected) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .zIndex(4f)
+                    .width(handleWidth)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp))
+                    .background(AccentBlue.copy(alpha = 0.5f))
+                    .pointerInput(clip.id) {
+                        detectHorizontalDragGestures(
+                            onDragStart = { onBeginTrimDrag(currentClip.id) },
+                            onDragEnd = { onCommitTrimDrag(currentClip.id) },
+                            onDragCancel = { onCommitTrimDrag(currentClip.id) },
+                            onHorizontalDrag = { _, dragAmount ->
+                                val c = currentClip
+                                val deltaMs = with(density) {
+                                    (dragAmount / density.density / DP_PER_SECOND * 1000f).toLong()
+                                }
+                                // Left handle: can extend left until trimStart=0, shrink right until 500ms minimum
+                                val minStart = c.endTimeMs - (mediaDurationMs - c.trimEndMs)
+                                val maxStart = c.endTimeMs - 500L
+                                val newStart = (c.startTimeMs + deltaMs).coerceIn(
+                                    minStart, maxStart
+                                )
+                                onTrimDrag(c.id, newStart, c.endTimeMs)
                             }
-                            // Left handle: can extend left until trimStart=0, shrink right until 500ms minimum
-                            val minStart = c.endTimeMs - (mediaDurationMs - c.trimEndMs)
-                            val maxStart = c.endTimeMs - 500L
-                            val newStart = (c.startTimeMs + deltaMs).coerceIn(
-                                minStart.coerceAtLeast(0L), maxStart
-                            )
-                            onTrimDrag(c.id, newStart, c.endTimeMs)
-                        }
-                    )
-                },
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(3.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                        )
+                    },
+                contentAlignment = Alignment.Center
             ) {
-                repeat(3) {
-                    Box(
-                        modifier = Modifier
-                            .size(3.dp)
-                            .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.8f))
-                    )
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    repeat(3) {
+                        Box(
+                            modifier = Modifier
+                                .size(3.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.8f))
+                        )
+                    }
                 }
             }
         }
 
-        // Right trim handle — atomic drag with proper clamping
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .zIndex(4f)
-                .width(handleWidth)
-                .fillMaxHeight()
-                .clip(RoundedCornerShape(topEnd = 8.dp, bottomEnd = 8.dp))
-                .background(
-                    if (isSelected) AccentBlue.copy(alpha = 0.5f)
-                    else Color.White.copy(alpha = 0.2f)
-                )
-                .pointerInput(clip.id) {
-                    detectHorizontalDragGestures(
-                        onDragStart = { onBeginTrimDrag(currentClip.id) },
-                        onDragEnd = { onCommitTrimDrag(currentClip.id) },
-                        onDragCancel = { onCommitTrimDrag(currentClip.id) },
-                        onHorizontalDrag = { _, dragAmount ->
-                            val c = currentClip
-                            val deltaMs = with(density) {
-                                (dragAmount / density.density / DP_PER_SECOND * 1000f).toLong()
+        // Right trim handle — only active when selected
+        if (isSelected) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .zIndex(4f)
+                    .width(handleWidth)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(topEnd = 8.dp, bottomEnd = 8.dp))
+                    .background(AccentBlue.copy(alpha = 0.5f))
+                    .pointerInput(clip.id) {
+                        detectHorizontalDragGestures(
+                            onDragStart = { onBeginTrimDrag(currentClip.id) },
+                            onDragEnd = { onCommitTrimDrag(currentClip.id) },
+                            onDragCancel = { onCommitTrimDrag(currentClip.id) },
+                            onHorizontalDrag = { _, dragAmount ->
+                                val c = currentClip
+                                val deltaMs = with(density) {
+                                    (dragAmount / density.density / DP_PER_SECOND * 1000f).toLong()
+                                }
+                                // Right handle: can extend right until trimEnd=0, shrink left until 500ms minimum
+                                val maxEnd = c.startTimeMs + (mediaDurationMs - c.trimStartMs)
+                                val minEnd = c.startTimeMs + 500L
+                                val newEnd = (c.endTimeMs + deltaMs).coerceIn(minEnd, maxEnd)
+                                onTrimDrag(c.id, c.startTimeMs, newEnd)
                             }
-                            // Right handle: can extend right until trimEnd=0, shrink left until 500ms minimum
-                            val maxEnd = c.startTimeMs + (mediaDurationMs - c.trimStartMs)
-                            val minEnd = c.startTimeMs + 500L
-                            val newEnd = (c.endTimeMs + deltaMs).coerceIn(minEnd, maxEnd)
-                            onTrimDrag(c.id, c.startTimeMs, newEnd)
-                        }
-                    )
-                },
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(3.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                        )
+                    },
+                contentAlignment = Alignment.Center
             ) {
-                repeat(3) {
-                    Box(
-                        modifier = Modifier
-                            .size(3.dp)
-                            .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.8f))
-                    )
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    repeat(3) {
+                        Box(
+                            modifier = Modifier
+                                .size(3.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.8f))
+                        )
+                    }
                 }
             }
         }
 
-        // Transition button overlay at left edge (between this clip and previous)
-        if (showTransitionButton) {
+        // Transition button overlay at left edge — only when no clip is selected
+        if (showTransitionButton && !anyClipSelected) {
             val hasTransition =
                 clip.entryTransitionType != null && clip.entryTransitionType != "CUT"
             Box(
