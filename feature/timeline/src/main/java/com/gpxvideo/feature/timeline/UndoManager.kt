@@ -246,6 +246,29 @@ sealed class TimelineAction {
 
         override fun reverse(state: TimelineState): TimelineState = execute(state)
     }
+
+    /** Generic property update on a single clip — supports undo by restoring old snapshot. */
+    data class UpdateClipProperty(
+        val clipId: UUID,
+        val oldClip: TimelineClipState,
+        val newClip: TimelineClipState
+    ) : TimelineAction() {
+        override fun execute(state: TimelineState): TimelineState {
+            return state.copy(
+                tracks = state.tracks.map { track ->
+                    track.copy(clips = track.clips.map { if (it.id == clipId) newClip else it })
+                }
+            )
+        }
+
+        override fun reverse(state: TimelineState): TimelineState {
+            return state.copy(
+                tracks = state.tracks.map { track ->
+                    track.copy(clips = track.clips.map { if (it.id == clipId) oldClip else it })
+                }
+            )
+        }
+    }
 }
 
 private fun TimelineState.updateClip(

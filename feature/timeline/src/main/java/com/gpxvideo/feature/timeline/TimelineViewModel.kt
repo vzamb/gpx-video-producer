@@ -573,13 +573,11 @@ class TimelineViewModel @AssistedInject constructor(
 
     private fun updateClipProperty(clipId: UUID, transform: (TimelineClipState) -> TimelineClipState) {
         val currentState = _state.value
-        val newTracks = currentState.tracks.map { track ->
-            track.copy(clips = track.clips.map { clip ->
-                if (clip.id == clipId) transform(clip) else clip
-            })
-        }
-        _state.value = currentState.copy(tracks = newTracks)
-        persistState()
+        val oldClip = currentState.tracks.flatMap { it.clips }.find { it.id == clipId } ?: return
+        val newClip = transform(oldClip)
+        if (oldClip == newClip) return
+        val action = TimelineAction.UpdateClipProperty(clipId, oldClip, newClip)
+        executeAction(action)
     }
 
     fun undo() {
