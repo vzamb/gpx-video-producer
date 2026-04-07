@@ -50,6 +50,7 @@ import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Route
+import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -338,28 +339,35 @@ private fun TimelineAssemblyContent(
         },
         floatingActionButton = {
             Box(modifier = Modifier.navigationBarsPadding()) {
-                if (uiState.gpxData != null) {
-                    ExtendedFloatingActionButton(
-                        onClick = onGoToStyle,
-                        containerColor = AccentBlue,
-                        contentColor = Color.White
-                    ) {
-                        Icon(
-                            Icons.Default.Route,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text("Overlays", fontWeight = FontWeight.Bold)
+                val hasMedia = uiState.mediaItems.isNotEmpty()
+                when {
+                    hasMedia && uiState.gpxData != null -> {
+                        ExtendedFloatingActionButton(
+                            onClick = onGoToStyle,
+                            containerColor = AccentBlue,
+                            contentColor = Color.White
+                        ) {
+                            Icon(Icons.Default.Route, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Overlays", fontWeight = FontWeight.Bold)
+                        }
                     }
-                } else {
-                    FloatingActionButton(
-                        onClick = onAddActivity,
-                        containerColor = Color(0xFF00C853),
-                        contentColor = Color.White
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = "Add Activity")
+                    hasMedia -> {
+                        ExtendedFloatingActionButton(
+                            onClick = { if (!uiState.isImportingGpx) onAddActivity() },
+                            containerColor = if (uiState.isImportingGpx) Color(0xFF00C853).copy(alpha = 0.5f) else Color(0xFF00C853),
+                            contentColor = Color.White
+                        ) {
+                            if (uiState.isImportingGpx) {
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = Color.White)
+                            } else {
+                                Icon(Icons.Default.Route, contentDescription = null, modifier = Modifier.size(18.dp))
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            Text(if (uiState.isImportingGpx) "Importing…" else "Add GPX Activity", fontWeight = FontWeight.Bold)
+                        }
                     }
+                    // No media: no FAB — the empty timeline has a prominent add-video button
                 }
             }
         }
@@ -863,15 +871,36 @@ private fun FrameTimeline(
                 .height(72.dp)
         ) {
             if (videoClips.isEmpty()) {
-                Box(
+                Column(
                     modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
                 ) {
-                    Text(
-                        "Tap + to add clips",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.3f)
-                    )
+                    Surface(
+                        onClick = onAddClips,
+                        shape = RoundedCornerShape(12.dp),
+                        color = AccentBlue.copy(alpha = 0.15f),
+                        border = BorderStroke(1.5.dp, AccentBlue.copy(alpha = 0.4f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.VideoLibrary,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                                tint = AccentBlue
+                            )
+                            Text(
+                                "Add Video Clips",
+                                color = AccentBlue,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 14.sp
+                            )
+                        }
+                    }
                 }
             } else {
                 Row(
