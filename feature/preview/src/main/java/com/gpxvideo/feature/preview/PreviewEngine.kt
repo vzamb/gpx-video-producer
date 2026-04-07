@@ -32,6 +32,7 @@ data class PreviewClip(
     val startMs: Long,
     val endMs: Long,
     val speed: Float = 1f,
+    val volume: Float = 1f,
     val displayTransform: PreviewDisplayTransform = PreviewDisplayTransform()
 )
 
@@ -52,6 +53,7 @@ private data class PreviewClipRange(
     val index: Int,
     val timelineStartMs: Long,
     val timelineEndMs: Long,
+    val volume: Float = 1f,
     val displayTransform: PreviewDisplayTransform
 )
 
@@ -173,6 +175,7 @@ class PreviewEngine @Inject constructor(
                 index = index,
                 timelineStartMs = timelineCursor,
                 timelineEndMs = timelineCursor + durationMs,
+                volume = clip.volume,
                 displayTransform = clip.displayTransform
             )
             timelineCursor += durationMs
@@ -193,6 +196,8 @@ class PreviewEngine @Inject constructor(
         exoPlayer?.prepare()
         exoPlayer?.playWhenReady = false
         exoPlayer?.seekTo(0, 1L)
+        // Apply volume of the first clip
+        exoPlayer?.volume = clipRanges.firstOrNull()?.volume ?: 1f
         _duration.value = clipRanges.lastOrNull()?.timelineEndMs ?: 0L
         _currentPositionMs.value = 0L
         val firstTransform = clipRanges.firstOrNull()?.displayTransform ?: PreviewDisplayTransform()
@@ -242,13 +247,14 @@ class PreviewEngine @Inject constructor(
         val validClips = clips.filter { it.endMs > it.startMs }
         if (validClips.size != clipRanges.size) return // structural mismatch — use setMediaSources
         clipRanges = clipRanges.zip(validClips) { range, clip ->
-            range.copy(displayTransform = clip.displayTransform)
+            range.copy(displayTransform = clip.displayTransform, volume = clip.volume)
         }
         val currentPos = _currentPositionMs.value
         val activeRange = clipRanges.firstOrNull { currentPos < it.timelineEndMs }
             ?: clipRanges.lastOrNull()
         activeRange?.let {
             _activeDisplayTransform.value = it.displayTransform
+            exoPlayer?.volume = it.volume
             if (it.displayTransform.sourceVideoAspectRatio > 0f) {
                 _videoAspectRatio.value = it.displayTransform.sourceVideoAspectRatio
             }
@@ -352,11 +358,11 @@ class PreviewEngine @Inject constructor(
     }
 
     private fun updateActiveDisplayTransform(currentItemIndex: Int) {
-        val transform = clipRanges
-            .getOrNull(currentItemIndex.coerceAtLeast(0))
-            ?.displayTransform
-            ?: PreviewDisplayTransform()
+        val range = clipRanges.getOrNull(currentItemIndex.coerceAtLeast(0))
+        val transform = range?.displayTransform ?: PreviewDisplayTransform()
         _activeDisplayTransform.value = transform
+        // Apply per-clip volume
+        exoPlayer?.volume = range?.volume ?: 1f
         // Eagerly set the video AR from metadata so the TextureView transform is correct
         // even before ExoPlayer fires onVideoSizeChanged for this clip.
         if (transform.sourceVideoAspectRatio > 0f) {

@@ -255,23 +255,94 @@ class TimelineViewModel @AssistedInject constructor(
         if (track.isLocked) return
         if (newEndMs <= newStartMs) return
 
+        val snappedStart = snapToGrid(newStartMs).coerceAtLeast(0)
+        val snappedEnd = snapToGrid(newEndMs)
+
+        val startDelta = snappedStart - clip.startTimeMs
+        val endDelta = clip.endTimeMs - snappedEnd
+
         val action = TimelineAction.TrimClip(
             clipId = clipId,
             oldStart = clip.startTimeMs,
             oldEnd = clip.endTimeMs,
             oldTrimStart = clip.trimStartMs,
             oldTrimEnd = clip.trimEndMs,
-            newStart = snapToGrid(newStartMs).coerceAtLeast(0),
-            newEnd = snapToGrid(newEndMs),
-            newTrimStart = clip.trimStartMs + (snapToGrid(newStartMs) - clip.startTimeMs)
-                .coerceAtLeast(0),
-            newTrimEnd = clip.trimEndMs + (clip.endTimeMs - snapToGrid(newEndMs))
-                .coerceAtLeast(0)
+            newStart = snappedStart,
+            newEnd = snappedEnd,
+            newTrimStart = (clip.trimStartMs + startDelta).coerceAtLeast(0),
+            newTrimEnd = (clip.trimEndMs + endDelta).coerceAtLeast(0)
         )
         executeAction(action)
         if (track.type.isSequentialVisualTrack()) {
             normalizeTrackLayout(track.id)
         }
+    }
+
+    // ── Atomic trim drag (single undo step for entire gesture) ──────────
+
+    private var trimDragSnapshot: TimelineClipState? = null
+
+    fun beginTrimDrag(clipId: UUID) {
+        trimDragSnapshot = _state.value.tracks.flatMap { it.clips }.find { it.id == clipId }
+    }
+
+    /** Update trim without pushing to undo stack — called on each drag frame. */
+    fun trimClipDirect(clipId: UUID, newStartMs: Long, newEndMs: Long) {
+        val currentState = _state.value
+        val clip = currentState.tracks.flatMap { it.clips }.find { it.id == clipId } ?: return
+        val track = currentState.tracks.find { t -> t.clips.any { it.id == clipId } } ?: return
+        if (track.isLocked || newEndMs <= newStartMs) return
+
+        val startDelta = newStartMs - clip.startTimeMs
+        val endDelta = clip.endTimeMs - newEndMs
+
+        val updatedClip = clip.copy(
+            startTimeMs = newStartMs,
+            endTimeMs = newEndMs,
+            trimStartMs = (clip.trimStartMs + startDelta).coerceAtLeast(0),
+            trimEndMs = (clip.trimEndMs + endDelta).coerceAtLeast(0)
+        )
+
+        var newTracks = currentState.tracks.map { t ->
+            t.copy(clips = t.clips.map { c -> if (c.id == clipId) updatedClip else c }
+                .sortedBy { it.startTimeMs })
+        }
+        if (track.type.isSequentialVisualTrack()) {
+            newTracks = newTracks.map { t ->
+                if (t.id == track.id) t.copy(clips = packSequential(t.clips)) else t
+            }
+        }
+        val maxEnd = newTracks.flatMap { it.clips }.maxOfOrNull { it.endTimeMs } ?: 0L
+        _state.value = currentState.copy(tracks = newTracks, totalDurationMs = maxEnd)
+    }
+
+    /** Commit the entire drag as a single undo action. */
+    fun commitTrimDrag(clipId: UUID) {
+        val initial = trimDragSnapshot ?: return
+        trimDragSnapshot = null
+        val current = _state.value.tracks.flatMap { it.clips }.find { it.id == clipId } ?: return
+        if (initial.startTimeMs == current.startTimeMs &&
+            initial.endTimeMs == current.endTimeMs &&
+            initial.trimStartMs == current.trimStartMs &&
+            initial.trimEndMs == current.trimEndMs) return
+
+        val action = TimelineAction.TrimClip(
+            clipId = clipId,
+            oldStart = initial.startTimeMs,
+            oldEnd = initial.endTimeMs,
+            oldTrimStart = initial.trimStartMs,
+            oldTrimEnd = initial.trimEndMs,
+            newStart = current.startTimeMs,
+            newEnd = current.endTimeMs,
+            newTrimStart = current.trimStartMs,
+            newTrimEnd = current.trimEndMs
+        )
+        undoManager.pushWithoutExecute(action)
+        _state.value = _state.value.copy(
+            canUndo = undoManager.canUndo,
+            canRedo = undoManager.canRedo
+        )
+        persistState()
     }
 
     fun splitClipAtPlayhead(clipId: UUID) {
@@ -582,22 +653,31 @@ class TimelineViewModel @AssistedInject constructor(
 
     fun undo() {
         undoManager.undo(_state.value)?.let { newState ->
-            _state.value = newState.copy(
-                canUndo = undoManager.canUndo,
-                canRedo = undoManager.canRedo
-            )
-            persistState()
+            applyAndNormalize(newState)
         }
     }
 
     fun redo() {
         undoManager.redo(_state.value)?.let { newState ->
-            _state.value = newState.copy(
-                canUndo = undoManager.canUndo,
-                canRedo = undoManager.canRedo
-            )
-            persistState()
+            applyAndNormalize(newState)
         }
+    }
+
+    /** After undo/redo, repack sequential tracks to eliminate overlap. */
+    private fun applyAndNormalize(newState: TimelineState) {
+        val normalizedTracks = newState.tracks.map { track ->
+            if (track.type.isSequentialVisualTrack()) {
+                track.copy(clips = packSequential(track.clips))
+            } else track
+        }
+        val maxEnd = normalizedTracks.flatMap { it.clips }.maxOfOrNull { it.endTimeMs } ?: 0L
+        _state.value = newState.copy(
+            tracks = normalizedTracks,
+            totalDurationMs = maxEnd,
+            canUndo = undoManager.canUndo,
+            canRedo = undoManager.canRedo
+        )
+        persistState()
     }
 
     private fun executeAction(action: TimelineAction) {

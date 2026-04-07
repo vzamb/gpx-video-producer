@@ -304,6 +304,13 @@ class UndoManager(private val maxHistory: Int = 50) {
         return action.execute(state)
     }
 
+    /** Push an action onto the undo stack without executing it (state is already up-to-date). */
+    fun pushWithoutExecute(action: TimelineAction) {
+        undoStack.addLast(action)
+        if (undoStack.size > maxHistory) undoStack.removeFirst()
+        redoStack.clear()
+    }
+
     fun undo(state: TimelineState): TimelineState? {
         val action = undoStack.removeLastOrNull() ?: return null
         redoStack.addLast(action)
