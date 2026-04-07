@@ -16,10 +16,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -122,6 +124,7 @@ private val AccentBlue = Color(0xFF448AFF)
 private val PlayheadRed = Color(0xFFFF3D3D)
 
 private const val DP_PER_SECOND = 30f
+private const val TRANSITION_GAP_DP = 28f
 
 // ── Effect presets ──────────────────────────────────────────────────────────
 
@@ -427,6 +430,8 @@ private fun TimelineAssemblyContent(
                 mediaItems = uiState.mediaItems,
                 selectedClipId = timelineState.selectedClipId,
                 currentPositionMs = currentPositionMs,
+                totalDurationMs = timelineState.totalDurationMs,
+                isPlaying = isPlaying,
                 isImporting = uiState.isImporting,
                 onSelectClip = timelineViewModel::selectClip,
                 onBeginTrimDrag = timelineViewModel::beginTrimDrag,
@@ -847,7 +852,57 @@ private fun ActionChip(
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// 6. FrameTimeline — horizontally scrollable clips with frame thumbnails
+// 5b. Scroll ↔ time mapping helpers (accounts for transition gaps between clips)
+// ═════════════════════════════════════════════════════════════════════════════
+
+/** Convert scroll pixel offset → timeline time (ms), skipping over inter-clip gaps. */
+private fun scrollPxToTime(
+    scrollPx: Int,
+    clips: List<TimelineClipState>,
+    pxPerMs: Float,
+    gapPx: Float
+): Long {
+    if (clips.isEmpty()) return 0L
+    var accumulated = 0f
+    for ((i, clip) in clips.withIndex()) {
+        val clipWidthPx = (clip.endTimeMs - clip.startTimeMs) * pxPerMs
+        if (scrollPx <= accumulated + clipWidthPx) {
+            return clip.startTimeMs + ((scrollPx - accumulated) / pxPerMs).toLong()
+                .coerceAtLeast(clip.startTimeMs)
+        }
+        accumulated += clipWidthPx
+        if (i < clips.size - 1) {
+            if (scrollPx <= accumulated + gapPx) {
+                return clip.endTimeMs // inside gap → snap to end of clip
+            }
+            accumulated += gapPx
+        }
+    }
+    return clips.last().endTimeMs
+}
+
+/** Convert timeline time (ms) → scroll pixel offset, accounting for gaps. */
+private fun timeToScrollPx(
+    timeMs: Long,
+    clips: List<TimelineClipState>,
+    pxPerMs: Float,
+    gapPx: Float
+): Int {
+    if (clips.isEmpty()) return 0
+    var accumulated = 0f
+    for ((i, clip) in clips.withIndex()) {
+        if (timeMs <= clip.endTimeMs) {
+            val offsetInClip = (timeMs.coerceAtLeast(clip.startTimeMs) - clip.startTimeMs) * pxPerMs
+            return (accumulated + offsetInClip).roundToInt()
+        }
+        accumulated += (clip.endTimeMs - clip.startTimeMs) * pxPerMs
+        if (i < clips.size - 1) accumulated += gapPx
+    }
+    return accumulated.roundToInt()
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 6. FrameTimeline — CapCut-style center-fixed playhead with scrollable clips
 // ═════════════════════════════════════════════════════════════════════════════
 
 @Composable
@@ -856,6 +911,8 @@ private fun FrameTimeline(
     mediaItems: List<MediaItemEntity>,
     selectedClipId: UUID?,
     currentPositionMs: Long,
+    totalDurationMs: Long,
+    isPlaying: Boolean,
     isImporting: Boolean,
     onSelectClip: (UUID?) -> Unit,
     onBeginTrimDrag: (UUID) -> Unit,
@@ -869,23 +926,48 @@ private fun FrameTimeline(
     val scrollState = rememberScrollState()
     var transitionPopupClipId by remember { mutableStateOf<UUID?>(null) }
     val density = LocalDensity.current
+    val pxPerMs = with(density) { DP_PER_SECOND * density.density / 1000f }
+    var isTrimming by remember { mutableStateOf(false) }
+    var isAutoScrolling by remember { mutableStateOf(false) }
+    val gapPx = with(density) { TRANSITION_GAP_DP * density.density }
 
-    // Auto-scroll to keep the playhead visible in the timeline
+    // Keep a fresh ref for callbacks used inside pointer handlers
+    val currentVideoClips by rememberUpdatedState(videoClips)
+
+    // Sync playback position → scroll (only when not trimming and user not scrolling)
     LaunchedEffect(currentPositionMs) {
-        if (videoClips.isEmpty()) return@LaunchedEffect
-        val playheadPx = with(density) {
-            (currentPositionMs / 1000f * DP_PER_SECOND).dp.toPx() + 16.dp.toPx()
+        if (!isTrimming && !scrollState.isScrollInProgress) {
+            isAutoScrolling = true
+            val targetPx = timeToScrollPx(currentPositionMs, currentVideoClips, pxPerMs, gapPx)
+                .coerceIn(0, scrollState.maxValue)
+            scrollState.scrollTo(targetPx)
+            isAutoScrolling = false
         }
-        val viewportStart = scrollState.value.toFloat()
-        val viewportEnd = viewportStart + scrollState.viewportSize.toFloat()
-        val margin = with(density) { 32.dp.toPx() }
-        when {
-            playheadPx > viewportEnd - margin ->
-                scrollState.animateScrollTo(
-                    (playheadPx - scrollState.viewportSize + margin).toInt().coerceAtLeast(0)
-                )
-            playheadPx < viewportStart + margin ->
-                scrollState.animateScrollTo((playheadPx - margin).toInt().coerceAtLeast(0))
+    }
+
+    // Sync user scroll → seek position (scroll timeline = scrub)
+    LaunchedEffect(Unit) {
+        snapshotFlow { scrollState.isScrollInProgress to scrollState.value }
+            .collect { (isScrolling, scrollPx) ->
+                if (isScrolling && !isTrimming && !isAutoScrolling) {
+                    val ms = scrollPxToTime(scrollPx, currentVideoClips, pxPerMs, gapPx)
+                    onSeek(ms)
+                }
+            }
+    }
+
+    // Trim drag handler: left-handle adjusts scroll to keep right side visually fixed
+    val handleTrimDrag: (UUID, Long, Long) -> Unit = { clipId, newStart, newEnd ->
+        val clip = currentVideoClips.find { it.id == clipId }
+        if (clip != null) {
+            val startDelta = newStart - clip.startTimeMs
+            onTrimDrag(clipId, newStart, newEnd)
+            // Left-handle trim: compensate scroll so right side stays visually fixed
+            if (startDelta != 0L) {
+                scrollState.dispatchRawDelta(-startDelta * pxPerMs)
+            }
+        } else {
+            onTrimDrag(clipId, newStart, newEnd)
         }
     }
 
@@ -919,12 +1001,14 @@ private fun FrameTimeline(
             }
         }
 
-        // Clip area
-        Box(
+        // Clip area with center-fixed playhead
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(72.dp)
         ) {
+            val halfContainerDp = maxWidth / 2
+
             if (videoClips.isEmpty()) {
                 Column(
                     modifier = Modifier.fillMaxSize(),
@@ -960,35 +1044,98 @@ private fun FrameTimeline(
             } else {
                 Row(
                     modifier = Modifier
-                        .horizontalScroll(scrollState)
-                        .padding(horizontal = 16.dp),
+                        .horizontalScroll(scrollState),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Start padding = half screen (playhead at center = time 0)
+                    Spacer(Modifier.width(halfContainerDp))
+
                     videoClips.forEachIndexed { index, clip ->
+                        // Transition button BETWEEN clips (sibling in Row, proper z-order)
+                        if (index > 0) {
+                            val hasTransition =
+                                clip.entryTransitionType != null && clip.entryTransitionType != "CUT"
+                            Box(
+                                modifier = Modifier
+                                    .width(TRANSITION_GAP_DP.dp)
+                                    .height(56.dp)
+                                    .zIndex(10f),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (selectedClipId == null) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(26.dp)
+                                            .clip(CircleShape)
+                                            .background(
+                                                if (hasTransition) AccentBlue
+                                                else Color(0xFF2A2A2E)
+                                            )
+                                            .border(
+                                                1.5.dp,
+                                                if (hasTransition) AccentBlue
+                                                else Color.White.copy(alpha = 0.3f),
+                                                CircleShape
+                                            )
+                                            .clickable {
+                                                transitionPopupClipId =
+                                                    if (transitionPopupClipId == clip.id) null
+                                                    else clip.id
+                                            },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (hasTransition) {
+                                            Text(
+                                                clip.entryTransitionType?.take(1) ?: "T",
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color.White
+                                            )
+                                        } else {
+                                            Icon(
+                                                Icons.Default.Add,
+                                                contentDescription = "Add transition",
+                                                modifier = Modifier.size(14.dp),
+                                                tint = Color.White.copy(alpha = 0.7f)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                TransitionPickerPopup(
+                                    expanded = transitionPopupClipId == clip.id,
+                                    currentType = clip.entryTransitionType,
+                                    onDismiss = { transitionPopupClipId = null },
+                                    onSelect = { type, dur ->
+                                        onSetEntryTransition(clip.id, type, dur)
+                                        transitionPopupClipId = null
+                                    }
+                                )
+                            }
+                        }
+
                         val mediaItem = clip.mediaItemId?.let { mediaMap[it] }
                         FrameClipBlock(
                             clip = clip,
                             mediaItem = mediaItem,
                             isSelected = clip.id == selectedClipId,
-                            anyClipSelected = selectedClipId != null,
-                            showTransitionButton = index > 0,
-                            transitionPopupClipId = transitionPopupClipId,
-                            onToggleTransitionPopup = {
-                                transitionPopupClipId =
-                                    if (transitionPopupClipId == clip.id) null else clip.id
-                            },
-                            onSelectTransition = { type, dur ->
-                                onSetEntryTransition(clip.id, type, dur)
-                                transitionPopupClipId = null
-                            },
                             onSelect = {
+                                transitionPopupClipId = null
                                 onSelectClip(
                                     if (clip.id == selectedClipId) null else clip.id
                                 )
                             },
-                            onBeginTrimDrag = onBeginTrimDrag,
-                            onTrimDrag = onTrimDrag,
-                            onCommitTrimDrag = onCommitTrimDrag
+                            onBeginTrimDrag = { id ->
+                                isTrimming = true
+                                onBeginTrimDrag(id)
+                            },
+                            onTrimDrag = handleTrimDrag,
+                            onCommitTrimDrag = { id ->
+                                onCommitTrimDrag(id)
+                                val ms = scrollPxToTime(scrollState.value, currentVideoClips, pxPerMs, gapPx)
+                                onSeek(ms)
+                                isTrimming = false
+                            }
                         )
                     }
 
@@ -1022,27 +1169,34 @@ private fun FrameTimeline(
                             )
                         }
                     }
+
+                    // End padding = half screen
+                    Spacer(Modifier.width(halfContainerDp))
                 }
 
-                // Playhead line
-                if (videoClips.isNotEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .offset {
-                                val playheadPx =
-                                    (currentPositionMs / 1000f * DP_PER_SECOND).dp.toPx() +
-                                        16.dp.toPx()
-                                IntOffset(
-                                    (playheadPx - scrollState.value).roundToInt(),
-                                    0
-                                )
-                            }
-                            .width(2.dp)
-                            .fillMaxHeight()
-                            .background(PlayheadRed)
-                            .zIndex(5f)
-                    )
-                }
+                // Center-fixed playhead line (always at center, does not scroll)
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .width(2.dp)
+                        .fillMaxHeight()
+                        .background(PlayheadRed)
+                        .zIndex(5f)
+                )
+
+                // Time indicator at playhead
+                Text(
+                    formatDurationMs(currentPositionMs),
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .offset(y = (-14).dp)
+                        .background(PlayheadRed, RoundedCornerShape(4.dp))
+                        .padding(horizontal = 6.dp, vertical = 1.dp)
+                        .zIndex(6f),
+                    fontSize = 9.sp,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
     }
@@ -1057,11 +1211,6 @@ private fun FrameClipBlock(
     clip: TimelineClipState,
     mediaItem: MediaItemEntity?,
     isSelected: Boolean,
-    anyClipSelected: Boolean = false,
-    showTransitionButton: Boolean = false,
-    transitionPopupClipId: UUID? = null,
-    onToggleTransitionPopup: () -> Unit = {},
-    onSelectTransition: (String?, Long?) -> Unit = { _, _ -> },
     onSelect: () -> Unit,
     onBeginTrimDrag: (UUID) -> Unit,
     onTrimDrag: (UUID, Long, Long) -> Unit,
@@ -1073,10 +1222,12 @@ private fun FrameClipBlock(
     val borderWidth = if (isSelected) 2.dp else 1.dp
     val density = LocalDensity.current
 
-    // rememberUpdatedState so drag gestures always see the latest clip values
     val currentClip by rememberUpdatedState(clip)
+    val currentOnSelect by rememberUpdatedState(onSelect)
+    val currentOnBeginTrimDrag by rememberUpdatedState(onBeginTrimDrag)
+    val currentOnTrimDrag by rememberUpdatedState(onTrimDrag)
+    val currentOnCommitTrimDrag by rememberUpdatedState(onCommitTrimDrag)
 
-    // Media duration for clamping trim handles
     val mediaDurationMs = mediaItem?.durationMs ?: Long.MAX_VALUE
 
     val path = mediaItem?.let { it.localCopyPath.ifBlank { it.sourcePath } }
@@ -1100,7 +1251,9 @@ private fun FrameClipBlock(
             .clip(RoundedCornerShape(8.dp))
             .border(borderWidth, borderColor, RoundedCornerShape(8.dp))
             .background(clip.color.copy(alpha = 0.3f))
-            .clickable(onClick = onSelect)
+            .pointerInput(Unit) {
+                detectTapGestures { currentOnSelect() }
+            }
     ) {
         // Frame strip
         if (frames.isNotEmpty()) {
@@ -1166,21 +1319,20 @@ private fun FrameClipBlock(
                     .background(AccentBlue.copy(alpha = 0.5f))
                     .pointerInput(clip.id) {
                         detectHorizontalDragGestures(
-                            onDragStart = { onBeginTrimDrag(currentClip.id) },
-                            onDragEnd = { onCommitTrimDrag(currentClip.id) },
-                            onDragCancel = { onCommitTrimDrag(currentClip.id) },
+                            onDragStart = { currentOnBeginTrimDrag(currentClip.id) },
+                            onDragEnd = { currentOnCommitTrimDrag(currentClip.id) },
+                            onDragCancel = { currentOnCommitTrimDrag(currentClip.id) },
                             onHorizontalDrag = { _, dragAmount ->
                                 val c = currentClip
                                 val deltaMs = with(density) {
                                     (dragAmount / density.density / DP_PER_SECOND * 1000f).toLong()
                                 }
-                                // Left handle: can extend left until trimStart=0, shrink right until 500ms minimum
                                 val minStart = c.endTimeMs - (mediaDurationMs - c.trimEndMs)
                                 val maxStart = c.endTimeMs - 500L
                                 val newStart = (c.startTimeMs + deltaMs).coerceIn(
                                     minStart, maxStart
                                 )
-                                onTrimDrag(c.id, newStart, c.endTimeMs)
+                                currentOnTrimDrag(c.id, newStart, c.endTimeMs)
                             }
                         )
                     },
@@ -1214,19 +1366,18 @@ private fun FrameClipBlock(
                     .background(AccentBlue.copy(alpha = 0.5f))
                     .pointerInput(clip.id) {
                         detectHorizontalDragGestures(
-                            onDragStart = { onBeginTrimDrag(currentClip.id) },
-                            onDragEnd = { onCommitTrimDrag(currentClip.id) },
-                            onDragCancel = { onCommitTrimDrag(currentClip.id) },
+                            onDragStart = { currentOnBeginTrimDrag(currentClip.id) },
+                            onDragEnd = { currentOnCommitTrimDrag(currentClip.id) },
+                            onDragCancel = { currentOnCommitTrimDrag(currentClip.id) },
                             onHorizontalDrag = { _, dragAmount ->
                                 val c = currentClip
                                 val deltaMs = with(density) {
                                     (dragAmount / density.density / DP_PER_SECOND * 1000f).toLong()
                                 }
-                                // Right handle: can extend right until trimEnd=0, shrink left until 500ms minimum
                                 val maxEnd = c.startTimeMs + (mediaDurationMs - c.trimStartMs)
                                 val minEnd = c.startTimeMs + 500L
                                 val newEnd = (c.endTimeMs + deltaMs).coerceIn(minEnd, maxEnd)
-                                onTrimDrag(c.id, c.startTimeMs, newEnd)
+                                currentOnTrimDrag(c.id, c.startTimeMs, newEnd)
                             }
                         )
                     },
@@ -1246,54 +1397,6 @@ private fun FrameClipBlock(
                     }
                 }
             }
-        }
-
-        // Transition button overlay at left edge — only when no clip is selected
-        if (showTransitionButton && !anyClipSelected) {
-            val hasTransition =
-                clip.entryTransitionType != null && clip.entryTransitionType != "CUT"
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .offset(x = (-11).dp)
-                    .size(22.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (hasTransition) AccentBlue
-                        else Color(0xFF2A2A2E)
-                    )
-                    .border(
-                        1.5.dp,
-                        if (hasTransition) AccentBlue else Color.White.copy(alpha = 0.3f),
-                        CircleShape
-                    )
-                    .zIndex(3f)
-                    .clickable(onClick = onToggleTransitionPopup),
-                contentAlignment = Alignment.Center
-            ) {
-                if (hasTransition) {
-                    Text(
-                        clip.entryTransitionType?.take(1) ?: "T",
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                } else {
-                    Icon(
-                        Icons.Default.Add,
-                        contentDescription = "Add transition",
-                        modifier = Modifier.size(14.dp),
-                        tint = Color.White.copy(alpha = 0.7f)
-                    )
-                }
-            }
-
-            TransitionPickerPopup(
-                expanded = transitionPopupClipId == clip.id,
-                currentType = clip.entryTransitionType,
-                onDismiss = onToggleTransitionPopup,
-                onSelect = onSelectTransition
-            )
         }
     }
 }
