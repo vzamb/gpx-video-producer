@@ -16,8 +16,10 @@ import com.gpxvideo.feature.preview.PreviewRoute
 import com.gpxvideo.feature.preview.previewScreen
 import com.gpxvideo.feature.project.CreateProjectRoute
 import com.gpxvideo.feature.project.ProjectEditorRoute
+import com.gpxvideo.feature.project.StyleRoute
 import com.gpxvideo.feature.project.createProjectScreen
 import com.gpxvideo.feature.project.projectEditorScreen
+import com.gpxvideo.feature.project.styleScreen
 import com.gpxvideo.feature.export.ExportRoute
 import com.gpxvideo.feature.export.exportScreen
 import com.gpxvideo.feature.templates.TemplateEditorRoute
@@ -78,9 +80,16 @@ fun AppNavigation() {
 
         projectEditorScreen(
             onNavigateBack = { navController.popBackStack() },
-            onNavigateToPreview = { projectId ->
-                navController.navigate(PreviewRoute(projectId = projectId))
+            onNavigateToStyle = { projectId ->
+                navController.navigate(StyleRoute(projectId = projectId))
             },
+            onNavigateToExport = { projectId ->
+                navController.navigate(ExportRoute(projectId = projectId))
+            }
+        )
+
+        styleScreen(
+            onNavigateBack = { navController.popBackStack() },
             onNavigateToExport = { projectId ->
                 navController.navigate(ExportRoute(projectId = projectId))
             }

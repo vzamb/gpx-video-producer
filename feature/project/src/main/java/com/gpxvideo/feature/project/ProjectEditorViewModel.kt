@@ -46,7 +46,9 @@ data class ProjectEditorUiState(
     val isImportingGpx: Boolean = false,
     val storyMode: String = "HYPER_LAPSE",
     val storyTemplate: String = "CINEMATIC",
-    val selectedAspectRatio: SocialAspectRatio = SocialAspectRatio.PORTRAIT_9_16
+    val selectedAspectRatio: SocialAspectRatio = SocialAspectRatio.PORTRAIT_9_16,
+    val accentColor: Int = 0xFF448AFF.toInt(),
+    val activityTitle: String = ""
 )
 
 @HiltViewModel
@@ -71,6 +73,8 @@ class ProjectEditorViewModel @Inject constructor(
     private val _storyMode = MutableStateFlow("HYPER_LAPSE")
     private val _storyTemplate = MutableStateFlow("CINEMATIC")
     private val _selectedAspectRatio = MutableStateFlow(SocialAspectRatio.PORTRAIT_9_16)
+    private val _accentColor = MutableStateFlow(0xFF448AFF.toInt())
+    private val _activityTitle = MutableStateFlow("")
 
     init {
         viewModelScope.launch {
@@ -79,6 +83,11 @@ class ProjectEditorViewModel @Inject constructor(
             project?.let {
                 _storyMode.value = it.storyMode
                 _storyTemplate.value = it.storyTemplate
+                // Restore aspect ratio from saved resolution
+                val savedRatio = SocialAspectRatio.entries.find { r ->
+                    r.width == it.resolutionWidth && r.height == it.resolutionHeight
+                } ?: SocialAspectRatio.PORTRAIT_9_16
+                _selectedAspectRatio.value = savedRatio
             }
         }
         viewModelScope.launch {
@@ -103,7 +112,9 @@ class ProjectEditorViewModel @Inject constructor(
         _isImportingGpx,
         _storyMode,
         _storyTemplate,
-        _selectedAspectRatio
+        _selectedAspectRatio,
+        _accentColor,
+        _activityTitle
     ) { values ->
         val project = values[0] as ProjectEntity?
         val mediaItems = @Suppress("UNCHECKED_CAST") (values[1] as List<MediaItemEntity>)
@@ -115,6 +126,8 @@ class ProjectEditorViewModel @Inject constructor(
         val storyMode = values[7] as String
         val storyTemplate = values[8] as String
         val aspectRatio = values[9] as SocialAspectRatio
+        val accentColor = values[10] as Int
+        val activityTitle = values[11] as String
         ProjectEditorUiState(
             project = project,
             mediaItems = mediaItems,
@@ -126,7 +139,9 @@ class ProjectEditorViewModel @Inject constructor(
             isImportingGpx = importingGpx,
             storyMode = storyMode,
             storyTemplate = storyTemplate,
-            selectedAspectRatio = aspectRatio
+            selectedAspectRatio = aspectRatio,
+            accentColor = accentColor,
+            activityTitle = activityTitle
         )
     }.stateIn(
         scope = viewModelScope,
@@ -317,6 +332,36 @@ class ProjectEditorViewModel @Inject constructor(
 
     fun setAspectRatio(ratio: SocialAspectRatio) {
         _selectedAspectRatio.value = ratio
+        viewModelScope.launch(Dispatchers.IO) {
+            val p = _project.value ?: return@launch
+            projectDao.update(p.copy(
+                resolutionWidth = ratio.width,
+                resolutionHeight = ratio.height
+            ))
+        }
+    }
+
+    fun setAccentColor(color: Int) {
+        _accentColor.value = color
+    }
+
+    fun setActivityTitle(title: String) {
+        _activityTitle.value = title
+    }
+
+    fun reorderMedia(fromIndex: Int, toIndex: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val items = mediaItemDao.getByProjectId(projectId).first()
+            if (fromIndex !in items.indices || toIndex !in items.indices) return@launch
+            val mutable = items.toMutableList()
+            val moved = mutable.removeAt(fromIndex)
+            mutable.add(toIndex, moved)
+            // Re-insert with updated createdAt to maintain order
+            val now = java.time.Instant.now()
+            mutable.forEachIndexed { idx, item ->
+                mediaItemDao.update(item.copy(createdAt = now.plusMillis(idx.toLong())))
+            }
+        }
     }
 
     /** Check if any imported video has Exif creation timestamps (enables Documentary mode). */

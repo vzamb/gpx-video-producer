@@ -79,6 +79,14 @@ class ExportViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val uuid = UUID.fromString(projectId)
+                // Load project to restore saved aspect ratio
+                val project = projectDao.getById(uuid)
+                if (project != null) {
+                    val savedRatio = SocialAspectRatio.entries.find {
+                        it.width == project.resolutionWidth && it.height == project.resolutionHeight
+                    } ?: SocialAspectRatio.LANDSCAPE_16_9
+                    _uiState.update { it.copy(settings = it.settings.copy(aspectRatio = savedRatio)) }
+                }
                 val items = mediaItemDao.getByProjectId(uuid).first()
                 val totalDuration = items.sumOf { it.durationMs ?: 0L }
                 if (totalDuration > 0) {

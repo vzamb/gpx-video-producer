@@ -11,6 +11,9 @@ object CreateProjectRoute
 @Serializable
 data class ProjectEditorRoute(val projectId: String)
 
+@Serializable
+data class StyleRoute(val projectId: String)
+
 fun NavGraphBuilder.createProjectScreen(
     onProjectCreated: (UUID) -> Unit,
     onNavigateBack: () -> Unit
@@ -25,11 +28,23 @@ fun NavGraphBuilder.createProjectScreen(
 
 fun NavGraphBuilder.projectEditorScreen(
     onNavigateBack: () -> Unit,
-    onNavigateToPreview: (String) -> Unit,
+    onNavigateToStyle: (String) -> Unit,
     onNavigateToExport: (String) -> Unit
 ) {
     composable<ProjectEditorRoute> {
-        StoryCreatorScreen(
+        VideoAssemblyScreen(
+            onNavigateBack = onNavigateBack,
+            onNavigateToStyle = onNavigateToStyle
+        )
+    }
+}
+
+fun NavGraphBuilder.styleScreen(
+    onNavigateBack: () -> Unit,
+    onNavigateToExport: (String) -> Unit
+) {
+    composable<StyleRoute> {
+        StyleTelemetryScreen(
             onNavigateBack = onNavigateBack,
             onNavigateToExport = onNavigateToExport
         )
