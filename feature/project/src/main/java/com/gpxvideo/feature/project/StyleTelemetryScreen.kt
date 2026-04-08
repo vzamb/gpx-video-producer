@@ -226,7 +226,7 @@ fun StyleTelemetryScreen(
                 hasGpxData = uiState.gpxData != null,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
             )
 
             // Mini scrubber timeline
@@ -327,21 +327,32 @@ private fun interpolateGpxAtProgress(
 
     val distanceSoFar = gpxData.totalDistance * progress
 
-    // Compute speed from neighboring points
+    // Accumulated vertical gain up to this point
+    var cumulativeGain = 0.0
+    for (i in 1..idx) {
+        val diff = (points[i].elevation ?: 0.0) - (points[i - 1].elevation ?: 0.0)
+        if (diff > 0) cumulativeGain += diff
+    }
+
+    // Compute speed from neighboring points (use a window for smoothing)
     val pointSpeed = point.speed
     val speed: Double = if (pointSpeed != null && pointSpeed > 0) {
         pointSpeed
-    } else if (idx > 0) {
-        val prevPoint = points[idx - 1]
-        val pointTime = point.time
-        val prevTime = prevPoint.time
-        val timeDiff = if (pointTime != null && prevTime != null)
-            (pointTime.toEpochMilli() - prevTime.toEpochMilli()) / 1000.0 else 1.0
-        val distChunk = gpxData.totalDistance / points.size
-        if (timeDiff > 0) distChunk / timeDiff else 0.0
     } else {
-        if (gpxData.totalDuration.seconds > 0)
-            gpxData.totalDistance / gpxData.totalDuration.seconds.toDouble() else 0.0
+        // Average speed over a small window of points for smoother values
+        val windowSize = (points.size / 50).coerceIn(3, 15)
+        val windowStart = (idx - windowSize).coerceAtLeast(0)
+        val windowEnd = (idx + windowSize).coerceAtMost(points.lastIndex)
+        val startTime = points[windowStart].time
+        val endTime = points[windowEnd].time
+        if (startTime != null && endTime != null) {
+            val timeDiffSec = (endTime.toEpochMilli() - startTime.toEpochMilli()) / 1000.0
+            val distFraction = (windowEnd - windowStart).toDouble() / points.size * gpxData.totalDistance
+            if (timeDiffSec > 0) distFraction / timeDiffSec else 0.0
+        } else {
+            if (gpxData.totalDuration.seconds > 0)
+                gpxData.totalDistance / gpxData.totalDuration.seconds.toDouble() else 0.0
+        }
     }
 
     // Grade from neighboring points
@@ -357,7 +368,7 @@ private fun interpolateGpxAtProgress(
 
     return LiveGpxValues(
         distance = distanceSoFar,
-        elevation = point.elevation ?: 0.0,
+        elevation = cumulativeGain,
         speed = speed,
         heartRate = point.heartRate,
         cadence = point.cadence,
@@ -549,21 +560,16 @@ private fun TemplatePreviewSection(
             )
         }
 
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(4.dp))
         Text(
             templates[pagerState.currentPage].displayName,
-            style = MaterialTheme.typography.titleSmall,
+            style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Bold,
             color = Color.White,
             letterSpacing = 2.sp
         )
-        Text(
-            "Swipe to change template",
-            style = MaterialTheme.typography.labelSmall,
-            color = Color.White.copy(alpha = 0.3f)
-        )
 
-        Row(modifier = Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.Center) {
+        Row(modifier = Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.Center) {
             templates.forEachIndexed { index, _ ->
                 Box(
                     modifier = Modifier
@@ -577,7 +583,7 @@ private fun TemplatePreviewSection(
                 )
             }
         }
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(2.dp))
     }
 }
 
@@ -706,11 +712,10 @@ private fun formatTemp(temp: Double?): String {
     return "%.0f°".format(temp)
 }
 
-/** Choose speed or pace label depending on sport type. */
-private fun speedOrPaceLabel(isRunning: Boolean): String = if (isRunning) "PACE" else "SPEED"
-private fun speedOrPaceValue(metersPerSec: Double, isRunning: Boolean): String =
-    if (isRunning) formatPace(metersPerSec) else formatMetricSpeed(metersPerSec)
-private fun speedOrPaceUnit(isRunning: Boolean): String = if (isRunning) "min/km" else "km/h"
+/** Always show pace (min/km) as the primary speed metric. */
+private fun speedOrPaceLabel(isRunning: Boolean): String = "PACE"
+private fun speedOrPaceValue(metersPerSec: Double, isRunning: Boolean): String = formatPace(metersPerSec)
+private fun speedOrPaceUnit(isRunning: Boolean): String = "min/km"
 
 // ── Cinematic Overlay ────────────────────────────────────────────────────
 
@@ -740,22 +745,27 @@ private fun CinematicOverlay(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(if (isPortrait) 280.dp else 180.dp)
+                .height(if (isPortrait) 240.dp else 160.dp)
                 .align(Alignment.BottomCenter)
                 .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f))))
         )
 
-        if (activityTitle.isNotBlank()) {
+        // Title area — always clickable at top
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(16.dp)
+                .clickable(onClick = onTitleClick)
+        ) {
             Text(
-                activityTitle,
+                text = activityTitle.ifBlank { "＋ Tap to add title" },
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
-                color = Color.White.copy(alpha = 0.9f),
-                modifier = Modifier.align(Alignment.TopStart).padding(16.dp).clickable(onClick = onTitleClick)
+                color = if (activityTitle.isNotBlank()) Color.White.copy(alpha = 0.9f) else Color.White.copy(alpha = 0.3f)
             )
         }
 
-        Column(modifier = Modifier.align(Alignment.BottomStart).padding(if (isLandscape) 20.dp else 14.dp)) {
+        Column(modifier = Modifier.align(Alignment.BottomStart).padding(if (isLandscape) 20.dp else 14.dp).padding(bottom = 4.dp)) {
             GlassCard(modifier = if (isLandscape) Modifier.width(160.dp) else Modifier) {
                 Column {
                     Text("DISTANCE", style = AthleticType.metricLabel, color = accentColor.copy(alpha = 0.7f))
@@ -767,7 +777,7 @@ private fun CinematicOverlay(
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 GlassCard(modifier = if (isLandscape) Modifier.width(80.dp) else Modifier.width(60.dp)) {
                     Column {
-                        Text("ELEV", style = AthleticType.metricLabel, color = accentColor.copy(alpha = 0.7f))
+                        Text("GAIN", style = AthleticType.metricLabel, color = accentColor.copy(alpha = 0.7f))
                         Text(elev, style = AthleticType.smallMetric, color = Color.White)
                     }
                 }
@@ -816,7 +826,7 @@ private fun HeroOverlay(
     val dist = if (isAnimated) formatMetricDistance(liveValues.distance) else gpxData?.let { formatMetricDistance(it.totalDistance) } ?: "—"
     val elevVal = if (isAnimated) formatMetricElevation(liveValues.elevation) else gpxData?.let { formatMetricElevation(it.totalElevationGain) } ?: "—"
     val timeVal = if (isAnimated) styleDuration(liveValues.elapsedTime) else gpxData?.let { styleDuration(it.totalDuration.toMillis()) } ?: "—"
-    val speedPace = if (isAnimated) speedOrPaceValue(liveValues.speed, isRunning)
+    val paceVal = if (isAnimated) speedOrPaceValue(liveValues.speed, isRunning)
                     else gpxData?.let {
                         val s = if (it.totalDuration.seconds > 0) it.totalDistance / it.totalDuration.seconds.toDouble() else 0.0
                         speedOrPaceValue(s, isRunning)
@@ -830,19 +840,23 @@ private fun HeroOverlay(
     val cardSpacing = if (isLandscape) 16.dp else 10.dp
 
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            if (activityTitle.isNotBlank()) {
-                Text(
-                    activityTitle.uppercase(),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = accentColor.copy(alpha = 0.8f),
-                    letterSpacing = 4.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.clickable(onClick = onTitleClick)
-                )
-                Spacer(Modifier.height(4.dp))
-            }
+        // Title area — always clickable at top
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 16.dp)
+                .clickable(onClick = onTitleClick)
+        ) {
+            Text(
+                text = (activityTitle.ifBlank { "＋ Tap to add title" }).uppercase(),
+                style = MaterialTheme.typography.labelSmall,
+                color = if (activityTitle.isNotBlank()) accentColor.copy(alpha = 0.8f) else Color.White.copy(alpha = 0.3f),
+                letterSpacing = 4.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
 
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text("DISTANCE", style = AthleticType.metricLabel, color = Color.White.copy(alpha = 0.5f), letterSpacing = 3.sp, fontSize = 10.sp)
             Text(dist, fontSize = heroFontSize, fontFamily = AthleticCondensed, fontWeight = FontWeight.Black, color = Color.White)
             Text("KM", fontFamily = AthleticCondensed, fontWeight = FontWeight.Bold, color = accentColor, fontSize = 16.sp, letterSpacing = 4.sp)
@@ -854,14 +868,14 @@ private fun HeroOverlay(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("⬆️", fontSize = 14.sp)
                         Text(elevVal, style = AthleticType.mediumMetric, color = Color.White)
-                        Text(if (isAnimated) "m alt" else "m gain", style = AthleticType.metricLabel, color = Color.White.copy(alpha = 0.5f))
+                        Text("m gain", style = AthleticType.metricLabel, color = Color.White.copy(alpha = 0.5f))
                     }
                 }
                 GlassCard {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(if (isRunning) "🏃" else "⏱️", fontSize = 14.sp)
-                        Text(if (isRunning) speedPace else timeVal, style = AthleticType.mediumMetric, color = Color.White)
-                        Text(if (isRunning) speedOrPaceUnit(true) else "time", style = AthleticType.metricLabel, color = Color.White.copy(alpha = 0.5f))
+                        Text("🏃", fontSize = 14.sp)
+                        Text(paceVal, style = AthleticType.mediumMetric, color = Color.White)
+                        Text(speedOrPaceUnit(isRunning), style = AthleticType.metricLabel, color = Color.White.copy(alpha = 0.5f))
                     }
                 }
                 GlassCard {
@@ -900,7 +914,7 @@ private fun ProDashboardOverlay(
 ) {
     val distStr = if (isAnimated) "%.1f km".format(liveValues.distance / 1000.0) else gpxData?.let { "%.1f km".format(it.totalDistance / 1000.0) } ?: "—"
     val elevStr = if (isAnimated) "${formatMetricElevation(liveValues.elevation)} m" else gpxData?.let { "${formatMetricElevation(it.totalElevationGain)} m" } ?: "—"
-    val speedStr = speedOrPaceLabel(isRunning) + ": " + (if (isAnimated) speedOrPaceValue(liveValues.speed, isRunning) + " " + speedOrPaceUnit(isRunning) else gpxData?.let {
+    val paceStr = "PACE: " + (if (isAnimated) speedOrPaceValue(liveValues.speed, isRunning) + " " + speedOrPaceUnit(isRunning) else gpxData?.let {
         val s = if (it.totalDuration.seconds > 0) it.totalDistance / it.totalDuration.seconds.toDouble() else 0.0
         speedOrPaceValue(s, isRunning) + " " + speedOrPaceUnit(isRunning)
     } ?: "—")
@@ -916,11 +930,17 @@ private fun ProDashboardOverlay(
     if (isPortrait) {
         Column(modifier = Modifier.fillMaxSize()) {
             Box(modifier = Modifier.weight(0.55f).fillMaxWidth()) {
-                if (activityTitle.isNotBlank()) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(12.dp)
+                        .clickable(onClick = onTitleClick)
+                ) {
                     Text(
-                        activityTitle, style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.9f),
-                        modifier = Modifier.align(Alignment.TopStart).padding(12.dp).clickable(onClick = onTitleClick)
+                        text = activityTitle.ifBlank { "＋ Tap to add title" },
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (activityTitle.isNotBlank()) Color.White.copy(alpha = 0.9f) else Color.White.copy(alpha = 0.3f)
                     )
                 }
             }
@@ -934,10 +954,10 @@ private fun ProDashboardOverlay(
                 Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceEvenly) {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         DashMetric("DISTANCE", distStr, accentColor, Modifier.weight(1f))
-                        DashMetric("ELEVATION", elevStr, Color(0xFF66BB6A), Modifier.weight(1f))
+                        DashMetric("GAIN", elevStr, Color(0xFF66BB6A), Modifier.weight(1f))
                     }
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        DashMetric(speedOrPaceLabel(isRunning), speedStr.substringAfter(": "), Color(0xFFFFAB40), Modifier.weight(1f))
+                        DashMetric("PACE", paceStr.substringAfter(": "), Color(0xFFFFAB40), Modifier.weight(1f))
                         DashMetric("HEART RATE", hrStr, Color(0xFFEF5350), Modifier.weight(1f))
                     }
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -957,11 +977,17 @@ private fun ProDashboardOverlay(
     } else {
         Row(modifier = Modifier.fillMaxSize()) {
             Box(modifier = Modifier.weight(0.6f).fillMaxSize()) {
-                if (activityTitle.isNotBlank()) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(12.dp)
+                        .clickable(onClick = onTitleClick)
+                ) {
                     Text(
-                        activityTitle, style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.9f),
-                        modifier = Modifier.align(Alignment.TopStart).padding(12.dp).clickable(onClick = onTitleClick)
+                        text = activityTitle.ifBlank { "＋ Tap to add title" },
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (activityTitle.isNotBlank()) Color.White.copy(alpha = 0.9f) else Color.White.copy(alpha = 0.3f)
                     )
                 }
                 MiniElevChart(
@@ -979,8 +1005,8 @@ private fun ProDashboardOverlay(
             ) {
                 Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceEvenly) {
                     DashMetric("DISTANCE", distStr, accentColor, Modifier.fillMaxWidth())
-                    DashMetric("ELEVATION", elevStr, Color(0xFF66BB6A), Modifier.fillMaxWidth())
-                    DashMetric(speedOrPaceLabel(isRunning), speedStr.substringAfter(": "), Color(0xFFFFAB40), Modifier.fillMaxWidth())
+                    DashMetric("GAIN", elevStr, Color(0xFF66BB6A), Modifier.fillMaxWidth())
+                    DashMetric("PACE", paceStr.substringAfter(": "), Color(0xFFFFAB40), Modifier.fillMaxWidth())
                     DashMetric("HEART RATE", hrStr, Color(0xFFEF5350), Modifier.fillMaxWidth())
                     DashMetric("TIME", timeStr, Color(0xFF26A69A), Modifier.fillMaxWidth())
                 }
@@ -1060,7 +1086,7 @@ private fun SyncToggleOption(
         enabled = enabled
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
@@ -1154,15 +1180,20 @@ private fun StyleMiniScrubber(
                     .clip(RoundedCornerShape(1.5.dp))
                     .background(AccentBlue.copy(alpha = 0.7f))
             )
-            // Thumb
+            // Thumb — positioned at end of filled fraction
             if (totalDurationMs > 0) {
                 Box(
                     modifier = Modifier
-                        .padding(start = ((progress * 100).coerceIn(0f, 100f)).dp) // approximate
-                        .size(10.dp)
-                        .clip(CircleShape)
-                        .background(AccentBlue)
-                )
+                        .fillMaxWidth(fraction = progress.coerceAtLeast(0.005f))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(AccentBlue)
+                            .align(Alignment.CenterEnd)
+                    )
+                }
             }
         }
     }

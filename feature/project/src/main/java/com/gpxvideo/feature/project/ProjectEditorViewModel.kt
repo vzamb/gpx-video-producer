@@ -107,13 +107,18 @@ class ProjectEditorViewModel @Inject constructor(
                 _selectedAspectRatio.value = savedRatio
             }
         }
+        // Watch GPX files reactively so data appears as soon as a file is imported
         viewModelScope.launch {
-            val existingFiles = gpxFileDao.getByProjectId(projectId).first()
-            if (existingFiles.isNotEmpty()) {
-                val gpxData = gpxImportManager.parseGpxFile(existingFiles.first())
-                if (gpxData != null) {
-                    _gpxData.value = gpxData
-                    _gpxStats.value = GpxStatistics.computeFullStats(gpxData)
+            gpxFileDao.getByProjectId(projectId).collect { existingFiles ->
+                if (existingFiles.isNotEmpty() && _gpxData.value == null) {
+                    val gpxData = gpxImportManager.parseGpxFile(existingFiles.first())
+                    if (gpxData != null) {
+                        _gpxData.value = gpxData
+                        _gpxStats.value = GpxStatistics.computeFullStats(gpxData)
+                    }
+                } else if (existingFiles.isEmpty()) {
+                    _gpxData.value = null
+                    _gpxStats.value = null
                 }
             }
         }
