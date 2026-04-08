@@ -1,342 +1,246 @@
 # GPX Video Producer
 
-Android-native video editor focused on sports creators who want to combine ride/run/hike footage, photos, and GPX data into social-ready recap videos.
+An Android app for endurance athletes to create professional social media videos with real-time telemetry overlays from GPX/TCX activity data. Combine your ride, run, or hike footage with live speed, elevation, heart rate, and route visualizations — all synced to your GPS track.
 
-The app is designed around a **single-screen editor** with:
+<p align="center">
+  <img src="preview.jpg" width="270" alt="Preview screen with overlays" />
+  &nbsp;&nbsp;
+  <img src="export.jpg" width="270" alt="Exported video result" />
+</p>
 
-- a live preview canvas
-- a timeline with clip rows and overlay rows
-- GPX-driven static and dynamic visuals
-- export settings for common social/video formats
+---
 
-This repository contains the current working implementation and the history of the main technical approaches already tackled during development.
+## Features
 
-## Project vision
+### Video Assembly ("The Cut")
+- **Multi-clip timeline** — import multiple video clips onto a single track with a CapCut-style center-fixed playhead
+- **Trim & resize** — drag clip handles to trim from start or end; timeline auto-adjusts neighboring clips
+- **Transitions** — crossfade, dissolve, slide, and wipe transitions between clips
+- **Visual effects** — tap-to-apply color LUT effects per clip (8 presets)
+- **Audio toggle** — mute/unmute individual clips
+- **Undo / Redo** — full undo history for all timeline operations (global top bar)
+- **Aspect ratio selector** — switch canvas format (9:16, 16:9, 4:5, 1:1) at any time; preview updates instantly
 
-Typical target users are cyclists, runners, hikers, skiers, and other sport enthusiasts who record:
+### Style & Telemetry ("The Magic")
+- **Predefined templates** — swipe between *Cinematic*, *Hero*, and *Pro Dashboard* overlay layouts
+- **Accent color picker** — customize overlay colors with a tap
+- **Two sync modes:**
+  - **Summary** — proportionally maps the entire GPX track across your video duration; works with any footage, even clips without timestamps
+  - **Live** — real-time sync using GPS timestamps for exact telemetry at each frame; supports spatial alignment via an interactive elevation chart
 
-- videos during an activity
-- photos during the same event
-- a GPX/TCX track from a watch, bike computer, or phone
-
-The goal of the app is to let them build a polished video story directly on Android, including:
-
-- ordered clips and images on a timeline
-- text and visual overlays
-- route maps, altitude profiles, and summary stats
-- dynamic GPX-synced data during playback
-- export to vertical, square, or landscape outputs
-
-## Current repository status
-
-This is **not a blank prototype anymore**. The codebase already includes a multi-module Android app with:
-
-- project creation and home flows
-- a PowerDirector-style editor layout
-- live preview playback through Media3 / ExoPlayer
-- timeline state, seek, trimming, rearranging, and clip actions
-- overlay rendering and overlay interaction on canvas
-- GPX import workspace and GPX visualization components
-- export configuration and FFmpeg-based export pipeline
-- template gallery/editor scaffolding
-
-Recent emulator verification confirmed that the editor is operational for core interactions, including:
-
-- opening a project
-- displaying the preview
-- seeking via the playback slider
-- playing the timeline
-- switching output canvas aspect ratio
-- opening overlay, text, GPX, effects, and export surfaces
-
-## What has been implemented
-
-### Editor experience
-
-- Single-screen editor with top bar, preview, playback bar, timeline, and bottom tool actions
-- Larger live preview area
-- Timeline rows for video/media and generated elements
-- Filmstrip-style clip rendering in the timeline instead of plain blocks
-- Playhead-driven preview synchronization
-- Clip selection, split, duplicate, delete, undo, redo
-- Long-press drag behavior for safer clip rearranging
-
-### Playback and preview
-
-- Media3 / ExoPlayer-backed preview engine
-- Multi-clip preview composition
-- Timeline-position seeking into the correct clip segment
-- Playback state synchronization between preview and timeline
-- Clip display transform support
-- Fix for the seek slider responsiveness issue by using local drag state in the playback bar
-
-### Canvas and aspect ratio handling
-
-- Configurable output canvas ratio from the editor top bar
-- Presets for popular publishing formats such as:
-  - `16:9`
-  - `9:16`
-  - `1:1`
-  - `4:5`
-- Preview surface adapts to project output resolution
-- Letterbox/pillarbox behavior is part of the preview composition flow
-- Per-clip content mode model exists (`FIT`, `FILL`, `CROP`)
-
-### Overlays and GPX visuals
-
-- Overlay catalog with static and dynamic items
-- Static overlays such as:
-  - altitude profile
-  - GPS map
-  - statistics card/grid
-- Dynamic overlays such as:
-  - live altitude
-  - live map
-  - live metric/stat
-- Overlay drag on preview canvas
-- Overlay resize handles
-- Overlay settings and sync-related UI wiring
-- GPX time sync engine
-
-### GPX handling
-
-- GPX import entry points from the editor
-- GPX workspace bottom sheet
-- GPX route canvas and altitude profile canvas
-- GPX stats grid / visualization surface
-- Custom GPX parser library module
+### Overlay System
+- **Static overlays** — full-route elevation profile, GPS route map, summary stats card
+- **Dynamic overlays** — live altitude chart with moving marker, live map with trail, real-time single-metric readouts (speed, heart rate, cadence, power, temperature, grade)
+- **Text labels** — custom text overlays with font and position control
+- **Adaptive layout** — overlays automatically reposition when you change the aspect ratio
 
 ### Export
+- **Media3 Transformer** pipeline — hardware-accelerated video composition
+- **Codec support** — H.264, H.265, VP9
+- **Resolution** — 720p, 1080p, 1440p, 4K
+- **What you see is what you get** — exported video matches the preview exactly
 
-- Export settings screen
-- Export pipeline backed by FFmpeg abstractions
-- Overlay frame rendering for export
-- Encoding pipeline structure with phases and progress reporting
-- Resolution / frame-rate / format based export configuration
+### GPX / TCX Parsing
+- Full GPX and TCX file parsing with telemetry extraction
+- Supports: heart rate, cadence, power, temperature, speed, elevation
+- Statistics: distance, elevation gain/loss, moving time, average/max metrics
+- Haversine distance calculation, elevation smoothing, pause detection
 
-### Templates
+---
 
-- Template repository/applicator structure
-- Template gallery and editor screens
-- Built-in template support scaffolding
+## Architecture
 
-## Main technical approaches already tackled
+The project follows a **multi-module clean architecture** with MVVM, Hilt dependency injection, and Jetpack Compose throughout.
 
-### 1. Modular Android architecture
-
-The app is split into feature and library modules so editor concerns stay isolated:
-
-- `:feature:project`
-- `:feature:timeline`
-- `:feature:preview`
-- `:feature:export`
-- `:feature:gpx`
-- `:feature:overlays`
-- `:feature:templates`
-- `:core:*`
-- `:lib:*`
-
-This was important because the product spans media handling, rendering, timeline logic, GPX processing, and export.
-
-### 2. Compose-first editor UI
-
-The editor is implemented with Jetpack Compose rather than legacy views. That made it easier to iterate on:
-
-- a single-tab editing screen
-- bottom sheets for tools
-- reactive state across preview and timeline
-- draggable / resizable overlays
-
-### 3. Separate preview and timeline state coordination
-
-One major challenge was making the preview feel like a real editor instead of a static media player. The chosen approach separates:
-
-- timeline editing state
-- preview playback engine
-- overlay state / GPX sync state
-
-Then these are coordinated from the editor screen so:
-
-- seeking updates both timeline and preview
-- playback updates the timeline playhead
-- overlay rendering uses the active playback position
-
-### 4. ExoPlayer for interactive preview, FFmpeg for export
-
-The implementation uses two different engines for two different jobs:
-
-- **Media3 / ExoPlayer** for responsive in-editor playback and seek
-- **FFmpeg** for deterministic final export and compositing
-
-This avoids trying to force the export engine to power the live editor.
-
-### 5. GPX-driven overlay model
-
-Instead of treating GPX as a simple file attachment, the codebase models GPX as a source for:
-
-- route visualization
-- summary stats
-- timeline-synced dynamic overlays
-- export-time overlay rendering
-
-This is the key product differentiator.
-
-### 6. Touch and interaction debugging on emulator
-
-Several iterations were spent debugging real editor interaction issues on the emulator, including:
-
-- seekbar not reacting to touch
-- preview/timeline desynchronization
-- clip order not refreshing immediately
-- aspect ratio transform issues
-- overlay drag/resize inconsistencies
-
-The current project state reflects those debugging passes, not only static implementation.
-
-## Tech stack
-
-- Kotlin
-- Jetpack Compose
-- Material 3
-- Hilt
-- Room
-- Kotlin Coroutines / Flow
-- Media3 / ExoPlayer
-- FFmpeg wrapper modules
-- custom GPX parser
-- Gradle Kotlin DSL
-
-## Module overview
-
-- `app/` – application shell, dependency wiring, navigation entry points
-- `core/model/` – shared domain models
-- `core/database/` – Room entities, DAOs, migrations
-- `core/common/` – common utilities
-- `core/ui/` – shared design system/UI pieces
-- `feature/home/` – home, onboarding, settings
-- `feature/project/` – editor shell, media import, project editing UI
-- `feature/timeline/` – timeline models, actions, row rendering, undo, controls
-- `feature/preview/` – preview engine and video surface
-- `feature/export/` – export config and pipeline
-- `feature/gpx/` – GPX workspace and visualization
-- `feature/overlays/` – overlay catalog, sync, rendering support
-- `feature/templates/` – templates gallery/editor/application
-- `lib/ffmpeg/` – FFmpeg command and execution layer
-- `lib/gpx-parser/` – GPX parsing
-- `lib/media-utils/` – thumbnails and media helpers
-
-## Verified behaviors from recent work
-
-Recent emulator checks verified:
-
-- project entry into the editor
-- visible multi-clip timeline
-- seekbar-driven jump across the timeline
-- play button reaching end of timeline
-- aspect ratio preset switching
-- opening the overlay catalog
-- adding at least one overlay entry to timeline state
-- opening GPX workspace
-- opening text overlay flow
-- opening clip effects controls
-- opening export settings
-
-## Open points / known gaps
-
-The app is much further along than the initial prototype, but it still needs more polishing before it can be considered production-ready.
-
-### 1. Final aspect-ratio and framing polish
-
-The biggest product requirement is:
-
-- one global output canvas ratio
-- each input video keeping its own source aspect ratio
-- black bands belonging to the editable canvas when needed
-- per-clip framing controls for fit/fill/crop/reposition
-
-The codebase contains the foundations for this, but this area still needs more UX and behavior verification to ensure every scenario behaves correctly with mixed portrait/landscape clips.
-
-### 2. Canvas manipulation UX
-
-Overlay drag and resize exist, but interaction polish is still an open area:
-
-- repeated drag operations should remain perfectly stable
-- manipulation over black bands / empty canvas must always feel natural
-- per-video transform controls need to be as visual and reliable as overlay controls
-
-### 3. Timeline editing polish
-
-The timeline is functional, but still needs refinement in:
-
-- resize handles for clips/elements
-- precision trimming UX
-- preventing invalid empty gaps in all editing paths
-- clearer affordances for selected clips and rows
-
-### 4. GPX workspace depth
-
-The GPX area exists and can import files, but it should continue evolving into a richer editing workspace where users can:
-
-- inspect route details comfortably
-- review parsed metrics
-- tune sync values
-- manage a single project-level GPX source cleanly
-
-### 5. Export robustness
-
-The export stack is implemented, but still needs broader end-to-end validation for:
-
-- long projects
-- mixed media sources
-- multiple overlays together
-- failure reporting and recovery
-- performance and temp-file cleanup under stress
-
-### 6. Templates maturity
-
-Template infrastructure exists, but the product still needs stronger template authoring/application UX to deliver the original “project + template” vision cleanly.
-
-### 7. General product polish
-
-Still to be improved over time:
-
-- empty states
-- onboarding
-- visual consistency
-- performance on larger projects
-- automated test depth for editor-specific behaviors
-
-## Suggested next engineering priorities
-
-1. Finish the mixed-aspect-ratio canvas/framing behavior end to end.
-2. Make per-clip visual framing controls first-class in the editor.
-3. Further polish timeline trim/move/resize interactions.
-4. Strengthen GPX workspace editing and sync tooling.
-5. Run export verification on real projects with multiple overlays.
-6. Expand automated coverage around timeline, preview sync, and export.
-
-## Build
-
-Build the debug APK with:
-
-```bash
-./gradlew assembleDebug --no-daemon -q
+```
+gpx-video-producer/
+├── app/                    # Application entry point, navigation graph, DI setup
+├── core/
+│   ├── model/              # Domain data classes (Project, GpxData, Overlay, Timeline)
+│   ├── database/           # Room database (v3), entities, DAOs
+│   ├── common/             # Shared utilities, DI modules, DataStore preferences
+│   └── ui/                 # Compose theme, reusable UI components
+├── feature/
+│   ├── home/               # Project list, onboarding, settings
+│   ├── project/            # Video assembly screen, style & overlay screen, editor VM
+│   ├── timeline/           # Timeline state management (clips, transitions, adjustments)
+│   ├── preview/            # ExoPlayer-based playback engine with position tracking
+│   ├── export/             # Media3 Transformer export pipeline, overlay frame renderer
+│   ├── gpx/                # GPX import, route visualization, altitude profile canvas
+│   ├── overlays/           # Overlay catalog, renderers, GpxTimeSyncEngine
+│   └── templates/          # Built-in & user-saved overlay templates
+├── lib/
+│   ├── gpx-parser/         # XML pull parser for GPX/TCX with statistics computation
+│   ├── ffmpeg/             # FFmpeg command builder (legacy, transitioning to Media3)
+│   └── media-utils/        # Video metadata probing, thumbnail generation
+└── gradle/
+    └── libs.versions.toml  # Version catalog
 ```
 
-Install it on an emulator/device with:
+### Navigation Flow
+
+```
+Onboarding → Home (project list)
+                ├── Create Project → Video Assembly ("The Cut")
+                │                         │
+                │                    Style & Telemetry ("The Magic")
+                │                         │
+                │                      Export
+                └── Settings
+```
+
+### Key Architectural Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| 2-screen flow instead of 4-step wizard | Progressive disclosure: instant gratification with Summary mode, advanced Live sync on demand |
+| Center-fixed playhead (CapCut-style) | Timeline scrolls under a fixed center playhead — more intuitive clip navigation |
+| Media3 Transformer over FFmpeg-kit | FFmpeg-kit was retired April 2025; Media3 provides native hardware-accelerated composition |
+| Per-frame overlay rendering | Dynamic overlays are rendered as bitmap sequences synced to video timestamps via `GpxTimeSyncEngine` |
+| Room database with JSON-serialized overlays | Flexible overlay schema without rigid relational mapping |
+
+---
+
+## Tech Stack
+
+| Category | Technology | Version |
+|----------|-----------|---------|
+| Language | Kotlin | 2.0.21 |
+| UI | Jetpack Compose (Material 3) | BOM 2025.02 |
+| DI | Hilt | 2.53.1 |
+| Persistence | Room | 2.7.0 |
+| Video Playback | Media3 ExoPlayer | 1.5.1 |
+| Video Export | Media3 Transformer | 1.5.1 |
+| Image Loading | Coil 3 | 3.0.4 |
+| Navigation | Navigation Compose | 2.8.5 |
+| Serialization | kotlinx-serialization | 1.7.3 |
+| Async | Kotlin Coroutines | 1.9.0 |
+| Preferences | DataStore | 1.1.2 |
+| Testing | JUnit 5 | 5.11.4 |
+| Build | AGP / Gradle | 8.7.3 |
+| Min SDK | Android 8.0 | API 26 |
+| Target SDK | Android 15 | API 35 |
+
+---
+
+## Building
+
+### Prerequisites
+
+- **Android Studio** Ladybug (2024.2) or later
+- **JDK 17**
+- **Android SDK** with API 35 platform and build tools
+
+### Build & Run
 
 ```bash
+# Debug build
+./gradlew assembleDebug
+
+# Install on connected device / emulator
 adb install -r app/build/outputs/apk/debug/app-debug.apk
-```
 
-If the app is already running and you want a clean relaunch:
-
-```bash
-adb shell am force-stop com.gpxvideo.app
+# Launch
 adb shell am start -n com.gpxvideo.app/.MainActivity
 ```
 
-## Notes
+### Project Configuration
 
-- Session planning/history also exists in `PLAN.md` and the Copilot checkpoint files.
-- This `README.md` is intended to describe the **current project reality**: what is already in place, what technical directions were taken, and what still needs work.
+The project uses Gradle version catalog (`gradle/libs.versions.toml`) for centralized dependency management, with configuration caching and parallel builds enabled.
+
+```properties
+# gradle.properties
+org.gradle.parallel=true
+org.gradle.caching=true
+org.gradle.configuration-cache=true
+```
+
+---
+
+## Module Details
+
+### `core/model`
+
+Pure Kotlin JVM module defining the domain language:
+
+- **`Project`** — project metadata, sport type (cycling, running, hiking, trail running, skiing, etc.), output settings, story mode
+- **`GpxData`** — parsed GPS data: tracks, segments, points with full telemetry (lat, lon, elevation, HR, cadence, power, temperature, speed)
+- **`Overlay`** — sealed class hierarchy for static overlays (altitude profile, map, stats) and dynamic overlays (live altitude, live map, live stat, text label)
+- **`Timeline`** — tracks, clips, transitions (cut, fade, dissolve, slide, wipe), and per-clip adjustments (volume, speed, brightness, contrast, saturation, rotation, scale, opacity)
+- **`OutputSettings`** — resolution, aspect ratio (16:9, 9:16, 1:1, 4:5), frame rate, export format (H.264/H.265/VP9)
+
+### `core/database`
+
+Room database (version 3) with 7 entities: `ProjectEntity`, `MediaItemEntity`, `GpxFileEntity`, `TimelineTrackEntity`, `TimelineClipEntity`, `OverlayEntity`, `TemplateEntity`. Each entity has a corresponding DAO with Flow-based reactive queries.
+
+### `feature/preview` — PreviewEngine
+
+The playback engine wraps Media3 ExoPlayer with:
+
+- **Clip sequencing** — concatenates trimmed clips with `ConcatenatingMediaSource2`
+- **Position tracking** — polling-based position updates synced bidirectionally with the timeline scroll state
+- **Feedback loop prevention** — `rememberUpdatedState` for snapshotFlow params, `isAutoScrolling` flag, and 300ms user-scroll grace period
+- **STATE_ENDED handling** — re-prepares the player before seeking when in ended state; `lastSeekTimeNanos` grace period prevents state handlers from overriding explicit seeks
+
+### `feature/overlays` — GpxTimeSyncEngine
+
+The core synchronization engine that maps video playback position to GPX telemetry:
+
+```
+Video Time → SyncMode Logic → Interpolated GPX Point
+                                  ├── latitude, longitude, elevation
+                                  ├── speed, heart rate, cadence, power
+                                  ├── grade, temperature
+                                  └── elapsed distance, elapsed time, progress
+```
+
+Three sync modes:
+1. **GPX_TIMESTAMP** — matches video Exif timestamps to GPX point timestamps
+2. **CLIP_PROGRESS** — proportionally maps entire GPX track across video duration
+3. **MANUAL_KEYFRAMES** — user-defined spatial alignment points
+
+### `feature/export` — Export Pipeline
+
+Four-phase export:
+
+1. **PREPARING** — validate clips and overlays, create temp directory
+2. **RENDERING_OVERLAYS** — generate per-frame overlay bitmaps (dynamic) or single bitmaps (static) using Android Canvas
+3. **COMPOSING** — Media3 Transformer composites video + overlays + effects + transitions
+4. **FINALIZING** — clean up temp files, save to device storage
+
+### `lib/gpx-parser`
+
+Standalone XML pull parser for GPX and TCX files:
+
+- Namespace-aware parsing of tracks, segments, waypoints
+- Telemetry extraction from Garmin extensions (`gpxtpx:hr`, `gpxtpx:cad`, `gpxtpx:power`, `gpxtpx:atemp`)
+- Statistics: Haversine distance, elevation gain/loss with smoothing, moving time with pause detection (< 0.5 m/s for > 30s), average/max for all metrics
+- Downsampling for performance on large files
+
+---
+
+## Data Flow
+
+```
+┌─────────────┐    ┌──────────────────┐    ┌───────────────────┐    ┌──────────┐
+│ Import Video │───▶│  The Cut          │───▶│  The Magic         │───▶│  Export  │
+│ Import GPX   │    │  (Assembly)       │    │  (Style/Overlays)  │    │          │
+└─────────────┘    └──────────────────┘    └───────────────────┘    └──────────┘
+                          │                         │                      │
+                    ┌─────▼─────┐            ┌──────▼──────┐        ┌─────▼──────┐
+                    │ Timeline  │            │ GpxTimeSync │        │ Media3     │
+                    │ ViewModel │            │ Engine      │        │ Transformer│
+                    └─────┬─────┘            └──────┬──────┘        └─────┬──────┘
+                          │                         │                      │
+                    ┌─────▼─────┐            ┌──────▼──────┐        ┌─────▼──────┐
+                    │ Preview   │            │ Overlay     │        │ Overlay    │
+                    │ Engine    │            │ Renderer    │        │ Frame      │
+                    │ (ExoPlayer)│           │ (Canvas)    │        │ Renderer   │
+                    └───────────┘            └─────────────┘        └────────────┘
+```
+
+---
+
+## License
+
+Private project — not licensed for redistribution.
