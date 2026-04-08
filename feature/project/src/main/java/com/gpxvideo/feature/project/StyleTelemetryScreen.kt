@@ -106,13 +106,14 @@ import com.gpxvideo.core.model.GpxData
 import com.gpxvideo.core.model.GpxPoint
 import com.gpxvideo.core.model.SocialAspectRatio
 import com.gpxvideo.core.model.StoryMode
-import com.gpxvideo.core.model.StoryTemplate
+import com.gpxvideo.core.overlayrenderer.TemplateInfo
 import com.gpxvideo.core.overlayrenderer.LottieOverlayRenderer
 import com.gpxvideo.core.overlayrenderer.LottieTemplateLoader
 import com.gpxvideo.core.overlayrenderer.LoadedTemplate
 import com.gpxvideo.core.overlayrenderer.OverlayFrameData
 import com.gpxvideo.lib.gpxparser.GpxStats
 import com.gpxvideo.lib.gpxparser.GpxStatistics
+import com.gpxvideo.core.common.FormatUtils
 import com.gpxvideo.core.ui.theme.AthleticCondensed
 import com.gpxvideo.core.ui.theme.AthleticType
 import com.gpxvideo.feature.preview.VideoPreview
@@ -666,14 +667,16 @@ private fun TemplatePreviewSection(
     isRunning: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val templates = StoryTemplate.entries
+    val context = LocalContext.current
+    val loader = remember { LottieTemplateLoader(context) }
+    val templates = remember { loader.discoverTemplates() }
     val pagerState = rememberPagerState(
-        initialPage = templates.indexOfFirst { it.name == uiState.storyTemplate }.coerceAtLeast(0),
+        initialPage = templates.indexOfFirst { it.id.equals(uiState.storyTemplate, ignoreCase = true) }.coerceAtLeast(0),
         pageCount = { templates.size }
     )
 
     LaunchedEffect(pagerState.currentPage) {
-        onTemplateSelected(templates[pagerState.currentPage].name)
+        onTemplateSelected(templates[pagerState.currentPage].id)
     }
 
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
@@ -737,7 +740,7 @@ private fun TemplatePreviewSection(
 
 @Composable
 private fun StyleTemplateCard(
-    template: StoryTemplate,
+    template: TemplateInfo,
     gpxData: GpxData?,
     aspectRatio: SocialAspectRatio,
     accentColor: Color,
@@ -830,46 +833,15 @@ private fun StyleTemplateCard(
     }
 }
 
-// ── Template Overlays ────────────────────────────────────────────────────
-
-@Composable
-private fun GlassCard(
-    modifier: Modifier = Modifier,
-    content: @Composable () -> Unit
-) {
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color.White.copy(alpha = 0.08f))
-            .border(0.5.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(12.dp))
-            .padding(10.dp)
-    ) {
-        content()
-    }
-}
-
 // ── Metric formatting ────────────────────────────────────────────────────
 
 private fun formatMetricDistance(meters: Double): String = "%.1f".format(meters / 1000.0)
 private fun formatMetricSpeed(metersPerSec: Double): String = "%.1f".format(metersPerSec * 3.6)
 private fun formatMetricElevation(meters: Double): String = "%.0f".format(meters)
 
-private fun formatPace(metersPerSec: Double): String {
-    val speedKmh = metersPerSec * 3.6
-    if (speedKmh <= 0.5) return "—"
-    val paceMin = (60.0 / speedKmh).toInt()
-    val paceSec = ((60.0 / speedKmh - paceMin) * 60).toInt()
-    return "%d:%02d".format(paceMin, paceSec)
-}
-
-private fun formatGrade(grade: Double): String {
-    return "%+.1f%%".format(grade)
-}
-
-private fun formatTemp(temp: Double?): String {
-    if (temp == null) return "—"
-    return "%.0f°".format(temp)
-}
+private fun formatPace(metersPerSec: Double) = FormatUtils.formatPaceFromSpeed(metersPerSec)
+private fun formatGrade(grade: Double) = FormatUtils.formatGrade(grade)
+private fun formatTemp(temp: Double?) = FormatUtils.formatTemp(temp)
 
 /** Always show pace (min/km) as the primary speed metric. */
 private fun speedOrPaceLabel(isRunning: Boolean): String = "PACE"
@@ -880,7 +852,7 @@ private fun speedOrPaceUnit(isRunning: Boolean): String = "min/km"
 
 @Composable
 private fun LottieOverlayPreview(
-    template: StoryTemplate,
+    template: TemplateInfo,
     aspectRatio: SocialAspectRatio,
     gpxData: GpxData?,
     accentColor: Color,
@@ -906,7 +878,7 @@ private fun LottieOverlayPreview(
 
     // Load the Lottie composition using the project aspect ratio
     LaunchedEffect(template, aspectRatio) {
-        loadedTemplate = loader.load(template.name, outputW, outputH)
+        loadedTemplate = loader.load(template.id, outputW, outputH)
     }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize().clickable(onClick = onTitleClick)) {
@@ -947,7 +919,7 @@ private fun LottieOverlayPreview(
                         activityTitle = activityTitle
                     )
                 } catch (e: Exception) {
-                    android.util.Log.e("OverlayPreview", "Render failed for ${template.name} ${aspectRatio}: ${e.message}", e)
+                    android.util.Log.e("OverlayPreview", "Render failed for ${template.id} ${aspectRatio}: ${e.message}", e)
                     android.graphics.Bitmap.createBitmap(widthPx, heightPx, android.graphics.Bitmap.Config.ARGB_8888)
                 }
             }
@@ -957,352 +929,6 @@ private fun LottieOverlayPreview(
                 contentDescription = "Overlay",
                 modifier = Modifier.fillMaxSize()
             )
-        }
-    }
-}
-
-// ── Cinematic Overlay (legacy — kept for reference) ──────────────────────
-
-@Composable
-private fun CinematicOverlay(
-    gpxData: GpxData?,
-    accentColor: Color,
-    activityTitle: String,
-    onTitleClick: () -> Unit,
-    progress: Float,
-    liveValues: LiveGpxValues,
-    isAnimated: Boolean,
-    isPortrait: Boolean,
-    isLandscape: Boolean,
-    isRunning: Boolean
-) {
-    val dist = formatMetricDistance(liveValues.distance)
-    val elev = "${formatMetricElevation(liveValues.elevation)} m"
-    val speedPace = speedOrPaceValue(liveValues.speed, isRunning)
-
-    Box(modifier = Modifier.fillMaxSize()) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(if (isPortrait) 240.dp else 160.dp)
-                .align(Alignment.BottomCenter)
-                .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f))))
-        )
-
-        // Title area — always clickable at top
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(16.dp)
-                .clickable(onClick = onTitleClick)
-        ) {
-            Text(
-                text = activityTitle.ifBlank { "＋ Tap to add title" },
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = if (activityTitle.isNotBlank()) Color.White.copy(alpha = 0.9f) else Color.White.copy(alpha = 0.3f)
-            )
-        }
-
-        // Route map — top-right corner (square)
-        if (gpxData != null) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(12.dp)
-                    .size(if (isPortrait) 60.dp else 50.dp)
-            ) {
-                MiniRouteMap(gpxData = gpxData, accentColor = accentColor, progress = if (isAnimated) progress else 1f,
-                    modifier = Modifier.fillMaxSize(), isSquare = true)
-            }
-        }
-
-        Column(modifier = Modifier.align(Alignment.BottomStart).padding(if (isLandscape) 20.dp else 14.dp).padding(bottom = 4.dp)) {
-            GlassCard(modifier = if (isLandscape) Modifier.width(160.dp) else Modifier) {
-                Column {
-                    Text("DISTANCE", style = AthleticType.metricLabel, color = accentColor.copy(alpha = 0.7f))
-                    Text(dist, style = AthleticType.largeMetric, color = Color.White)
-                    Text("km", style = AthleticType.metricLabel, color = Color.White.copy(alpha = 0.5f))
-                }
-            }
-            Spacer(Modifier.height(6.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                GlassCard(modifier = if (isLandscape) Modifier.width(80.dp) else Modifier.width(60.dp)) {
-                    Column {
-                        Text("GAIN", style = AthleticType.metricLabel, color = accentColor.copy(alpha = 0.7f))
-                        Text(elev, style = AthleticType.smallMetric, color = Color.White)
-                    }
-                }
-                GlassCard(modifier = if (isLandscape) Modifier.width(80.dp) else Modifier.width(60.dp)) {
-                    Column {
-                        Text(speedOrPaceLabel(isRunning), style = AthleticType.metricLabel, color = accentColor.copy(alpha = 0.7f))
-                        Text(speedPace, style = AthleticType.smallMetric, color = Color.White)
-                        Text(speedOrPaceUnit(isRunning), style = AthleticType.metricLabel, color = Color.White.copy(alpha = 0.3f), fontSize = 7.sp)
-                    }
-                }
-                // Show HR or grade as third card
-                val thirdLabel = if (liveValues.heartRate != null) "HR" else "GRADE"
-                val thirdValue = if (liveValues.heartRate != null) "${liveValues.heartRate}" else formatGrade(liveValues.grade)
-                val thirdUnit = if (liveValues.heartRate != null) "bpm" else ""
-                GlassCard(modifier = if (isLandscape) Modifier.width(80.dp) else Modifier.width(60.dp)) {
-                    Column {
-                        Text(thirdLabel, style = AthleticType.metricLabel, color = accentColor.copy(alpha = 0.7f))
-                        Text(thirdValue, style = AthleticType.smallMetric, color = Color.White)
-                        if (thirdUnit.isNotBlank()) {
-                            Text(thirdUnit, style = AthleticType.metricLabel, color = Color.White.copy(alpha = 0.3f), fontSize = 7.sp)
-                        }
-                    }
-                }
-            }
-            Spacer(Modifier.height(4.dp))
-            MiniElevChart(gpxData = gpxData, accentColor = accentColor, progress = if (isAnimated) progress else 1f)
-        }
-    }
-}
-
-// ── Hero Overlay ─────────────────────────────────────────────────────────
-
-@Composable
-private fun HeroOverlay(
-    gpxData: GpxData?,
-    accentColor: Color,
-    activityTitle: String,
-    onTitleClick: () -> Unit,
-    progress: Float,
-    liveValues: LiveGpxValues,
-    isAnimated: Boolean,
-    isPortrait: Boolean,
-    isLandscape: Boolean,
-    isRunning: Boolean
-) {
-    val dist = formatMetricDistance(liveValues.distance)
-    val elevVal = formatMetricElevation(liveValues.elevation)
-    val timeVal = styleDuration(liveValues.elapsedTime)
-    val paceVal = speedOrPaceValue(liveValues.speed, isRunning)
-
-    val heroFontSize = when {
-        isLandscape -> 72.sp
-        isPortrait -> 56.sp
-        else -> 64.sp
-    }
-    val cardSpacing = if (isLandscape) 16.dp else 10.dp
-
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        // Title area — always clickable at top
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = 16.dp)
-                .clickable(onClick = onTitleClick)
-        ) {
-            Text(
-                text = (activityTitle.ifBlank { "＋ Tap to add title" }).uppercase(),
-                style = MaterialTheme.typography.labelSmall,
-                color = if (activityTitle.isNotBlank()) accentColor.copy(alpha = 0.8f) else Color.White.copy(alpha = 0.3f),
-                letterSpacing = 4.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        // Route map — top-right corner (square)
-        if (gpxData != null) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(12.dp)
-                    .size(if (isPortrait) 60.dp else 50.dp)
-            ) {
-                MiniRouteMap(gpxData = gpxData, accentColor = accentColor, progress = if (isAnimated) progress else 1f,
-                    modifier = Modifier.fillMaxSize(), isSquare = true)
-            }
-        }
-
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("DISTANCE", style = AthleticType.metricLabel, color = Color.White.copy(alpha = 0.5f), letterSpacing = 3.sp, fontSize = 10.sp)
-            Text(dist, fontSize = heroFontSize, fontFamily = AthleticCondensed, fontWeight = FontWeight.Black, color = Color.White)
-            Text("KM", fontFamily = AthleticCondensed, fontWeight = FontWeight.Bold, color = accentColor, fontSize = 16.sp, letterSpacing = 4.sp)
-
-            Spacer(Modifier.height(if (isPortrait) 16.dp else 24.dp))
-
-            Row(horizontalArrangement = Arrangement.spacedBy(cardSpacing)) {
-                GlassCard {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("⬆️", fontSize = 14.sp)
-                        Text(elevVal, style = AthleticType.mediumMetric, color = Color.White)
-                        Text("m gain", style = AthleticType.metricLabel, color = Color.White.copy(alpha = 0.5f))
-                    }
-                }
-                GlassCard {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("🏃", fontSize = 14.sp)
-                        Text(paceVal, style = AthleticType.mediumMetric, color = Color.White)
-                        Text(speedOrPaceUnit(isRunning), style = AthleticType.metricLabel, color = Color.White.copy(alpha = 0.5f))
-                    }
-                }
-                GlassCard {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("⏱️", fontSize = 14.sp)
-                        Text(timeVal, style = AthleticType.mediumMetric, color = Color.White)
-                        Text("time", style = AthleticType.metricLabel, color = Color.White.copy(alpha = 0.5f))
-                    }
-                }
-            }
-        }
-
-        Column(modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp)) {
-            MiniElevChart(
-                gpxData = gpxData,
-                accentColor = accentColor,
-                progress = if (isAnimated) progress else 1f
-            )
-        }
-    }
-}
-
-// ── Pro Dashboard Overlay ────────────────────────────────────────────────
-
-@Composable
-private fun ProDashboardOverlay(
-    gpxData: GpxData?,
-    accentColor: Color,
-    activityTitle: String,
-    onTitleClick: () -> Unit,
-    progress: Float,
-    liveValues: LiveGpxValues,
-    isAnimated: Boolean,
-    isPortrait: Boolean,
-    isLandscape: Boolean,
-    isRunning: Boolean
-) {
-    val distStr = "%.1f km".format(liveValues.distance / 1000.0)
-    val elevStr = "${formatMetricElevation(liveValues.elevation)} m"
-    val paceStr = speedOrPaceValue(liveValues.speed, isRunning) + " " + speedOrPaceUnit(isRunning)
-    val hrStr = liveValues.heartRate?.let { "$it bpm" } ?: "—"
-    val timeStr = styleDuration(liveValues.elapsedTime)
-    val gradeStr = if (isAnimated) formatGrade(liveValues.grade) else "—"
-    val tempStr = if (isAnimated) formatTemp(liveValues.temperature) else
-        gpxData?.tracks?.flatMap { it.segments }?.flatMap { it.points }?.mapNotNull { it.temperature }
-            ?.takeIf { it.isNotEmpty() }?.let { formatTemp(it.average()) } ?: ""
-
-    if (isPortrait) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            Box(modifier = Modifier.weight(0.55f).fillMaxWidth()) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(12.dp)
-                        .clickable(onClick = onTitleClick)
-                ) {
-                    Text(
-                        text = activityTitle.ifBlank { "＋ Tap to add title" },
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = if (activityTitle.isNotBlank()) Color.White.copy(alpha = 0.9f) else Color.White.copy(alpha = 0.3f)
-                    )
-                }
-                // Route map — top-right corner
-                if (gpxData != null) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(12.dp)
-                            .size(60.dp)
-                    ) {
-                        MiniRouteMap(gpxData = gpxData, accentColor = accentColor, progress = if (isAnimated) progress else 1f,
-                            modifier = Modifier.fillMaxSize(), isSquare = true)
-                    }
-                }
-            }
-            Box(
-                modifier = Modifier
-                    .weight(0.45f)
-                    .fillMaxWidth()
-                    .background(Color.Black.copy(alpha = 0.5f))
-                    .padding(10.dp)
-            ) {
-                Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceEvenly) {
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        DashMetric("DISTANCE", distStr, accentColor, Modifier.weight(1f))
-                        DashMetric("GAIN", elevStr, Color(0xFF66BB6A), Modifier.weight(1f))
-                    }
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        DashMetric("PACE", paceStr, Color(0xFFFFAB40), Modifier.weight(1f))
-                        DashMetric("HEART RATE", hrStr, Color(0xFFEF5350), Modifier.weight(1f))
-                    }
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        DashMetric("TIME", timeStr, Color(0xFF26A69A), Modifier.weight(1f))
-                        if (isAnimated) {
-                            DashMetric("GRADE", gradeStr, Color(0xFF7E57C2), Modifier.weight(1f))
-                        } else if (tempStr.isNotBlank()) {
-                            DashMetric("TEMP", tempStr, Color(0xFF7E57C2), Modifier.weight(1f))
-                        } else {
-                            Spacer(Modifier.weight(1f))
-                        }
-                    }
-                    MiniElevChart(gpxData = gpxData, accentColor = accentColor, progress = if (isAnimated) progress else 1f)
-                }
-            }
-        }
-    } else {
-        Row(modifier = Modifier.fillMaxSize()) {
-            Box(modifier = Modifier.weight(0.6f).fillMaxSize()) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(12.dp)
-                        .clickable(onClick = onTitleClick)
-                ) {
-                    Text(
-                        text = activityTitle.ifBlank { "＋ Tap to add title" },
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = if (activityTitle.isNotBlank()) Color.White.copy(alpha = 0.9f) else Color.White.copy(alpha = 0.3f)
-                    )
-                }
-                // Route map — top-right of video area
-                if (gpxData != null) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(12.dp)
-                            .size(50.dp)
-                    ) {
-                        MiniRouteMap(gpxData = gpxData, accentColor = accentColor, progress = if (isAnimated) progress else 1f,
-                            modifier = Modifier.fillMaxSize(), isSquare = true)
-                    }
-                }
-                Column(modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp)) {
-                    MiniElevChart(
-                        gpxData = gpxData, accentColor = accentColor,
-                        progress = if (isAnimated) progress else 1f
-                    )
-                }
-            }
-            Box(
-                modifier = Modifier
-                    .weight(0.4f)
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.5f))
-                    .padding(8.dp)
-            ) {
-                Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceEvenly) {
-                    DashMetric("DISTANCE", distStr, accentColor, Modifier.fillMaxWidth())
-                    DashMetric("GAIN", elevStr, Color(0xFF66BB6A), Modifier.fillMaxWidth())
-                    DashMetric("PACE", paceStr, Color(0xFFFFAB40), Modifier.fillMaxWidth())
-                    DashMetric("HEART RATE", hrStr, Color(0xFFEF5350), Modifier.fillMaxWidth())
-                    DashMetric("TIME", timeStr, Color(0xFF26A69A), Modifier.fillMaxWidth())
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun DashMetric(label: String, value: String, color: Color, modifier: Modifier = Modifier) {
-    GlassCard(modifier = modifier) {
-        Column {
-            Text(label, style = AthleticType.metricLabel, color = color.copy(alpha = 0.8f))
-            Text(value, style = AthleticType.smallMetric, color = Color.White)
         }
     }
 }
@@ -2159,9 +1785,4 @@ private fun styleDuration(ms: Long): String {
     else "%d:%02d".format(minutes, seconds)
 }
 
-private fun formatDurationMs(ms: Long): String {
-    val totalSeconds = ms / 1000
-    val minutes = totalSeconds / 60
-    val seconds = totalSeconds % 60
-    return "%d:%02d".format(minutes, seconds)
-}
+private fun formatDurationMs(ms: Long) = FormatUtils.formatDurationMs(ms)

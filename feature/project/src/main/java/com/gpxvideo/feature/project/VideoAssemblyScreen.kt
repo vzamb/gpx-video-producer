@@ -108,6 +108,7 @@ import com.gpxvideo.feature.preview.PreviewEngine
 import com.gpxvideo.feature.preview.VideoPreview
 import com.gpxvideo.feature.timeline.TimelineClipState
 import com.gpxvideo.feature.timeline.TimelineState
+import com.gpxvideo.core.common.FormatUtils
 import com.gpxvideo.feature.timeline.TimelineViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -1834,14 +1835,7 @@ private fun rememberClipFrames(
 // Helper: formatDurationMs
 // ═════════════════════════════════════════════════════════════════════════════
 
-private fun formatDurationMs(ms: Long): String {
-    val totalSeconds = ms / 1000
-    val hours = totalSeconds / 3600
-    val minutes = (totalSeconds % 3600) / 60
-    val seconds = totalSeconds % 60
-    return if (hours > 0) "%d:%02d:%02d".format(hours, minutes, seconds)
-    else "%d:%02d".format(minutes, seconds)
-}
+private fun formatDurationMs(ms: Long) = FormatUtils.formatDurationMs(ms)
 
 // ═════════════════════════════════════════════════════════════════════════════
 // Helper: effectColorMatrix — builds a ColorMatrix for brightness/contrast/sat

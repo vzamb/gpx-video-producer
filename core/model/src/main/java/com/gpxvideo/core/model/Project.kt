@@ -101,22 +101,3 @@ data class ClipSyncPoint(
     /** Whether this clip has been manually synced by the user. */
     val isSynced: Boolean = false
 )
-
-/** Pre-configured, uneditable aesthetic overlay layouts. */
-enum class StoryTemplate(val displayName: String, val description: String) {
-    /** Minimalist small data cards in bottom-left corner. */
-    CINEMATIC(
-        "Cinematic",
-        "Minimalist data cards nestled in the corner"
-    ),
-    /** Massive distance tracking centered on screen. */
-    HERO(
-        "Hero",
-        "Massive distance tracking, centered and bold"
-    ),
-    /** Vertical side-panel with comprehensive metrics and mini map. */
-    PRO_DASHBOARD(
-        "Pro Dashboard",
-        "Full metrics panel with route map"
-    )
-}

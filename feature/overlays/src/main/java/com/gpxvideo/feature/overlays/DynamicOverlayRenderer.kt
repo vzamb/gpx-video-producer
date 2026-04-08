@@ -18,6 +18,7 @@ import com.gpxvideo.core.model.OverlayConfig
 import com.gpxvideo.lib.gpxparser.GpxStatistics
 import java.time.Duration
 import kotlin.math.cos
+import com.gpxvideo.core.common.FormatUtils
 import kotlin.math.min
 import kotlin.math.sin
 
@@ -554,16 +555,7 @@ object DynamicOverlayRenderer {
         }
     }
 
-    private fun formatDuration(duration: Duration): String {
-        val totalSeconds = duration.seconds
-        val hours = totalSeconds / 3600
-        val minutes = (totalSeconds % 3600) / 60
-        val seconds = totalSeconds % 60
-        return when {
-            hours > 0 -> "%d:%02d:%02d".format(hours, minutes, seconds)
-            else -> "%d:%02d".format(minutes, seconds)
-        }
-    }
+    private fun formatDuration(duration: Duration) = FormatUtils.formatDuration(duration)
 
     private fun drawBackground(canvas: Canvas, w: Int, h: Int, bgColor: Long?, cr: Float) {
         // Only draw background if explicitly set (non-null). Default is transparent.

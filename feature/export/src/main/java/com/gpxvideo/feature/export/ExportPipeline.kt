@@ -41,6 +41,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import java.io.File
+import com.gpxvideo.core.common.FormatUtils
 import javax.inject.Inject
 import kotlin.coroutines.resume
 
@@ -570,13 +571,7 @@ private class DynamicStoryTemplateOverlay(
         )
     }
 
-    private fun formatPace(speedMs: Double): String {
-        if (speedMs < 0.3) return "—"
-        val kmh = speedMs * 3.6
-        val paceMin = (60.0 / kmh).toInt()
-        val paceSec = ((60.0 / kmh - paceMin) * 60).toInt()
-        return "%d:%02d".format(paceMin, paceSec)
-    }
+    private fun formatPace(speedMs: Double) = FormatUtils.formatPaceFromSpeed(speedMs)
 
     private fun computeCumulativeDistances(): List<Double> {
         if (allPoints.size < 2) return if (allPoints.isNotEmpty()) listOf(0.0) else emptyList()

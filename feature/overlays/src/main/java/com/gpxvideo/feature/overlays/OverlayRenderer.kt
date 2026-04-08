@@ -17,6 +17,7 @@ import com.gpxvideo.core.model.StatField
 import com.gpxvideo.core.model.StatsLayout
 import com.gpxvideo.lib.gpxparser.GpxStatistics
 import com.gpxvideo.lib.gpxparser.GpxStats
+import com.gpxvideo.core.common.FormatUtils
 import java.time.Duration
 import kotlin.math.abs
 
@@ -362,26 +363,7 @@ object OverlayRenderer {
         StatsLayout.VERTICAL_LIST -> 1 to count.coerceAtLeast(1)
     }
 
-    private fun formatDistance(meters: Double): String {
-        return if (meters >= 1000) "%.2f km".format(meters / 1000)
-        else "%.0f m".format(meters)
-    }
-
-    private fun formatDuration(duration: Duration): String {
-        val totalSeconds = duration.seconds
-        val hours = totalSeconds / 3600
-        val minutes = (totalSeconds % 3600) / 60
-        val seconds = totalSeconds % 60
-        return when {
-            hours > 0 -> "%d:%02d:%02d".format(hours, minutes, seconds)
-            else -> "%d:%02d".format(minutes, seconds)
-        }
-    }
-
-    private fun formatPace(paceMinPerKm: Double): String {
-        if (paceMinPerKm <= 0 || paceMinPerKm.isInfinite() || paceMinPerKm.isNaN()) return "--:--"
-        val minutes = paceMinPerKm.toInt()
-        val seconds = ((paceMinPerKm - minutes) * 60).toInt()
-        return "%d:%02d".format(minutes, seconds)
-    }
+    private fun formatDistance(meters: Double) = FormatUtils.formatDistance(meters)
+    private fun formatDuration(duration: Duration) = FormatUtils.formatDuration(duration)
+    private fun formatPace(paceMinPerKm: Double) = FormatUtils.formatPace(paceMinPerKm)
 }
