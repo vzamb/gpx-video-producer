@@ -3,6 +3,7 @@ package com.gpxvideo.feature.export
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,50 +15,42 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.gpxvideo.core.model.ExportFormat
-import com.gpxvideo.core.model.Resolution
 
-@OptIn(ExperimentalMaterial3Api::class)
+private val DarkBg = Color(0xFF0D0D12)
+private val AccentBlue = Color(0xFF448AFF)
+private val SurfaceDark = Color(0xFF1A1A2E)
+
 @Composable
 fun ExportScreen(
     projectId: String,
@@ -68,47 +61,47 @@ fun ExportScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Export Video") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                }
+    // Auto-start export when screen opens
+    LaunchedEffect(Unit) {
+        if (uiState.exportState is ExportState.Idle) {
+            viewModel.startExport()
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(DarkBg)
+    ) {
+        // Back button
+        IconButton(
+            onClick = onNavigateBack,
+            modifier = Modifier
+                .padding(top = 48.dp, start = 8.dp)
+                .align(Alignment.TopStart)
+        ) {
+            Icon(
+                Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "Back",
+                tint = Color.White
             )
         }
-    ) { padding ->
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(top = 100.dp, start = 24.dp, end = 24.dp, bottom = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
             when (val state = uiState.exportState) {
                 is ExportState.Idle -> {
-                    ExportSettingsSection(
-                        settings = uiState.settings,
-                        estimatedSizeMb = uiState.estimatedSizeMb,
-                        onFormatChanged = viewModel::updateFormat,
-                        onResolutionChanged = viewModel::updateResolution,
-                        onFrameRateChanged = viewModel::updateFrameRate
+                    // Brief loading state before auto-start kicks in
+                    Text(
+                        "Preparing export…",
+                        color = Color.White.copy(alpha = 0.6f),
+                        style = MaterialTheme.typography.bodyLarge
                     )
-
-                    Spacer(Modifier.height(8.dp))
-
-                    Button(
-                        onClick = viewModel::startExport,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary
-                        )
-                    ) {
-                        Text("Start Export", modifier = Modifier.padding(vertical = 8.dp))
-                    }
                 }
 
                 is ExportState.Exporting -> {
@@ -116,7 +109,10 @@ fun ExportScreen(
                         phase = state.phase,
                         progress = state.progress,
                         startTimeMs = state.startTimeMs,
-                        onCancel = viewModel::cancelExport
+                        onCancel = {
+                            viewModel.cancelExport()
+                            onNavigateBack()
+                        }
                     )
                 }
 
@@ -124,12 +120,8 @@ fun ExportScreen(
                     ExportCompleteSection(
                         outputPath = state.outputPath,
                         fileSizeBytes = state.fileSizeBytes,
-                        onShare = {
-                            shareVideoFile(context, state.outputPath)
-                        },
-                        onSaveToGallery = {
-                            viewModel.saveToGallery(state.outputPath)
-                        },
+                        onShare = { shareVideoFile(context, state.outputPath) },
+                        onSaveToGallery = { viewModel.saveToGallery(state.outputPath) },
                         onDone = onNavigateBack
                     )
                 }
@@ -137,137 +129,10 @@ fun ExportScreen(
                 is ExportState.Error -> {
                     ExportErrorSection(
                         message = state.message,
-                        onRetry = viewModel::resetState,
+                        onRetry = viewModel::startExport,
                         onDismiss = onNavigateBack
                     )
                 }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ExportSettingsSection(
-    settings: com.gpxvideo.core.model.OutputSettings,
-    estimatedSizeMb: Float,
-    onFormatChanged: (ExportFormat) -> Unit,
-    onResolutionChanged: (Resolution) -> Unit,
-    onFrameRateChanged: (Int) -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(
-                "Export Settings",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-
-            // Format dropdown
-            DropdownSelector(
-                label = "Format",
-                selectedValue = settings.format.displayName,
-                options = ExportFormat.entries.map { it.displayName },
-                onOptionSelected = { name ->
-                    ExportFormat.entries.find { it.displayName == name }?.let(onFormatChanged)
-                }
-            )
-
-            // Resolution dropdown
-            DropdownSelector(
-                label = "Resolution",
-                selectedValue = settings.resolution.displayName,
-                options = Resolution.entries.map { it.displayName },
-                onOptionSelected = { name ->
-                    Resolution.entries.find { it.displayName == name }?.let(onResolutionChanged)
-                }
-            )
-
-            // Frame rate dropdown
-            val frameRates = listOf(24, 30, 60)
-            DropdownSelector(
-                label = "Frame Rate",
-                selectedValue = "${settings.frameRate} fps",
-                options = frameRates.map { "$it fps" },
-                onOptionSelected = { value ->
-                    value.replace(" fps", "").toIntOrNull()?.let(onFrameRateChanged)
-                }
-            )
-
-            // Audio codec display
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text("Audio Codec", style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    settings.audioCodec.displayName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            // Estimated size
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text("Estimated Size", style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    "~${"%.1f".format(estimatedSizeMb)} MB",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun DropdownSelector(
-    label: String,
-    selectedValue: String,
-    options: List<String>,
-    onOptionSelected: (String) -> Unit
-) {
-    var expanded by remember { mutableStateOf(false) }
-
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = { expanded = it }
-    ) {
-        OutlinedTextField(
-            value = selectedValue,
-            onValueChange = {},
-            readOnly = true,
-            label = { Text(label) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
-        )
-
-        ExposedDropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false }
-        ) {
-            options.forEach { option ->
-                DropdownMenuItem(
-                    text = { Text(option) },
-                    onClick = {
-                        onOptionSelected(option)
-                        expanded = false
-                    }
-                )
             }
         }
     }
@@ -280,59 +145,70 @@ private fun ExportProgressSection(
     startTimeMs: Long,
     onCancel: () -> Unit
 ) {
-    Card(
+    Column(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+        Text(
+            "Exporting your video",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = Color.White
+        )
+
+        Text(
+            phase.displayName,
+            style = MaterialTheme.typography.bodyLarge,
+            color = AccentBlue
+        )
+
+        // Large percentage
+        Text(
+            "${(progress * 100).toInt()}%",
+            style = MaterialTheme.typography.displayLarge.copy(fontSize = 72.sp),
+            fontWeight = FontWeight.Bold,
+            color = Color.White
+        )
+
+        // Progress bar
+        LinearProgressIndicator(
+            progress = { progress.coerceIn(0f, 1f) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(6.dp)
+                .clip(RoundedCornerShape(3.dp)),
+            color = AccentBlue,
+            trackColor = SurfaceDark
+        )
+
+        // Estimated remaining time
+        val elapsed = System.currentTimeMillis() - startTimeMs
+        if (progress > 0.01f && elapsed > 1000) {
+            val estimatedTotal = elapsed / progress
+            val remaining = (estimatedTotal - elapsed).toLong().coerceAtLeast(0)
+            val remainingSec = remaining / 1000
+            val minutes = remainingSec / 60
+            val seconds = remainingSec % 60
+            Text(
+                "About ${minutes}m ${seconds}s remaining",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White.copy(alpha = 0.5f)
+            )
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        OutlinedButton(
+            onClick = onCancel,
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White.copy(alpha = 0.7f)),
+            border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
+                brush = Brush.linearGradient(listOf(Color.White.copy(alpha = 0.2f), Color.White.copy(alpha = 0.2f)))
+            )
         ) {
-            Text(
-                "Exporting...",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-
-            Text(
-                phase.displayName,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.primary
-            )
-
-            LinearProgressIndicator(
-                progress = { progress.coerceIn(0f, 1f) },
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Text(
-                "${(progress * 100).toInt()}%",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-
-            val elapsed = System.currentTimeMillis() - startTimeMs
-            if (progress > 0.01f && elapsed > 1000) {
-                val estimatedTotal = elapsed / progress
-                val remaining = (estimatedTotal - elapsed).toLong().coerceAtLeast(0)
-                val remainingSec = remaining / 1000
-                val minutes = remainingSec / 60
-                val seconds = remainingSec % 60
-                Text(
-                    "~${minutes}m ${seconds}s remaining",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            OutlinedButton(onClick = onCancel) {
-                Icon(Icons.Default.Close, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("Cancel")
-            }
+            Icon(Icons.Default.Close, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text("Cancel")
         }
     }
 }
@@ -345,84 +221,83 @@ private fun ExportCompleteSection(
     onSaveToGallery: () -> Unit,
     onDone: () -> Unit
 ) {
-    Card(
+    Column(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            AnimatedVisibility(visible = true, enter = fadeIn(), exit = fadeOut()) {
+        AnimatedVisibility(visible = true, enter = fadeIn(), exit = fadeOut()) {
+            Box(
+                modifier = Modifier
+                    .size(80.dp)
+                    .clip(CircleShape)
+                    .background(AccentBlue.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
                 Icon(
                     Icons.Default.CheckCircle,
                     contentDescription = "Success",
-                    modifier = Modifier.size(64.dp),
-                    tint = MaterialTheme.colorScheme.primary
+                    modifier = Modifier.size(48.dp),
+                    tint = AccentBlue
                 )
             }
+        }
 
-            Text(
-                "Export Complete!",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
+        Text(
+            "Export Complete!",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            color = Color.White
+        )
 
-            Text(
-                outputPath.substringAfterLast("/"),
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+        Text(
+            outputPath.substringAfterLast("/"),
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = Color.White.copy(alpha = 0.6f)
+        )
 
+        if (fileSizeBytes > 0) {
             val sizeMb = fileSizeBytes / (1024f * 1024f)
-            if (fileSizeBytes > 0) {
-                Text(
-                    "${"%.1f".format(sizeMb)} MB",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else {
-                Text(
-                    "Stub export — add FFmpeg-kit for real encoding",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            Text(
+                "${"%.1f".format(sizeMb)} MB",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White.copy(alpha = 0.4f)
+            )
+        }
 
-            // Share button
-            Button(
-                onClick = onShare,
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary
-                )
-            ) {
-                Icon(Icons.Default.Share, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("Share")
-            }
+        Spacer(Modifier.height(8.dp))
 
-            // Save to gallery
-            OutlinedButton(
-                onClick = onSaveToGallery,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Default.FolderOpen, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("Save to Gallery")
-            }
+        Button(
+            onClick = onShare,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Icon(Icons.Default.Share, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text("Share", modifier = Modifier.padding(vertical = 4.dp))
+        }
 
-            // Done
-            OutlinedButton(
-                onClick = onDone,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Done")
-            }
+        OutlinedButton(
+            onClick = onSaveToGallery,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Icon(Icons.Default.FolderOpen, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text("Save to Gallery")
+        }
+
+        OutlinedButton(
+            onClick = onDone,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White.copy(alpha = 0.6f)),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Text("Done")
         }
     }
 }
@@ -455,37 +330,36 @@ private fun ExportErrorSection(
     onRetry: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    Card(
+    Column(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.errorContainer
-        )
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                "Export Failed",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onErrorContainer
-            )
+        Text(
+            "Export Failed",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFFEF5350)
+        )
 
-            Text(
-                message,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onErrorContainer
-            )
+        Text(
+            message,
+            style = MaterialTheme.typography.bodyMedium,
+            color = Color.White.copy(alpha = 0.7f)
+        )
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onDismiss) {
-                    Text("Cancel")
-                }
-                Button(onClick = onRetry) {
-                    Text("Retry")
-                }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedButton(
+                onClick = onDismiss,
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White.copy(alpha = 0.6f))
+            ) {
+                Text("Cancel")
+            }
+            Button(
+                onClick = onRetry,
+                colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)
+            ) {
+                Text("Retry")
             }
         }
     }

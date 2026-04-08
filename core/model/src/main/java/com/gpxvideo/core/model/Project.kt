@@ -31,6 +31,7 @@ enum class SportType(val displayName: String, val icon: String) {
 
 data class OutputSettings(
     val resolution: Resolution = Resolution.FHD_1080P,
+    val aspectRatio: SocialAspectRatio = SocialAspectRatio.LANDSCAPE_16_9,
     val frameRate: Int = 30,
     val format: ExportFormat = ExportFormat.MP4_H264,
     val bitrateBps: Long = 10_000_000L,
@@ -44,6 +45,19 @@ enum class Resolution(val width: Int, val height: Int, val displayName: String) 
     UHD_4K(3840, 2160, "4K UHD")
 }
 
+enum class SocialAspectRatio(
+    val displayName: String,
+    val description: String,
+    val width: Int,
+    val height: Int,
+    val icon: String
+) {
+    LANDSCAPE_16_9("16:9", "YouTube, Twitter", 1920, 1080, "📺"),
+    PORTRAIT_9_16("9:16", "Reels, TikTok, Shorts", 1080, 1920, "📱"),
+    SQUARE_1_1("1:1", "Instagram Post", 1080, 1080, "⬜"),
+    PORTRAIT_4_5("4:5", "Instagram Feed", 1080, 1350, "📷")
+}
+
 enum class ExportFormat(val displayName: String, val extension: String) {
     MP4_H264("MP4 (H.264)", "mp4"),
     MP4_H265("MP4 (H.265/HEVC)", "mp4"),
@@ -53,4 +67,56 @@ enum class ExportFormat(val displayName: String, val extension: String) {
 enum class AudioCodec(val displayName: String) {
     AAC("AAC"),
     OPUS("Opus")
+}
+
+/** Synchronization approach for GPX ↔ video alignment. */
+enum class StoryMode(val displayName: String, val description: String) {
+    /** Static: show final totals — no animation, all stats at their end value. */
+    STATIC(
+        "Static",
+        "Show final activity totals"
+    ),
+    /** Fast Forward: proportionally map entire GPX across video duration (animated). */
+    FAST_FORWARD(
+        "Fast Forward",
+        "Animate the full activity across the video"
+    ),
+    /** Live Sync: match video timestamps to GPX timestamps per clip. */
+    LIVE_SYNC(
+        "Live Sync",
+        "Real-time telemetry synced to each clip"
+    )
+}
+
+/**
+ * Per-clip GPX sync point for Live Sync mode.
+ * Maps a video clip to a position on the GPX track.
+ */
+data class ClipSyncPoint(
+    val clipId: java.util.UUID,
+    /** Index into GPX points array, or -1 for auto (timestamp-based). */
+    val gpxPointIndex: Int = -1,
+    /** Distance along the track in meters where this clip starts. */
+    val gpxDistanceMeters: Double = 0.0,
+    /** Whether this clip has been manually synced by the user. */
+    val isSynced: Boolean = false
+)
+
+/** Pre-configured, uneditable aesthetic overlay layouts. */
+enum class StoryTemplate(val displayName: String, val description: String) {
+    /** Minimalist small data cards in bottom-left corner. */
+    CINEMATIC(
+        "Cinematic",
+        "Minimalist data cards nestled in the corner"
+    ),
+    /** Massive distance tracking centered on screen. */
+    HERO(
+        "Hero",
+        "Massive distance tracking, centered and bold"
+    ),
+    /** Vertical side-panel with comprehensive metrics and mini map. */
+    PRO_DASHBOARD(
+        "Pro Dashboard",
+        "Full metrics panel with route map"
+    )
 }

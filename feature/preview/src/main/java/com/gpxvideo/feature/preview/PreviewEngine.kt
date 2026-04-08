@@ -32,6 +32,7 @@ data class PreviewClip(
     val startMs: Long,
     val endMs: Long,
     val speed: Float = 1f,
+    val volume: Float = 1f,
     val displayTransform: PreviewDisplayTransform = PreviewDisplayTransform()
 )
 
@@ -52,6 +53,7 @@ private data class PreviewClipRange(
     val index: Int,
     val timelineStartMs: Long,
     val timelineEndMs: Long,
+    val volume: Float = 1f,
     val displayTransform: PreviewDisplayTransform
 )
 
@@ -67,6 +69,14 @@ class PreviewEngine @Inject constructor(
     private var boundTextureView: TextureView? = null
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var clipRanges: List<PreviewClipRange> = emptyList()
+
+    /** True while setMediaSources is rebuilding — suppresses stale position updates */
+    @Volatile
+    private var isRebuilding = false
+
+    /** Timestamp of last explicit seekTo — suppresses STATE_READY position override briefly */
+    @Volatile
+    private var lastSeekTimeNanos = 0L
 
     private val _currentPositionMs = MutableStateFlow(0L)
     val currentPositionMs: StateFlow<Long> = _currentPositionMs.asStateFlow()
@@ -88,6 +98,7 @@ class PreviewEngine @Inject constructor(
     fun initialize() {
         if (exoPlayer != null) return
         exoPlayer = ExoPlayer.Builder(context).build().also { player ->
+            player.playWhenReady = false // Prevent auto-play on prepare()
             player.addListener(object : Player.Listener {
                 override fun onIsPlayingChanged(playing: Boolean) {
                     _isPlaying.value = playing
@@ -95,14 +106,20 @@ class PreviewEngine @Inject constructor(
                 }
 
                 override fun onPlaybackStateChanged(playbackState: Int) {
+                    if (isRebuilding) return // ignore stale events during rebuild
+                    val timeSinceSeek = System.nanoTime() - lastSeekTimeNanos
                     if (playbackState == Player.STATE_READY) {
                         _duration.value = clipRanges.lastOrNull()?.timelineEndMs ?: 0L
-                        _currentPositionMs.value = currentTimelinePosition(player)
+                        if (timeSinceSeek > 500_000_000L) {
+                            _currentPositionMs.value = currentTimelinePosition(player)
+                        }
                         updateActiveDisplayTransform(player.currentMediaItemIndex)
                     }
                     if (playbackState == Player.STATE_ENDED) {
                         _isPlaying.value = false
-                        _currentPositionMs.value = clipRanges.lastOrNull()?.timelineEndMs ?: 0L
+                        if (timeSinceSeek > 500_000_000L) {
+                            _currentPositionMs.value = clipRanges.lastOrNull()?.timelineEndMs ?: 0L
+                        }
                         stopPositionPolling()
                     }
                 }
@@ -166,6 +183,13 @@ class PreviewEngine @Inject constructor(
             exoPlayer?.clearMediaItems()
             return
         }
+
+        // Save current position to restore after rebuild
+        val savedPositionMs = _currentPositionMs.value
+
+        isRebuilding = true
+        stopPositionPolling()
+
         var timelineCursor = 0L
         clipRanges = validClips.mapIndexed { index, clip ->
             val durationMs = (clip.endMs - clip.startMs).coerceAtLeast(0L)
@@ -173,6 +197,7 @@ class PreviewEngine @Inject constructor(
                 index = index,
                 timelineStartMs = timelineCursor,
                 timelineEndMs = timelineCursor + durationMs,
+                volume = clip.volume,
                 displayTransform = clip.displayTransform
             )
             timelineCursor += durationMs
@@ -190,22 +215,45 @@ class PreviewEngine @Inject constructor(
                 .build()
         }
         exoPlayer?.setMediaItems(items)
-        exoPlayer?.prepare()
         exoPlayer?.playWhenReady = false
-        exoPlayer?.seekTo(0, 1L)
-        _duration.value = clipRanges.lastOrNull()?.timelineEndMs ?: 0L
-        _currentPositionMs.value = 0L
-        val firstTransform = clipRanges.firstOrNull()?.displayTransform ?: PreviewDisplayTransform()
-        _activeDisplayTransform.value = firstTransform
-        if (firstTransform.sourceVideoAspectRatio > 0f) {
-            _videoAspectRatio.value = firstTransform.sourceVideoAspectRatio
+        exoPlayer?.prepare()
+
+        val newDuration = clipRanges.lastOrNull()?.timelineEndMs ?: 0L
+        _duration.value = newDuration
+
+        // Restore position: clamp to new timeline instead of always resetting to 0
+        val restoredPosition = savedPositionMs.coerceIn(0L, newDuration)
+        _currentPositionMs.value = restoredPosition
+        seekToInternal(restoredPosition)
+
+        // Apply display transform for the clip at the restored position
+        val activeRange = clipRanges.firstOrNull { restoredPosition < it.timelineEndMs }
+            ?: clipRanges.lastOrNull()
+        activeRange?.let {
+            exoPlayer?.volume = it.volume
+            _activeDisplayTransform.value = it.displayTransform
+            if (it.displayTransform.sourceVideoAspectRatio > 0f) {
+                _videoAspectRatio.value = it.displayTransform.sourceVideoAspectRatio
+            }
         }
+
+        isRebuilding = false
     }
 
     fun play() {
         val player = exoPlayer ?: return
         if (player.playbackState == Player.STATE_ENDED) {
-            player.seekTo(0, 0L)
+            val currentPos = _currentPositionMs.value
+            val endPos = clipRanges.lastOrNull()?.timelineEndMs ?: 0L
+            if (endPos > 0 && currentPos >= endPos - 100) {
+                // At or near the end → restart from beginning
+                _currentPositionMs.value = 0L
+                seekToInternal(0L)
+            } else {
+                // Resume from current scrubbed position
+                seekToInternal(currentPos)
+            }
+            lastSeekTimeNanos = System.nanoTime()
         }
         player.prepare()
         player.playWhenReady = true
@@ -218,6 +266,12 @@ class PreviewEngine @Inject constructor(
 
     fun seekTo(positionMs: Long) {
         val player = exoPlayer ?: return
+        lastSeekTimeNanos = System.nanoTime()
+        // ExoPlayer ignores seekTo in STATE_ENDED — re-prepare first
+        if (player.playbackState == Player.STATE_ENDED) {
+            player.prepare()
+            player.playWhenReady = false
+        }
         if (clipRanges.isEmpty()) {
             player.seekTo(positionMs)
             _currentPositionMs.value = positionMs
@@ -231,6 +285,41 @@ class PreviewEngine @Inject constructor(
         _activeDisplayTransform.value = range.displayTransform
         if (range.displayTransform.sourceVideoAspectRatio > 0f) {
             _videoAspectRatio.value = range.displayTransform.sourceVideoAspectRatio
+        }
+    }
+
+    /** Seek ExoPlayer without updating _currentPositionMs (used during rebuild). */
+    private fun seekToInternal(positionMs: Long) {
+        val player = exoPlayer ?: return
+        if (clipRanges.isEmpty()) {
+            player.seekTo(positionMs)
+            return
+        }
+        val clamped = positionMs.coerceIn(0L, clipRanges.last().timelineEndMs)
+        val range = clipRanges.firstOrNull { clamped < it.timelineEndMs } ?: clipRanges.last()
+        val localPos = (clamped - range.timelineStartMs).coerceAtLeast(0L)
+        player.seekTo(range.index, localPos)
+    }
+
+    /**
+     * Update only the display transforms (brightness, contrast, saturation, etc.)
+     * without reloading ExoPlayer media items or resetting playback position.
+     */
+    fun updateDisplayTransforms(clips: List<PreviewClip>) {
+        val validClips = clips.filter { it.endMs > it.startMs }
+        if (validClips.size != clipRanges.size) return // structural mismatch — use setMediaSources
+        clipRanges = clipRanges.zip(validClips) { range, clip ->
+            range.copy(displayTransform = clip.displayTransform, volume = clip.volume)
+        }
+        val currentPos = _currentPositionMs.value
+        val activeRange = clipRanges.firstOrNull { currentPos < it.timelineEndMs }
+            ?: clipRanges.lastOrNull()
+        activeRange?.let {
+            _activeDisplayTransform.value = it.displayTransform
+            exoPlayer?.volume = it.volume
+            if (it.displayTransform.sourceVideoAspectRatio > 0f) {
+                _videoAspectRatio.value = it.displayTransform.sourceVideoAspectRatio
+            }
         }
     }
 
@@ -307,9 +396,13 @@ class PreviewEngine @Inject constructor(
         positionPollingJob?.cancel()
         positionPollingJob = scope.launch {
             while (isActive) {
-                exoPlayer?.let { player ->
-                    _currentPositionMs.value = currentTimelinePosition(player)
-                    _duration.value = clipRanges.lastOrNull()?.timelineEndMs ?: player.duration.coerceAtLeast(0)
+                if (!isRebuilding) {
+                    exoPlayer?.let { player ->
+                        if (player.isPlaying) {
+                            _currentPositionMs.value = currentTimelinePosition(player)
+                            _duration.value = clipRanges.lastOrNull()?.timelineEndMs ?: player.duration.coerceAtLeast(0)
+                        }
+                    }
                 }
                 delay(16)
             }
@@ -331,11 +424,11 @@ class PreviewEngine @Inject constructor(
     }
 
     private fun updateActiveDisplayTransform(currentItemIndex: Int) {
-        val transform = clipRanges
-            .getOrNull(currentItemIndex.coerceAtLeast(0))
-            ?.displayTransform
-            ?: PreviewDisplayTransform()
+        val range = clipRanges.getOrNull(currentItemIndex.coerceAtLeast(0))
+        val transform = range?.displayTransform ?: PreviewDisplayTransform()
         _activeDisplayTransform.value = transform
+        // Apply per-clip volume
+        exoPlayer?.volume = range?.volume ?: 1f
         // Eagerly set the video AR from metadata so the TextureView transform is correct
         // even before ExoPlayer fires onVideoSizeChanged for this clip.
         if (transform.sourceVideoAspectRatio > 0f) {

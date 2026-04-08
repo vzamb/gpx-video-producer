@@ -11,11 +11,19 @@ import androidx.lifecycle.viewModelScope
 import com.gpxvideo.core.database.dao.GpxFileDao
 import com.gpxvideo.core.database.dao.MediaItemDao
 import com.gpxvideo.core.database.dao.ProjectDao
+import com.gpxvideo.core.database.dao.TimelineClipDao
+import com.gpxvideo.core.database.dao.TimelineTrackDao
 import com.gpxvideo.core.database.entity.GpxFileEntity
 import com.gpxvideo.core.database.entity.MediaItemEntity
 import com.gpxvideo.core.database.entity.ProjectEntity
+import com.gpxvideo.core.model.ClipSyncPoint
 import com.gpxvideo.core.model.GpxData
+import com.gpxvideo.core.model.SocialAspectRatio
+import com.gpxvideo.core.model.StoryMode
 import com.gpxvideo.feature.gpx.GpxImportManager
+import com.gpxvideo.feature.preview.PreviewClip
+import com.gpxvideo.feature.preview.PreviewDisplayTransform
+import com.gpxvideo.feature.preview.PreviewEngine
 import com.gpxvideo.lib.gpxparser.GpxStatistics
 import com.gpxvideo.lib.gpxparser.GpxStats
 import com.gpxvideo.lib.mediautils.MediaProber
@@ -42,7 +50,13 @@ data class ProjectEditorUiState(
     val gpxData: GpxData? = null,
     val gpxStats: GpxStats? = null,
     val gpxFiles: List<GpxFileEntity> = emptyList(),
-    val isImportingGpx: Boolean = false
+    val isImportingGpx: Boolean = false,
+    val storyMode: String = "STATIC",
+    val storyTemplate: String = "CINEMATIC",
+    val selectedAspectRatio: SocialAspectRatio = SocialAspectRatio.PORTRAIT_9_16,
+    val accentColor: Int = 0xFF448AFF.toInt(),
+    val activityTitle: String = "",
+    val clipSyncPoints: Map<UUID, ClipSyncPoint> = emptyMap()
 )
 
 @HiltViewModel
@@ -52,6 +66,9 @@ class ProjectEditorViewModel @Inject constructor(
     private val mediaItemDao: MediaItemDao,
     private val gpxFileDao: GpxFileDao,
     private val gpxImportManager: GpxImportManager,
+    private val trackDao: TimelineTrackDao,
+    private val clipDao: TimelineClipDao,
+    val previewEngine: PreviewEngine,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -64,20 +81,148 @@ class ProjectEditorViewModel @Inject constructor(
     private val _gpxData = MutableStateFlow<GpxData?>(null)
     private val _gpxStats = MutableStateFlow<GpxStats?>(null)
     private val _isImportingGpx = MutableStateFlow(false)
+    private val _storyMode = MutableStateFlow("STATIC")
+    private val _storyTemplate = MutableStateFlow("CINEMATIC")
+    private val _selectedAspectRatio = MutableStateFlow(SocialAspectRatio.PORTRAIT_9_16)
+    private val _accentColor = MutableStateFlow(0xFF448AFF.toInt())
+    private val _activityTitle = MutableStateFlow("")
+    private val _clipSyncPoints = MutableStateFlow<Map<UUID, ClipSyncPoint>>(emptyMap())
 
     init {
+        previewEngine.initialize()
         viewModelScope.launch {
-            _project.value = projectDao.getById(projectId)
+            val project = projectDao.getById(projectId)
+            _project.value = project
+            project?.let {
+                // Map legacy DB values to new enum names
+                _storyMode.value = when (it.storyMode) {
+                    "HYPER_LAPSE" -> StoryMode.FAST_FORWARD.name
+                    "DOCUMENTARY" -> StoryMode.LIVE_SYNC.name
+                    else -> it.storyMode
+                }
+                _storyTemplate.value = it.storyTemplate
+                val savedRatio = SocialAspectRatio.entries.find { r ->
+                    r.width == it.resolutionWidth && r.height == it.resolutionHeight
+                } ?: SocialAspectRatio.PORTRAIT_9_16
+                _selectedAspectRatio.value = savedRatio
+                _activityTitle.value = it.activityTitle
+            }
         }
+        // Watch GPX files reactively so data appears as soon as a file is imported
         viewModelScope.launch {
-            val existingFiles = gpxFileDao.getByProjectId(projectId).first()
-            if (existingFiles.isNotEmpty()) {
-                val gpxData = gpxImportManager.parseGpxFile(existingFiles.first())
-                if (gpxData != null) {
-                    _gpxData.value = gpxData
-                    _gpxStats.value = GpxStatistics.computeFullStats(gpxData)
+            gpxFileDao.getByProjectId(projectId).collect { existingFiles ->
+                if (existingFiles.isNotEmpty() && _gpxData.value == null) {
+                    val gpxData = gpxImportManager.parseGpxFile(existingFiles.first())
+                    if (gpxData != null) {
+                        _gpxData.value = gpxData
+                        _gpxStats.value = GpxStatistics.computeFullStats(gpxData)
+                    }
+                } else if (existingFiles.isEmpty()) {
+                    _gpxData.value = null
+                    _gpxStats.value = null
                 }
             }
+        }
+        // Load preview clips from timeline (respects trims, reorder, effects).
+        // Falls back to raw media items if no timeline clips exist yet.
+        viewModelScope.launch {
+            mediaItemDao.getByProjectId(projectId).collect { items ->
+                loadTimelineAwarePreviewClips(items)
+            }
+        }
+    }
+
+    // ── Preview playback ─────────────────────────────────────────────────
+    val currentPositionMs = previewEngine.currentPositionMs
+    val isPlaying = previewEngine.isPlaying
+    val videoDuration = previewEngine.duration
+
+    fun play() = previewEngine.play()
+    fun pause() = previewEngine.pause()
+    fun togglePlayback() { if (previewEngine.isPlaying.value) pause() else play() }
+    fun seekTo(positionMs: Long) = previewEngine.seekTo(positionMs)
+
+    /** Load preview clips respecting timeline trims, order, and effects. */
+    private suspend fun loadTimelineAwarePreviewClips(mediaItems: List<MediaItemEntity>) {
+        val mediaMap = mediaItems.associateBy { it.id }
+        val videoItems = mediaItems.filter { it.type == "VIDEO" }
+        if (videoItems.isEmpty()) {
+            kotlinx.coroutines.withContext(Dispatchers.Main) {
+                previewEngine.setMediaSources(emptyList())
+            }
+            return
+        }
+
+        // Try timeline clips first
+        val tracks = trackDao.getByProjectId(projectId).first()
+        val videoTrack = tracks.find { it.type == "VIDEO" }
+        if (videoTrack != null) {
+            val clipEntities = clipDao.getByTrackId(videoTrack.id).first()
+            if (clipEntities.isNotEmpty()) {
+                val clips = clipEntities.sortedBy { it.startTimeMs }.mapNotNull { clipEntity ->
+                    val media = mediaMap[clipEntity.mediaItemId] ?: return@mapNotNull null
+                    val path = media.localCopyPath.ifBlank { media.sourcePath }
+                    val uri = if (path.startsWith("content://")) Uri.parse(path) else Uri.fromFile(File(path))
+                    val sourceAR = if (media.height > 0) {
+                        val r = media.rotation % 360
+                        if (r == 90 || r == 270) media.height.toFloat() / media.width.toFloat()
+                        else media.width.toFloat() / media.height.toFloat()
+                    } else 0f
+                    val effectiveDurationMs = clipEntity.endTimeMs - clipEntity.startTimeMs
+                    PreviewClip(
+                        uri = uri,
+                        startMs = clipEntity.trimStartMs,
+                        endMs = clipEntity.trimStartMs + effectiveDurationMs,
+                        speed = clipEntity.speed,
+                        volume = clipEntity.volume,
+                        displayTransform = PreviewDisplayTransform(
+                            brightness = clipEntity.brightness,
+                            contrast = clipEntity.contrast,
+                            saturation = clipEntity.saturation,
+                            sourceVideoAspectRatio = sourceAR
+                        )
+                    )
+                }
+                if (clips.isNotEmpty()) {
+                    kotlinx.coroutines.withContext(Dispatchers.Main) {
+                        previewEngine.setMediaSources(clips)
+                    }
+                    return
+                }
+            }
+        }
+
+        // Fallback: raw media items (no timeline yet)
+        loadPreviewClips(videoItems)
+    }
+
+    private suspend fun loadPreviewClips(items: List<MediaItemEntity>) {
+        val videoItems = items.filter { it.type == "VIDEO" }
+        if (videoItems.isEmpty()) {
+            kotlinx.coroutines.withContext(Dispatchers.Main) {
+                previewEngine.setMediaSources(emptyList())
+            }
+            return
+        }
+        val clips = videoItems.map { media ->
+            val path = media.localCopyPath.ifBlank { media.sourcePath }
+            val uri = if (path.startsWith("content://")) Uri.parse(path) else Uri.fromFile(File(path))
+            val durationMs = media.durationMs ?: 5000L
+            val sourceAR = if (media.height > 0) {
+                val r = media.rotation % 360
+                if (r == 90 || r == 270) media.height.toFloat() / media.width.toFloat()
+                else media.width.toFloat() / media.height.toFloat()
+            } else 0f
+            PreviewClip(
+                uri = uri,
+                startMs = 0L,
+                endMs = durationMs,
+                speed = 1f,
+                displayTransform = PreviewDisplayTransform(sourceVideoAspectRatio = sourceAR)
+            )
+        }
+        kotlinx.coroutines.withContext(Dispatchers.Main) {
+            previewEngine.setMediaSources(clips)
         }
     }
 
@@ -88,7 +233,10 @@ class ProjectEditorViewModel @Inject constructor(
         gpxFileDao.getByProjectId(projectId),
         _gpxData,
         _gpxStats,
-        _isImportingGpx
+        _isImportingGpx,
+        _storyMode,
+        _storyTemplate,
+        combine(_selectedAspectRatio, _accentColor, _activityTitle, _clipSyncPoints) { ar, ac, at, cs -> arrayOf(ar, ac, at, cs) }
     ) { values ->
         val project = values[0] as ProjectEntity?
         val mediaItems = @Suppress("UNCHECKED_CAST") (values[1] as List<MediaItemEntity>)
@@ -97,6 +245,15 @@ class ProjectEditorViewModel @Inject constructor(
         val gpxData = values[4] as GpxData?
         val gpxStats = values[5] as GpxStats?
         val importingGpx = values[6] as Boolean
+        val storyMode = values[7] as String
+        val storyTemplate = values[8] as String
+        @Suppress("UNCHECKED_CAST")
+        val extra = values[9] as Array<*>
+        val aspectRatio = extra[0] as SocialAspectRatio
+        val accentColor = extra[1] as Int
+        val activityTitle = extra[2] as String
+        @Suppress("UNCHECKED_CAST")
+        val clipSyncPoints = extra[3] as Map<UUID, ClipSyncPoint>
         ProjectEditorUiState(
             project = project,
             mediaItems = mediaItems,
@@ -105,7 +262,13 @@ class ProjectEditorViewModel @Inject constructor(
             gpxData = gpxData,
             gpxStats = gpxStats,
             gpxFiles = gpxFiles,
-            isImportingGpx = importingGpx
+            isImportingGpx = importingGpx,
+            storyMode = storyMode,
+            storyTemplate = storyTemplate,
+            selectedAspectRatio = aspectRatio,
+            accentColor = accentColor,
+            activityTitle = activityTitle,
+            clipSyncPoints = clipSyncPoints
         )
     }.stateIn(
         scope = viewModelScope,
@@ -278,5 +441,78 @@ class ProjectEditorViewModel @Inject constructor(
             // Delete from Room
             mediaItemDao.deleteById(mediaItemId)
         }
+    }
+
+    fun setStoryMode(mode: String) {
+        _storyMode.value = mode
+        viewModelScope.launch(Dispatchers.IO) {
+            projectDao.updateStoryMode(projectId, mode)
+        }
+    }
+
+    fun setStoryTemplate(template: String) {
+        _storyTemplate.value = template
+        viewModelScope.launch(Dispatchers.IO) {
+            projectDao.updateStoryTemplate(projectId, template)
+        }
+    }
+
+    fun setAspectRatio(ratio: SocialAspectRatio) {
+        _selectedAspectRatio.value = ratio
+        viewModelScope.launch(Dispatchers.IO) {
+            val p = _project.value ?: return@launch
+            projectDao.update(p.copy(
+                resolutionWidth = ratio.width,
+                resolutionHeight = ratio.height
+            ))
+        }
+    }
+
+    fun setAccentColor(color: Int) {
+        _accentColor.value = color
+    }
+
+    fun setActivityTitle(title: String) {
+        _activityTitle.value = title
+        viewModelScope.launch(Dispatchers.IO) {
+            projectDao.updateActivityTitle(projectId, title)
+        }
+    }
+
+    fun setClipSyncPoint(clipId: UUID, syncPoint: ClipSyncPoint) {
+        _clipSyncPoints.value = _clipSyncPoints.value + (clipId to syncPoint)
+    }
+
+    fun removeClipSyncPoint(clipId: UUID) {
+        _clipSyncPoints.value = _clipSyncPoints.value - clipId
+    }
+
+    /** Force reload timeline-aware preview clips (call from Style screen). */
+    fun reloadTimelinePreview() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val items = mediaItemDao.getByProjectId(projectId).first()
+            loadTimelineAwarePreviewClips(items)
+        }
+    }
+
+    fun reorderMedia(fromIndex: Int, toIndex: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val items = mediaItemDao.getByProjectId(projectId).first()
+            if (fromIndex !in items.indices || toIndex !in items.indices) return@launch
+            val mutable = items.toMutableList()
+            val moved = mutable.removeAt(fromIndex)
+            mutable.add(toIndex, moved)
+            // Re-insert with updated createdAt to maintain order
+            val now = java.time.Instant.now()
+            mutable.forEachIndexed { idx, item ->
+                mediaItemDao.update(item.copy(createdAt = now.plusMillis(idx.toLong())))
+            }
+        }
+    }
+
+    /** Check if any imported video has Exif creation timestamps (enables Documentary mode). */
+    fun hasVideoTimestamps(): Boolean {
+        // For now, always allow both modes; Exif extraction will be enhanced later
+        return true
     }
 }

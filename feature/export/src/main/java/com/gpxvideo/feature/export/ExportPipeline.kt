@@ -24,8 +24,10 @@ import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.ProgressHolder
 import androidx.media3.transformer.Transformer
 import com.gpxvideo.core.model.ExportFormat
+import com.gpxvideo.core.model.GpxData
 import com.gpxvideo.core.model.OverlayConfig
 import com.gpxvideo.lib.ffmpeg.FfmpegResult
+import com.gpxvideo.lib.gpxparser.GpxStats
 import com.google.common.collect.ImmutableList
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -128,8 +130,11 @@ class ExportPipeline @Inject constructor(
         onPhaseChanged(ExportPhase.ENCODING)
         val encodingBase = if (renderedInputs.isNotEmpty()) 0.3f else 0f
 
+        // Calculate total video duration for story template progress
+        val totalDurationMs = config.clips.maxOfOrNull { it.endTimeMs } ?: 0L
+
         val result = withContext(Dispatchers.Main) {
-            exportWithTransformer(config, renderedInputs, encodingBase, onProgress)
+            exportWithTransformer(config, renderedInputs, totalDurationMs, encodingBase, onProgress)
         }
 
         // Phase 3: Cleanup
@@ -143,6 +148,7 @@ class ExportPipeline @Inject constructor(
     private suspend fun exportWithTransformer(
         config: ExportConfig,
         renderedInputs: Map<ExportOverlay, RenderedOverlayInput>,
+        totalDurationMs: Long,
         encodingBase: Float,
         onProgress: (Float) -> Unit
     ): FfmpegResult = suspendCancellableCoroutine { cont ->
@@ -203,23 +209,48 @@ class ExportPipeline @Inject constructor(
 
         // Build composition-level overlay effect
         val compositionEffects = mutableListOf<androidx.media3.common.Effect>()
+
+        // Collect all texture overlays
+        val textureOverlays = mutableListOf<androidx.media3.effect.TextureOverlay>()
+
         if (renderedInputs.isNotEmpty()) {
-            val compositeOverlay = CompositeOverlay(
-                outputWidth = width,
-                outputHeight = height,
-                overlays = renderedInputs.map { (exportOverlay, rendered) ->
-                    OverlayEntry(
-                        config = exportOverlay.overlayConfig,
-                        startTimeMs = exportOverlay.startTimeMs,
-                        endTimeMs = exportOverlay.endTimeMs,
-                        path = rendered.path,
-                        isSequence = rendered.isSequence,
-                        frameRate = config.outputSettings.frameRate
-                    )
-                }
+            textureOverlays.add(
+                CompositeOverlay(
+                    outputWidth = width,
+                    outputHeight = height,
+                    overlays = renderedInputs.map { (exportOverlay, rendered) ->
+                        OverlayEntry(
+                            config = exportOverlay.overlayConfig,
+                            startTimeMs = exportOverlay.startTimeMs,
+                            endTimeMs = exportOverlay.endTimeMs,
+                            path = rendered.path,
+                            isSequence = rendered.isSequence,
+                            frameRate = config.outputSettings.frameRate
+                        )
+                    }
+                )
             )
+        }
+
+        // Add dynamic story template overlay (renders per-frame with live GPX data)
+        if (config.storyTemplate != null) {
+            textureOverlays.add(
+                DynamicStoryTemplateOverlay(
+                    template = config.storyTemplate,
+                    width = width,
+                    height = height,
+                    gpxData = config.gpxData,
+                    gpxStats = config.gpxStats,
+                    syncEngine = config.syncEngine,
+                    totalDurationMs = totalDurationMs,
+                    activityTitle = config.activityTitle
+                )
+            )
+        }
+
+        if (textureOverlays.isNotEmpty()) {
             compositionEffects.add(
-                OverlayEffect(ImmutableList.of(compositeOverlay as androidx.media3.effect.TextureOverlay))
+                OverlayEffect(ImmutableList.copyOf(textureOverlays))
             )
         }
 
@@ -396,5 +427,53 @@ private class CompositeOverlay(
         return staticBitmapCache.getOrPut(path) {
             BitmapFactory.decodeFile(path) ?: return null
         }
+    }
+}
+
+/**
+ * A [BitmapOverlay] that renders the story template overlay per-frame with
+ * live interpolated GPX data, matching the Screen 2 preview quality.
+ */
+@UnstableApi
+private class DynamicStoryTemplateOverlay(
+    private val template: String,
+    private val width: Int,
+    private val height: Int,
+    private val gpxData: GpxData?,
+    private val gpxStats: GpxStats?,
+    private val syncEngine: com.gpxvideo.feature.overlays.GpxTimeSyncEngine?,
+    private val totalDurationMs: Long,
+    private val activityTitle: String = ""
+) : BitmapOverlay() {
+
+    // Reuse bitmap to avoid GC pressure during encoding
+    private var cachedBitmap: Bitmap? = null
+
+    override fun getBitmap(presentationTimeUs: Long): Bitmap {
+        val timeMs = presentationTimeUs / 1000L
+        val progress = if (totalDurationMs > 0) (timeMs.toFloat() / totalDurationMs).coerceIn(0f, 1f) else 0f
+        val point = syncEngine?.getPointAtVideoTime(timeMs)
+
+        val frameData = StoryTemplateRenderer.FrameData(
+            distance = point?.elapsedDistance ?: 0.0,
+            elevation = point?.elevation ?: 0.0,
+            speed = point?.speed ?: 0.0,
+            heartRate = point?.heartRate,
+            progress = progress
+        )
+
+        return StoryTemplateRenderer.render(
+            template = template,
+            width = width,
+            height = height,
+            gpxData = gpxData,
+            gpxStats = gpxStats,
+            frameData = frameData,
+            activityTitle = activityTitle
+        )
+    }
+
+    override fun getOverlaySettings(presentationTimeUs: Long): OverlaySettings {
+        return OverlaySettings.Builder().build()
     }
 }

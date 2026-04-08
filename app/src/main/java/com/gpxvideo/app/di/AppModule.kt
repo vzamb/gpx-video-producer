@@ -24,6 +24,25 @@ object AppModule {
         }
     }
 
+    private val MIGRATION_2_3 = object : Migration(2, 3) {
+        override fun migrate(database: SupportSQLiteDatabase) {
+            database.execSQL(
+                "ALTER TABLE projects ADD COLUMN story_mode TEXT NOT NULL DEFAULT 'HYPER_LAPSE'"
+            )
+            database.execSQL(
+                "ALTER TABLE projects ADD COLUMN story_template TEXT NOT NULL DEFAULT 'CINEMATIC'"
+            )
+        }
+    }
+
+    private val MIGRATION_3_4 = object : Migration(3, 4) {
+        override fun migrate(database: SupportSQLiteDatabase) {
+            database.execSQL(
+                "ALTER TABLE projects ADD COLUMN activity_title TEXT NOT NULL DEFAULT ''"
+            )
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): AppDatabase {
@@ -32,7 +51,7 @@ object AppModule {
             AppDatabase::class.java,
             "gpx_video_producer.db"
         )
-            .addMigrations(MIGRATION_1_2)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
             .build()
     }
 }
