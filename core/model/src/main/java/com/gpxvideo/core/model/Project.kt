@@ -71,17 +71,36 @@ enum class AudioCodec(val displayName: String) {
 
 /** Synchronization approach for GPX ↔ video alignment. */
 enum class StoryMode(val displayName: String, val description: String) {
-    /** Mode A: Match video Exif timestamps with GPX real-world timestamps. */
-    DOCUMENTARY(
-        "Real-Time Sync",
-        "Telemetry matches the exact moment each clip was recorded"
+    /** Static: show final totals — no animation, all stats at their end value. */
+    STATIC(
+        "Static",
+        "Show final activity totals"
     ),
-    /** Mode B: Map entire GPX track proportionally across total video duration. */
-    HYPER_LAPSE(
-        "Journey Summary",
-        "Telemetry spans the full activity across your video"
+    /** Fast Forward: proportionally map entire GPX across video duration (animated). */
+    FAST_FORWARD(
+        "Fast Forward",
+        "Animate the full activity across the video"
+    ),
+    /** Live Sync: match video timestamps to GPX timestamps per clip. */
+    LIVE_SYNC(
+        "Live Sync",
+        "Real-time telemetry synced to each clip"
     )
 }
+
+/**
+ * Per-clip GPX sync point for Live Sync mode.
+ * Maps a video clip to a position on the GPX track.
+ */
+data class ClipSyncPoint(
+    val clipId: java.util.UUID,
+    /** Index into GPX points array, or -1 for auto (timestamp-based). */
+    val gpxPointIndex: Int = -1,
+    /** Distance along the track in meters where this clip starts. */
+    val gpxDistanceMeters: Double = 0.0,
+    /** Whether this clip has been manually synced by the user. */
+    val isSynced: Boolean = false
+)
 
 /** Pre-configured, uneditable aesthetic overlay layouts. */
 enum class StoryTemplate(val displayName: String, val description: String) {
