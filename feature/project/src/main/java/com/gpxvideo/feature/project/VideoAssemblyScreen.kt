@@ -1083,14 +1083,19 @@ private fun FrameTimeline(
     val currentVideoClips by rememberUpdatedState(videoClips)
 
     // Sync playback position → scroll (only when not trimming and user not scrolling)
-    LaunchedEffect(currentPositionMs) {
-        if (!isTrimming && !scrollState.isScrollInProgress) {
-            isAutoScrolling = true
-            val targetPx = timeToScrollPx(currentPositionMs, currentVideoClips, pxPerMs, gapPx)
-                .coerceIn(0, scrollState.maxValue)
-            scrollState.scrollTo(targetPx)
-            isAutoScrolling = false
-        }
+    // Uses snapshotFlow with debounce to avoid reacting to brief position glitches
+    // during media source rebuilds.
+    LaunchedEffect(Unit) {
+        snapshotFlow { currentPositionMs }
+            .collect { posMs ->
+                if (!isTrimming && !scrollState.isScrollInProgress) {
+                    isAutoScrolling = true
+                    val targetPx = timeToScrollPx(posMs, currentVideoClips, pxPerMs, gapPx)
+                        .coerceIn(0, scrollState.maxValue)
+                    scrollState.scrollTo(targetPx)
+                    isAutoScrolling = false
+                }
+            }
     }
 
     // Sync user scroll → seek position (scroll timeline = scrub)

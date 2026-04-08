@@ -105,6 +105,9 @@ class ProjectEditorViewModel @Inject constructor(
             }
         }
         // Auto-load preview when media items change
+        // NOTE: The VideoAssemblyScreen composable also calls setMediaSources with
+        // proper timeline clip info (trim, reorder). This fallback handles initial
+        // load and the Style screen. We use loadPreviewClips which preserves position.
         viewModelScope.launch {
             mediaItemDao.getByProjectId(projectId).collect { items ->
                 loadPreviewClips(items)
