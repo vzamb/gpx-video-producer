@@ -28,6 +28,7 @@ include(":core:model")
 include(":core:database")
 include(":core:common")
 include(":core:ui")
+include(":core:overlay-renderer")
 
 include(":feature:home")
 include(":feature:project")

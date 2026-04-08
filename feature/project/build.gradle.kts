@@ -29,12 +29,16 @@ dependencies {
     implementation(project(":core:database"))
     implementation(project(":core:common"))
     implementation(project(":core:ui"))
+    implementation(project(":core:overlay-renderer"))
     implementation(project(":lib:media-utils"))
     implementation(project(":feature:gpx"))
     implementation(project(":feature:preview"))
     implementation(project(":feature:timeline"))
     implementation(project(":feature:overlays"))
     implementation(project(":lib:gpx-parser"))
+
+    implementation(libs.lottie)
+    implementation(libs.lottie.compose)
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)

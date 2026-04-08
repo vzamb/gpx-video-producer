@@ -4,6 +4,7 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -12,6 +13,7 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -84,9 +86,13 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -100,6 +106,10 @@ import com.gpxvideo.core.model.GpxPoint
 import com.gpxvideo.core.model.SocialAspectRatio
 import com.gpxvideo.core.model.StoryMode
 import com.gpxvideo.core.model.StoryTemplate
+import com.gpxvideo.core.overlayrenderer.LottieOverlayRenderer
+import com.gpxvideo.core.overlayrenderer.LottieTemplateLoader
+import com.gpxvideo.core.overlayrenderer.LoadedTemplate
+import com.gpxvideo.core.overlayrenderer.OverlayFrameData
 import com.gpxvideo.lib.gpxparser.GpxStats
 import com.gpxvideo.lib.gpxparser.GpxStatistics
 import com.gpxvideo.core.ui.theme.AthleticCondensed
@@ -743,6 +753,7 @@ private fun StyleTemplateCard(
         colors = CardDefaults.cardColors(containerColor = CardBg),
         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
     ) {
+        android.util.Log.d("StyleCard", "Composing StyleTemplateCard template=${template.name} isActive=$isActivePage")
         Box(modifier = Modifier.fillMaxSize()) {
             if (isActivePage) {
                 VideoPreview(
@@ -757,12 +768,18 @@ private fun StyleTemplateCard(
                 )
             }
 
-            // Template overlay
-            when (template) {
-                StoryTemplate.CINEMATIC -> CinematicOverlay(gpxData, accentColor, activityTitle, onTitleClick, playbackProgress, liveGpxValues, isAnimated, isPortrait, isLandscape, isRunning)
-                StoryTemplate.HERO -> HeroOverlay(gpxData, accentColor, activityTitle, onTitleClick, playbackProgress, liveGpxValues, isAnimated, isPortrait, isLandscape, isRunning)
-                StoryTemplate.PRO_DASHBOARD -> ProDashboardOverlay(gpxData, accentColor, activityTitle, onTitleClick, playbackProgress, liveGpxValues, isAnimated, isPortrait, isLandscape, isRunning)
-            }
+            // Template overlay — rendered via Lottie
+            LottieOverlayPreview(
+                template = template,
+                aspectRatio = aspectRatio,
+                gpxData = gpxData,
+                accentColor = accentColor,
+                activityTitle = activityTitle,
+                progress = playbackProgress,
+                liveValues = liveGpxValues,
+                isRunning = isRunning,
+                onTitleClick = onTitleClick
+            )
 
             // Play/pause overlay
             if (isActivePage) {
@@ -845,7 +862,91 @@ private fun speedOrPaceLabel(isRunning: Boolean): String = "PACE"
 private fun speedOrPaceValue(metersPerSec: Double, isRunning: Boolean): String = formatPace(metersPerSec)
 private fun speedOrPaceUnit(isRunning: Boolean): String = "min/km"
 
-// ── Cinematic Overlay ────────────────────────────────────────────────────
+// ── Lottie Overlay Preview ────────────────────────────────────────────────
+
+@Composable
+private fun LottieOverlayPreview(
+    template: StoryTemplate,
+    aspectRatio: SocialAspectRatio,
+    gpxData: GpxData?,
+    accentColor: Color,
+    activityTitle: String,
+    progress: Float,
+    liveValues: LiveGpxValues,
+    isRunning: Boolean,
+    onTitleClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val loader = remember { LottieTemplateLoader(context) }
+    val renderer = remember { LottieOverlayRenderer() }
+
+    // Convert Compose Color to ARGB int
+    val accentArgb = remember(accentColor) { accentColor.toArgb() }
+
+    // Use actual output dimensions for template resolution
+    val outputW = aspectRatio.width
+    val outputH = aspectRatio.height
+
+    var loadedTemplate by remember { mutableStateOf<LoadedTemplate?>(null) }
+
+    // Load the Lottie composition using the project aspect ratio
+    LaunchedEffect(template, aspectRatio) {
+        loadedTemplate = loader.load(template.name, outputW, outputH)
+    }
+
+    BoxWithConstraints(modifier = modifier.fillMaxSize().clickable(onClick = onTitleClick)) {
+        val widthPx = with(LocalDensity.current) { maxWidth.toPx().toInt() }
+        val heightPx = with(LocalDensity.current) { maxHeight.toPx().toInt() }
+
+        val tmpl = loadedTemplate
+        if (tmpl != null && widthPx > 0 && heightPx > 0) {
+            val frameData = remember(progress, liveValues) {
+                OverlayFrameData(
+                    distance = liveValues.distance,
+                    elevation = liveValues.elevation,
+                    elevationGain = liveValues.elevation,
+                    speed = liveValues.speed,
+                    pace = speedOrPaceValue(liveValues.speed, isRunning),
+                    heartRate = liveValues.heartRate,
+                    cadence = liveValues.cadence,
+                    power = liveValues.power,
+                    temperature = liveValues.temperature,
+                    grade = liveValues.grade,
+                    elapsedTime = liveValues.elapsedTime,
+                    progress = progress,
+                    latitude = liveValues.latitude,
+                    longitude = liveValues.longitude
+                )
+            }
+
+            val bitmap = remember(tmpl, widthPx, heightPx, frameData, activityTitle) {
+                try {
+                    renderer.render(
+                        composition = tmpl.composition,
+                        jsonString = tmpl.jsonString,
+                        width = widthPx,
+                        height = heightPx,
+                        frameData = frameData,
+                        gpxData = gpxData,
+                        accentColor = accentArgb,
+                        activityTitle = activityTitle
+                    )
+                } catch (_: Exception) {
+                    android.graphics.Bitmap.createBitmap(widthPx, heightPx, android.graphics.Bitmap.Config.ARGB_8888)
+                }
+            }
+
+            Image(
+                bitmap = bitmap.asImageBitmap(),
+                contentDescription = "Overlay",
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+    }
+}
+
+// ── Cinematic Overlay (legacy — kept for reference) ──────────────────────
 
 @Composable
 private fun CinematicOverlay(

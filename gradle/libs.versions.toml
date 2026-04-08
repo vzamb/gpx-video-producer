@@ -27,6 +27,9 @@ media3 = "1.5.1"
 ffmpegKit = "6.0.LTS"
 coil = "3.0.4"
 
+# Lottie
+lottie = "6.6.2"
+
 # Kotlinx
 coroutines = "1.9.0"
 serialization = "1.7.3"
@@ -85,6 +88,10 @@ ffmpeg-kit-full = { group = "com.arthenica", name = "ffmpeg-kit-full", version.r
 
 # Coil
 coil-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref = "coil" }
+
+# Lottie
+lottie = { group = "com.airbnb.android", name = "lottie", version.ref = "lottie" }
+lottie-compose = { group = "com.airbnb.android", name = "lottie-compose", version.ref = "lottie" }
 
 # Kotlinx
 kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }

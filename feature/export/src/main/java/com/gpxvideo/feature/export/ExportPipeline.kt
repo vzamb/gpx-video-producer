@@ -26,6 +26,10 @@ import androidx.media3.transformer.Transformer
 import com.gpxvideo.core.model.ExportFormat
 import com.gpxvideo.core.model.GpxData
 import com.gpxvideo.core.model.OverlayConfig
+import com.gpxvideo.core.overlayrenderer.LottieOverlayRenderer
+import com.gpxvideo.core.overlayrenderer.LottieTemplateLoader
+import com.gpxvideo.core.overlayrenderer.LoadedTemplate
+import com.gpxvideo.core.overlayrenderer.OverlayFrameData
 import com.gpxvideo.lib.ffmpeg.FfmpegResult
 import com.gpxvideo.lib.gpxparser.GpxStats
 import com.google.common.collect.ImmutableList
@@ -236,6 +240,7 @@ class ExportPipeline @Inject constructor(
         if (config.storyTemplate != null) {
             textureOverlays.add(
                 DynamicStoryTemplateOverlay(
+                    context = context,
                     template = config.storyTemplate,
                     width = width,
                     height = height,
@@ -431,11 +436,12 @@ private class CompositeOverlay(
 }
 
 /**
- * A [BitmapOverlay] that renders the story template overlay per-frame with
- * live interpolated GPX data, matching the Screen 2 preview quality.
+ * A [BitmapOverlay] that renders the story template overlay per-frame using
+ * the Lottie-based LottieOverlayRenderer — same renderer as the preview.
  */
 @UnstableApi
 private class DynamicStoryTemplateOverlay(
+    private val context: Context,
     private val template: String,
     private val width: Int,
     private val height: Int,
@@ -443,32 +449,50 @@ private class DynamicStoryTemplateOverlay(
     private val gpxStats: GpxStats?,
     private val syncEngine: com.gpxvideo.feature.overlays.GpxTimeSyncEngine?,
     private val totalDurationMs: Long,
-    private val activityTitle: String = ""
+    private val activityTitle: String = "",
+    private val accentColor: Int = android.graphics.Color.argb(204, 68, 138, 255)
 ) : BitmapOverlay() {
 
-    // Reuse bitmap to avoid GC pressure during encoding
-    private var cachedBitmap: Bitmap? = null
+    private val loader = LottieTemplateLoader(context)
+    private val renderer = LottieOverlayRenderer()
+    private val loadedTemplate: LoadedTemplate? by lazy {
+        loader.loadSync(template, width, height)
+    }
 
     override fun getBitmap(presentationTimeUs: Long): Bitmap {
+        val tmpl = loadedTemplate ?: return Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+
         val timeMs = presentationTimeUs / 1000L
         val progress = if (totalDurationMs > 0) (timeMs.toFloat() / totalDurationMs).coerceIn(0f, 1f) else 0f
         val point = syncEngine?.getPointAtVideoTime(timeMs)
 
-        val frameData = StoryTemplateRenderer.FrameData(
+        val speedMs = point?.speed ?: 0.0
+        val paceStr = if (speedMs > 0.3) {
+            val kmh = speedMs * 3.6
+            val paceMin = (60.0 / kmh).toInt()
+            val paceSec = ((60.0 / kmh - paceMin) * 60).toInt()
+            "%d:%02d".format(paceMin, paceSec)
+        } else "—"
+
+        val frameData = OverlayFrameData(
             distance = point?.elapsedDistance ?: 0.0,
             elevation = point?.elevation ?: 0.0,
-            speed = point?.speed ?: 0.0,
+            elevationGain = point?.elevation ?: 0.0,
+            speed = speedMs,
+            pace = paceStr,
             heartRate = point?.heartRate,
-            progress = progress
+            progress = progress,
+            elapsedTime = timeMs
         )
 
-        return StoryTemplateRenderer.render(
-            template = template,
+        return renderer.render(
+            composition = tmpl.composition,
+            jsonString = tmpl.jsonString,
             width = width,
             height = height,
-            gpxData = gpxData,
-            gpxStats = gpxStats,
             frameData = frameData,
+            gpxData = gpxData,
+            accentColor = accentColor,
             activityTitle = activityTitle
         )
     }
