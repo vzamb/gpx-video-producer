@@ -7,6 +7,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -684,22 +685,27 @@ private fun TemplatePreviewSection(
             beyondViewportPageCount = 0
         ) { page ->
             val isActivePage = pagerState.currentPage == page
-            StyleTemplateCard(
-                template = templates[page],
-                gpxData = uiState.gpxData,
-                aspectRatio = aspectRatio,
-                accentColor = accentColor,
-                activityTitle = activityTitle,
-                onTitleClick = onTitleClick,
-                previewEngine = previewEngine,
-                isActivePage = isActivePage,
-                isPlaying = isPlaying,
-                playbackProgress = playbackProgress,
-                onTogglePlayback = onTogglePlayback,
-                liveGpxValues = liveGpxValues,
-                storyMode = storyMode,
-                isRunning = isRunning
-            )
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                StyleTemplateCard(
+                    template = templates[page],
+                    gpxData = uiState.gpxData,
+                    aspectRatio = aspectRatio,
+                    accentColor = accentColor,
+                    activityTitle = activityTitle,
+                    onTitleClick = onTitleClick,
+                    previewEngine = previewEngine,
+                    isActivePage = isActivePage,
+                    isPlaying = isPlaying,
+                    playbackProgress = playbackProgress,
+                    onTogglePlayback = onTogglePlayback,
+                    liveGpxValues = liveGpxValues,
+                    storyMode = storyMode,
+                    isRunning = isRunning
+                )
+            }
         }
 
         Spacer(Modifier.height(4.dp))
@@ -940,7 +946,8 @@ private fun LottieOverlayPreview(
                         accentColor = accentArgb,
                         activityTitle = activityTitle
                     )
-                } catch (_: Exception) {
+                } catch (e: Exception) {
+                    android.util.Log.e("OverlayPreview", "Render failed for ${template.name} ${aspectRatio}: ${e.message}", e)
                     android.graphics.Bitmap.createBitmap(widthPx, heightPx, android.graphics.Bitmap.Config.ARGB_8888)
                 }
             }
@@ -1711,42 +1718,23 @@ private fun LiveSyncConfigSheet(
                     Text("No GPX data loaded. Import a GPX file first.", color = Color.White.copy(alpha = 0.5f))
                 }
             } else {
-                // Toggle between elevation and map view
-                var showMap by remember { mutableStateOf(false) }
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Align by:", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.5f))
-                    Spacer(Modifier.width(8.dp))
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = if (!showMap) AccentBlue.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.06f),
-                        border = BorderStroke(1.dp, if (!showMap) AccentBlue.copy(alpha = 0.4f) else Color.Transparent),
-                        modifier = Modifier.clickable { showMap = false }
-                    ) {
-                        Text("📊 Elevation", modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                            style = MaterialTheme.typography.labelSmall, color = Color.White)
-                    }
-                    Spacer(Modifier.width(6.dp))
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = if (showMap) AccentBlue.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.06f),
-                        border = BorderStroke(1.dp, if (showMap) AccentBlue.copy(alpha = 0.4f) else Color.Transparent),
-                        modifier = Modifier.clickable { showMap = true }
-                    ) {
-                        Text("🗺 Map", modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                            style = MaterialTheme.typography.labelSmall, color = Color.White)
-                    }
+                // Collect clip fractions for map dots
+                val clipFractions = mediaItems.mapIndexed { index, media ->
+                    val syncPoint = clipSyncPoints[media.id]
+                    val currentDist = syncPoint?.gpxDistanceMeters ?: (totalDistance * index / mediaItems.size.coerceAtLeast(1))
+                    if (totalDistance > 0) (currentDist / totalDistance).toFloat().coerceIn(0f, 1f) else 0f
                 }
 
-                // Reference view
-                if (showMap) {
-                    MiniRouteMap(gpxData = gpxData, accentColor = AccentBlue, progress = 1f, modifier = Modifier.height(80.dp).padding(bottom = 12.dp), isSquare = false)
-                } else {
-                    MiniElevChart(gpxData = gpxData, accentColor = AccentBlue, progress = 1f, modifier = Modifier.padding(bottom = 12.dp))
-                }
+                // Always show the route map at top with numbered clip dots
+                ClipOverviewMap(
+                    gpxData = gpxData,
+                    accentColor = AccentBlue,
+                    clipFractions = clipFractions,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(140.dp)
+                        .padding(bottom = 12.dp)
+                )
 
                 mediaItems.forEachIndexed { index, media ->
                     val clipId = media.id
@@ -1763,7 +1751,6 @@ private fun LiveSyncConfigSheet(
                         distanceFraction = distFraction,
                         totalDistance = totalDistance,
                         gpxData = gpxData,
-                        useMapView = showMap,
                         onDistanceChanged = { newFraction ->
                             val newDist = newFraction * totalDistance
                             val pointIdx = allPoints.indices.minByOrNull { i ->
@@ -1807,7 +1794,6 @@ private fun ClipSyncRow(
     distanceFraction: Float,
     totalDistance: Double,
     gpxData: GpxData?,
-    useMapView: Boolean = false,
     onDistanceChanged: (Float) -> Unit
 ) {
     var sliderValue by remember(distanceFraction) { mutableStateOf(distanceFraction) }
@@ -1906,12 +1892,8 @@ private fun ClipSyncRow(
                         }
                     }
             ) {
-                // Mini background — elevation or map based on toggle
-                if (useMapView) {
-                    MiniRouteMap(gpxData = gpxData, accentColor = AccentBlue, progress = sliderValue, isSquare = false)
-                } else {
-                    MiniElevChart(gpxData = gpxData, accentColor = AccentBlue, progress = sliderValue)
-                }
+                // Mini elevation chart as slider background
+                MiniElevChart(gpxData = gpxData, accentColor = AccentBlue, progress = sliderValue)
 
                 // Pin indicator using fractional width
                 Box(modifier = Modifier.fillMaxSize()) {
@@ -1930,6 +1912,76 @@ private fun ClipSyncRow(
                     }
                 }
             }
+        }
+    }
+}
+
+// ── Clip Overview Map (with numbered clip dots) ─────────────────────────
+
+@Composable
+private fun ClipOverviewMap(
+    gpxData: GpxData?,
+    accentColor: Color,
+    clipFractions: List<Float>,
+    modifier: Modifier = Modifier
+) {
+    val allPoints = gpxData?.tracks?.flatMap { it.segments }?.flatMap { it.points } ?: emptyList()
+    if (allPoints.size < 2) {
+        Box(modifier = modifier.fillMaxWidth().height(80.dp).clip(RoundedCornerShape(8.dp)).background(Color.White.copy(alpha = 0.05f)))
+        return
+    }
+
+    val bounds = gpxData?.bounds ?: return
+    val latRange = (bounds.maxLatitude - bounds.minLatitude).coerceAtLeast(0.0001)
+    val lonRange = (bounds.maxLongitude - bounds.minLongitude).coerceAtLeast(0.0001)
+
+    val sampled = if (allPoints.size > 300) {
+        val step = allPoints.size.toFloat() / 300f
+        (0 until 300).map { i -> allPoints[(i * step).toInt().coerceAtMost(allPoints.lastIndex)] }
+    } else allPoints
+
+    val tealColor = accentColor.copy(alpha = 0.8f)
+
+    Canvas(modifier = modifier.clip(RoundedCornerShape(8.dp))) {
+        val w = size.width
+        val h = size.height
+        val padding = 16f
+
+        drawRect(Color.White.copy(alpha = 0.06f))
+
+        fun projectX(lon: Double) = padding + ((lon - bounds.minLongitude) / lonRange).toFloat() * (w - 2 * padding)
+        fun projectY(lat: Double) = h - padding - ((lat - bounds.minLatitude) / latRange).toFloat() * (h - 2 * padding)
+
+        // Full route
+        val fullPath = Path().apply {
+            sampled.forEachIndexed { i, pt ->
+                val x = projectX(pt.longitude)
+                val y = projectY(pt.latitude)
+                if (i == 0) moveTo(x, y) else lineTo(x, y)
+            }
+        }
+        drawPath(fullPath, Color.White.copy(alpha = 0.2f), style = Stroke(width = 2.5f, cap = StrokeCap.Round))
+        drawPath(fullPath, tealColor, style = Stroke(width = 2f, cap = StrokeCap.Round))
+
+        // Clip position dots with numbers
+        val textPaint = android.graphics.Paint().apply {
+            color = android.graphics.Color.WHITE
+            textSize = 22f
+            typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD)
+            textAlign = android.graphics.Paint.Align.CENTER
+            isAntiAlias = true
+        }
+
+        clipFractions.forEachIndexed { idx, frac ->
+            val ptIdx = (frac * (sampled.size - 1)).toInt().coerceIn(0, sampled.lastIndex)
+            val pt = sampled[ptIdx]
+            val cx = projectX(pt.longitude)
+            val cy = projectY(pt.latitude)
+            val dotRadius = 14f
+
+            drawCircle(Color.White, radius = dotRadius + 2f, center = Offset(cx, cy))
+            drawCircle(tealColor, radius = dotRadius, center = Offset(cx, cy))
+            drawContext.canvas.nativeCanvas.drawText("${idx + 1}", cx, cy + 8f, textPaint)
         }
     }
 }

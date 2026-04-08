@@ -62,10 +62,14 @@ class LottieTemplateLoader(private val context: Context) {
         return try {
             val jsonString = context.assets.open(path).bufferedReader().use { it.readText() }
             val result = LottieCompositionFactory.fromJsonStringSync(jsonString, path)
+            if (result.value == null) {
+                android.util.Log.e("LottieLoader", "Failed to parse $path: ${result.exception?.message}")
+            }
             result.value?.let { comp ->
                 LoadedTemplate(comp, jsonString).also { cache[path] = it }
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            android.util.Log.e("LottieLoader", "Error loading $path: ${e.message}", e)
             null
         }
     }

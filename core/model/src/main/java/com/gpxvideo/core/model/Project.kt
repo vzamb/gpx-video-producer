@@ -118,10 +118,5 @@ enum class StoryTemplate(val displayName: String, val description: String) {
     PRO_DASHBOARD(
         "Pro Dashboard",
         "Full metrics panel with route map"
-    ),
-    /** Futuristic HUD with scan lines, geometric brackets, and prominent title. */
-    FUTURISTIC(
-        "Futuristic",
-        "Sci-fi HUD with title and animated telemetry"
     )
 }
