@@ -242,7 +242,8 @@ class ExportPipeline @Inject constructor(
                     gpxData = config.gpxData,
                     gpxStats = config.gpxStats,
                     syncEngine = config.syncEngine,
-                    totalDurationMs = totalDurationMs
+                    totalDurationMs = totalDurationMs,
+                    activityTitle = config.activityTitle
                 )
             )
         }
@@ -441,7 +442,8 @@ private class DynamicStoryTemplateOverlay(
     private val gpxData: GpxData?,
     private val gpxStats: GpxStats?,
     private val syncEngine: com.gpxvideo.feature.overlays.GpxTimeSyncEngine?,
-    private val totalDurationMs: Long
+    private val totalDurationMs: Long,
+    private val activityTitle: String = ""
 ) : BitmapOverlay() {
 
     // Reuse bitmap to avoid GC pressure during encoding
@@ -466,7 +468,8 @@ private class DynamicStoryTemplateOverlay(
             height = height,
             gpxData = gpxData,
             gpxStats = gpxStats,
-            frameData = frameData
+            frameData = frameData,
+            activityTitle = activityTitle
         )
     }
 

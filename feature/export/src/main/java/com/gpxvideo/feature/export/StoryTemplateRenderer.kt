@@ -38,7 +38,8 @@ object StoryTemplateRenderer {
         height: Int,
         gpxData: GpxData?,
         gpxStats: GpxStats?,
-        frameData: FrameData? = null
+        frameData: FrameData? = null,
+        activityTitle: String = ""
     ): Bitmap {
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
@@ -49,9 +50,9 @@ object StoryTemplateRenderer {
         val dp = width / 360f
 
         when (template) {
-            "CINEMATIC" -> renderCinematic(canvas, width, height, dp, gpxData, gpxStats, frameData, isPortrait, isLandscape)
-            "HERO" -> renderHero(canvas, width, height, dp, gpxData, gpxStats, frameData, isPortrait, isLandscape)
-            "PRO_DASHBOARD" -> renderProDashboard(canvas, width, height, dp, gpxData, gpxStats, frameData, isPortrait, isLandscape)
+            "CINEMATIC" -> renderCinematic(canvas, width, height, dp, gpxData, gpxStats, frameData, isPortrait, isLandscape, activityTitle)
+            "HERO" -> renderHero(canvas, width, height, dp, gpxData, gpxStats, frameData, isPortrait, isLandscape, activityTitle)
+            "PRO_DASHBOARD" -> renderProDashboard(canvas, width, height, dp, gpxData, gpxStats, frameData, isPortrait, isLandscape, activityTitle)
         }
 
         return bitmap
@@ -65,7 +66,8 @@ object StoryTemplateRenderer {
         canvas: Canvas, w: Int, h: Int, dp: Float,
         gpxData: GpxData?, gpxStats: GpxStats?,
         frameData: FrameData?,
-        isPortrait: Boolean, isLandscape: Boolean
+        isPortrait: Boolean, isLandscape: Boolean,
+        activityTitle: String = ""
     ) {
         val isLive = frameData != null
         val condensedBold = Typeface.create("sans-serif-condensed", Typeface.BOLD)
@@ -106,6 +108,16 @@ object StoryTemplateRenderer {
 
             val panelPaint = Paint().apply { color = Color.argb(128, 0, 0, 0) }
             canvas.drawRect(0f, panelTop, w.toFloat(), h.toFloat(), panelPaint)
+
+            // Title at top
+            if (activityTitle.isNotBlank()) {
+                renderTitle(canvas, activityTitle, 12f * dp, 12f * dp + 14f * dp, 14f * dp, dp)
+            }
+
+            // Route map top-right
+            val mapSize = 60f * dp
+            val mapMargin = 12f * dp
+            renderRouteMap(canvas, gpxData, w - mapMargin - mapSize, mapMargin, w - mapMargin, mapMargin + mapSize, dp, progress, accent)
 
             val cLeft = panelPad
             val cRight = w - panelPad
@@ -159,6 +171,17 @@ object StoryTemplateRenderer {
             val panelPaint = Paint().apply { color = Color.argb(128, 0, 0, 0) }
             canvas.drawRect(panelX, 0f, w.toFloat(), h.toFloat(), panelPaint)
 
+            // Title at top-left
+            if (activityTitle.isNotBlank()) {
+                renderTitle(canvas, activityTitle, 12f * dp, 12f * dp + 14f * dp, 14f * dp, dp)
+            }
+
+            // Route map top-left (below title)
+            val mapSize = 50f * dp
+            val mapMargin = 12f * dp
+            val mapTop = if (activityTitle.isNotBlank()) 30f * dp else mapMargin
+            renderRouteMap(canvas, gpxData, mapMargin, mapTop, mapMargin + mapSize, mapTop + mapSize, dp, progress, accent)
+
             val cLeft = panelX + panelPad
             val cRight = w - panelPad
             val cTop = panelPad
@@ -196,7 +219,8 @@ object StoryTemplateRenderer {
         canvas: Canvas, w: Int, h: Int, dp: Float,
         gpxData: GpxData?, gpxStats: GpxStats?,
         frameData: FrameData?,
-        isPortrait: Boolean, isLandscape: Boolean
+        isPortrait: Boolean, isLandscape: Boolean,
+        activityTitle: String = ""
     ) {
         val isLive = frameData != null
         val condensedBold = Typeface.create("sans-serif-condensed", Typeface.BOLD)
@@ -227,6 +251,16 @@ object StoryTemplateRenderer {
             )
         }
         canvas.drawRect(0f, h - scrimH, w.toFloat(), h.toFloat(), gradientPaint)
+
+        // Title at top-left
+        if (activityTitle.isNotBlank()) {
+            renderTitle(canvas, activityTitle, 16f * dp, 16f * dp + 14f * dp, 14f * dp, dp)
+        }
+
+        // Route map top-right (small square)
+        val mapSize = (if (isPortrait) 60f else 50f) * dp
+        val mapMargin = 16f * dp
+        renderRouteMap(canvas, gpxData, w - mapMargin - mapSize, mapMargin, w - mapMargin, mapMargin + mapSize, dp, progress, accent)
 
         val pad = (if (isLandscape) 20f else 14f) * dp
         val cardSpacing = 6f * dp
@@ -278,7 +312,8 @@ object StoryTemplateRenderer {
         canvas: Canvas, w: Int, h: Int, dp: Float,
         gpxData: GpxData?, gpxStats: GpxStats?,
         frameData: FrameData?,
-        isPortrait: Boolean, isLandscape: Boolean
+        isPortrait: Boolean, isLandscape: Boolean,
+        activityTitle: String = ""
     ) {
         val isLive = frameData != null
         val condensedBold = Typeface.create("sans-serif-condensed", Typeface.BOLD)
@@ -305,6 +340,24 @@ object StoryTemplateRenderer {
             else -> 64f * dp
         }
         val centerY = h * 0.42f
+
+        // Title at top center
+        if (activityTitle.isNotBlank()) {
+            val titlePaint = Paint().apply {
+                color = withAlpha(accent, 204)
+                textSize = 10f * dp
+                typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
+                isAntiAlias = true
+                textAlign = Paint.Align.CENTER
+                letterSpacing = 0.35f
+            }
+            canvas.drawText(activityTitle.uppercase(), w / 2f, 20f * dp, titlePaint)
+        }
+
+        // Route map top-right
+        val mapSize = (if (isPortrait) 60f else 50f) * dp
+        val mapMargin = 16f * dp
+        renderRouteMap(canvas, gpxData, w - mapMargin - mapSize, mapMargin, w - mapMargin, mapMargin + mapSize, dp, progress, accent)
 
         // "DISTANCE" label
         val distLabel = Paint().apply {
@@ -497,6 +550,103 @@ object StoryTemplateRenderer {
             canvas.drawCircle(lastX, dotY, 4f * dp, Paint().apply { color = accentColor; isAntiAlias = true })
             canvas.drawCircle(lastX, dotY, 7f * dp, Paint().apply { color = withAlpha(accentColor, 60); isAntiAlias = true })
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // ROUTE MAP — Small square map matching MiniRouteMap composable
+    // ═══════════════════════════════════════════════════════════════════
+
+    private fun renderRouteMap(
+        canvas: Canvas, gpxData: GpxData?,
+        left: Float, top: Float, right: Float, bottom: Float,
+        dp: Float, progress: Float, accentColor: Int
+    ) {
+        val allPoints = gpxData?.tracks?.flatMap { it.segments }?.flatMap { it.points } ?: return
+        if (allPoints.size < 2) return
+        val bounds = gpxData.bounds ?: return
+
+        val latRange = (bounds.maxLatitude - bounds.minLatitude).coerceAtLeast(0.0001)
+        val lonRange = (bounds.maxLongitude - bounds.minLongitude).coerceAtLeast(0.0001)
+
+        val w = right - left
+        val h = bottom - top
+        val pad = 4f
+
+        // Background with rounded rect
+        val bgRect = RectF(left, top, right, bottom)
+        val cornerR = 8f * dp
+        canvas.drawRoundRect(bgRect, cornerR, cornerR, Paint().apply {
+            color = Color.argb(40, 0, 0, 0); isAntiAlias = true
+        })
+        canvas.drawRoundRect(bgRect, cornerR, cornerR, Paint().apply {
+            color = Color.argb(30, 255, 255, 255)
+            style = Paint.Style.STROKE; strokeWidth = 1f; isAntiAlias = true
+        })
+
+        // Sample points
+        val sampled = if (allPoints.size > 200) {
+            val step = allPoints.size.toFloat() / 200f
+            (0 until 200).map { i -> allPoints[(i * step).toInt().coerceAtMost(allPoints.lastIndex)] }
+        } else allPoints
+
+        fun projectX(lon: Double) = left + pad + ((lon - bounds.minLongitude) / lonRange).toFloat() * (w - 2 * pad)
+        fun projectY(lat: Double) = bottom - pad - ((lat - bounds.minLatitude) / latRange).toFloat() * (h - 2 * pad)
+
+        // Full route (dimmed)
+        val fullPath = Path().apply {
+            sampled.forEachIndexed { i, pt ->
+                val x = projectX(pt.longitude)
+                val y = projectY(pt.latitude)
+                if (i == 0) moveTo(x, y) else lineTo(x, y)
+            }
+        }
+        canvas.drawPath(fullPath, Paint().apply {
+            color = Color.argb(40, 255, 255, 255)
+            style = Paint.Style.STROKE; strokeWidth = 1.5f; isAntiAlias = true
+            strokeCap = Paint.Cap.ROUND
+        })
+
+        // Progress portion
+        val progressIdx = (progress * (sampled.size - 1)).toInt().coerceIn(0, sampled.lastIndex)
+        if (progressIdx > 0) {
+            val progressPath = Path().apply {
+                for (i in 0..progressIdx) {
+                    val x = projectX(sampled[i].longitude)
+                    val y = projectY(sampled[i].latitude)
+                    if (i == 0) moveTo(x, y) else lineTo(x, y)
+                }
+            }
+            canvas.drawPath(progressPath, Paint().apply {
+                color = accentColor
+                style = Paint.Style.STROKE; strokeWidth = 2f; isAntiAlias = true
+                strokeCap = Paint.Cap.ROUND
+            })
+
+            // Current position dot
+            val pt = sampled[progressIdx]
+            val cx = projectX(pt.longitude)
+            val cy = projectY(pt.latitude)
+            canvas.drawCircle(cx, cy, 4f, Paint().apply { color = Color.WHITE; isAntiAlias = true })
+            canvas.drawCircle(cx, cy, 3f, Paint().apply { color = accentColor; isAntiAlias = true })
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // TITLE RENDERING
+    // ═══════════════════════════════════════════════════════════════════
+
+    private fun renderTitle(
+        canvas: Canvas, title: String,
+        x: Float, y: Float, size: Float, dp: Float
+    ) {
+        val shadowPaint = Paint().apply {
+            color = Color.WHITE
+            textSize = size
+            typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            isAntiAlias = true
+            setShadowLayer(4f * dp, 1f, 1f, Color.argb(160, 0, 0, 0))
+        }
+        canvas.drawText(title, x, y, shadowPaint)
     }
 
     private fun formatDuration(ms: Long): String {

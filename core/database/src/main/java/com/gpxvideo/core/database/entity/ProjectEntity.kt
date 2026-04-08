@@ -37,5 +37,7 @@ data class ProjectEntity(
     @ColumnInfo(name = "story_mode", defaultValue = "HYPER_LAPSE")
     val storyMode: String = "HYPER_LAPSE",
     @ColumnInfo(name = "story_template", defaultValue = "CINEMATIC")
-    val storyTemplate: String = "CINEMATIC"
+    val storyTemplate: String = "CINEMATIC",
+    @ColumnInfo(name = "activity_title", defaultValue = "")
+    val activityTitle: String = ""
 )

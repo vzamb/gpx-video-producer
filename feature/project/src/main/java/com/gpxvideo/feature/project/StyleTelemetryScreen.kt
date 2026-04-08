@@ -888,6 +888,19 @@ private fun CinematicOverlay(
             )
         }
 
+        // Route map — top-right corner (square)
+        if (gpxData != null) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(12.dp)
+                    .size(if (isPortrait) 60.dp else 50.dp)
+            ) {
+                MiniRouteMap(gpxData = gpxData, accentColor = accentColor, progress = if (isAnimated) progress else 1f,
+                    modifier = Modifier.fillMaxSize(), isSquare = true)
+            }
+        }
+
         Column(modifier = Modifier.align(Alignment.BottomStart).padding(if (isLandscape) 20.dp else 14.dp).padding(bottom = 4.dp)) {
             GlassCard(modifier = if (isLandscape) Modifier.width(160.dp) else Modifier) {
                 Column {
@@ -927,8 +940,6 @@ private fun CinematicOverlay(
             }
             Spacer(Modifier.height(4.dp))
             MiniElevChart(gpxData = gpxData, accentColor = accentColor, progress = if (isAnimated) progress else 1f)
-            Spacer(Modifier.height(2.dp))
-            MiniRouteMap(gpxData = gpxData, accentColor = accentColor, progress = if (isAnimated) progress else 1f)
         }
     }
 }
@@ -977,6 +988,19 @@ private fun HeroOverlay(
             )
         }
 
+        // Route map — top-right corner (square)
+        if (gpxData != null) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(12.dp)
+                    .size(if (isPortrait) 60.dp else 50.dp)
+            ) {
+                MiniRouteMap(gpxData = gpxData, accentColor = accentColor, progress = if (isAnimated) progress else 1f,
+                    modifier = Modifier.fillMaxSize(), isSquare = true)
+            }
+        }
+
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text("DISTANCE", style = AthleticType.metricLabel, color = Color.White.copy(alpha = 0.5f), letterSpacing = 3.sp, fontSize = 10.sp)
             Text(dist, fontSize = heroFontSize, fontFamily = AthleticCondensed, fontWeight = FontWeight.Black, color = Color.White)
@@ -1011,12 +1035,6 @@ private fun HeroOverlay(
 
         Column(modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp)) {
             MiniElevChart(
-                gpxData = gpxData,
-                accentColor = accentColor,
-                progress = if (isAnimated) progress else 1f
-            )
-            Spacer(Modifier.height(2.dp))
-            MiniRouteMap(
                 gpxData = gpxData,
                 accentColor = accentColor,
                 progress = if (isAnimated) progress else 1f
@@ -1066,6 +1084,18 @@ private fun ProDashboardOverlay(
                         color = if (activityTitle.isNotBlank()) Color.White.copy(alpha = 0.9f) else Color.White.copy(alpha = 0.3f)
                     )
                 }
+                // Route map — top-right corner
+                if (gpxData != null) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(12.dp)
+                            .size(60.dp)
+                    ) {
+                        MiniRouteMap(gpxData = gpxData, accentColor = accentColor, progress = if (isAnimated) progress else 1f,
+                            modifier = Modifier.fillMaxSize(), isSquare = true)
+                    }
+                }
             }
             Box(
                 modifier = Modifier
@@ -1094,7 +1124,6 @@ private fun ProDashboardOverlay(
                         }
                     }
                     MiniElevChart(gpxData = gpxData, accentColor = accentColor, progress = if (isAnimated) progress else 1f)
-                    MiniRouteMap(gpxData = gpxData, accentColor = accentColor, progress = if (isAnimated) progress else 1f)
                 }
             }
         }
@@ -1114,13 +1143,20 @@ private fun ProDashboardOverlay(
                         color = if (activityTitle.isNotBlank()) Color.White.copy(alpha = 0.9f) else Color.White.copy(alpha = 0.3f)
                     )
                 }
+                // Route map — top-right of video area
+                if (gpxData != null) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(12.dp)
+                            .size(50.dp)
+                    ) {
+                        MiniRouteMap(gpxData = gpxData, accentColor = accentColor, progress = if (isAnimated) progress else 1f,
+                            modifier = Modifier.fillMaxSize(), isSquare = true)
+                    }
+                }
                 Column(modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp)) {
                     MiniElevChart(
-                        gpxData = gpxData, accentColor = accentColor,
-                        progress = if (isAnimated) progress else 1f
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    MiniRouteMap(
                         gpxData = gpxData, accentColor = accentColor,
                         progress = if (isAnimated) progress else 1f
                     )
@@ -1598,7 +1634,7 @@ private fun LiveSyncConfigSheet(
 
                 // Reference view
                 if (showMap) {
-                    MiniRouteMap(gpxData = gpxData, accentColor = AccentBlue, progress = 1f, modifier = Modifier.height(80.dp).padding(bottom = 12.dp))
+                    MiniRouteMap(gpxData = gpxData, accentColor = AccentBlue, progress = 1f, modifier = Modifier.height(80.dp).padding(bottom = 12.dp), isSquare = false)
                 } else {
                     MiniElevChart(gpxData = gpxData, accentColor = AccentBlue, progress = 1f, modifier = Modifier.padding(bottom = 12.dp))
                 }
@@ -1618,6 +1654,7 @@ private fun LiveSyncConfigSheet(
                         distanceFraction = distFraction,
                         totalDistance = totalDistance,
                         gpxData = gpxData,
+                        useMapView = showMap,
                         onDistanceChanged = { newFraction ->
                             val newDist = newFraction * totalDistance
                             val pointIdx = allPoints.indices.minByOrNull { i ->
@@ -1661,6 +1698,7 @@ private fun ClipSyncRow(
     distanceFraction: Float,
     totalDistance: Double,
     gpxData: GpxData?,
+    useMapView: Boolean = false,
     onDistanceChanged: (Float) -> Unit
 ) {
     var sliderValue by remember(distanceFraction) { mutableStateOf(distanceFraction) }
@@ -1759,8 +1797,12 @@ private fun ClipSyncRow(
                         }
                     }
             ) {
-                // Mini elevation background
-                MiniElevChart(gpxData = gpxData, accentColor = AccentBlue, progress = sliderValue)
+                // Mini background — elevation or map based on toggle
+                if (useMapView) {
+                    MiniRouteMap(gpxData = gpxData, accentColor = AccentBlue, progress = sliderValue, isSquare = false)
+                } else {
+                    MiniElevChart(gpxData = gpxData, accentColor = AccentBlue, progress = sliderValue)
+                }
 
                 // Pin indicator using fractional width
                 Box(modifier = Modifier.fillMaxSize()) {
@@ -1869,7 +1911,8 @@ private fun MiniRouteMap(
     gpxData: GpxData?,
     accentColor: Color,
     progress: Float,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isSquare: Boolean = false
 ) {
     val allPoints = gpxData?.tracks?.flatMap { it.segments }?.flatMap { it.points } ?: emptyList()
     if (allPoints.size < 2) {
@@ -1894,13 +1937,19 @@ private fun MiniRouteMap(
     } else allPoints
 
     val tealColor = accentColor.copy(alpha = 0.8f)
+    val cornerRadius = if (isSquare) 8.dp else 4.dp
+    val canvasModifier = if (isSquare) {
+        modifier.clip(RoundedCornerShape(cornerRadius))
+    } else {
+        modifier.fillMaxWidth().height(24.dp).clip(RoundedCornerShape(cornerRadius))
+    }
 
-    Canvas(modifier = modifier.fillMaxWidth().height(24.dp).clip(RoundedCornerShape(4.dp))) {
+    Canvas(modifier = canvasModifier) {
         val w = size.width
         val h = size.height
-        val padding = 2f
+        val padding = if (isSquare) 6f else 2f
 
-        drawRect(Color.White.copy(alpha = 0.05f))
+        drawRect(Color.White.copy(alpha = if (isSquare) 0.08f else 0.05f))
 
         fun projectX(lon: Double) = padding + ((lon - bounds.minLongitude) / lonRange).toFloat() * (w - 2 * padding)
         fun projectY(lat: Double) = h - padding - ((lat - bounds.minLatitude) / latRange).toFloat() * (h - 2 * padding)
@@ -1913,7 +1962,7 @@ private fun MiniRouteMap(
                 if (i == 0) moveTo(x, y) else lineTo(x, y)
             }
         }
-        drawPath(fullPath, Color.White.copy(alpha = 0.15f), style = Stroke(width = 1.5f, cap = StrokeCap.Round))
+        drawPath(fullPath, Color.White.copy(alpha = 0.15f), style = Stroke(width = if (isSquare) 2f else 1.5f, cap = StrokeCap.Round))
 
         // Draw progress portion
         val progressIdx = ((animatedProgress * (sampled.size - 1)).toInt()).coerceIn(0, sampled.lastIndex)
@@ -1925,14 +1974,15 @@ private fun MiniRouteMap(
                     if (i == 0) moveTo(x, y) else lineTo(x, y)
                 }
             }
-            drawPath(progressPath, tealColor, style = Stroke(width = 2f, cap = StrokeCap.Round))
+            drawPath(progressPath, tealColor, style = Stroke(width = if (isSquare) 2.5f else 2f, cap = StrokeCap.Round))
         }
 
         // Current position dot
         if (animatedProgress > 0.01f) {
             val pt = sampled[progressIdx]
-            drawCircle(Color.White, radius = 4f, center = Offset(projectX(pt.longitude), projectY(pt.latitude)))
-            drawCircle(tealColor, radius = 3f, center = Offset(projectX(pt.longitude), projectY(pt.latitude)))
+            val dotRadius = if (isSquare) 5f else 4f
+            drawCircle(Color.White, radius = dotRadius, center = Offset(projectX(pt.longitude), projectY(pt.latitude)))
+            drawCircle(tealColor, radius = dotRadius - 1f, center = Offset(projectX(pt.longitude), projectY(pt.latitude)))
         }
     }
 }

@@ -39,4 +39,7 @@ interface ProjectDao {
 
     @Query("UPDATE projects SET story_template = :storyTemplate WHERE id = :id")
     suspend fun updateStoryTemplate(id: UUID, storyTemplate: String)
+
+    @Query("UPDATE projects SET activity_title = :title WHERE id = :id")
+    suspend fun updateActivityTitle(id: UUID, title: String)
 }

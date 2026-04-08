@@ -361,7 +361,8 @@ class ExportViewModel @Inject constructor(
             syncEngine = syncEngine,
             projectWidth = settings.aspectRatio.width,
             projectHeight = settings.aspectRatio.height,
-            storyTemplate = project.storyTemplate
+            storyTemplate = project.storyTemplate,
+            activityTitle = project.activityTitle
         )
     }
 }

@@ -105,6 +105,7 @@ class ProjectEditorViewModel @Inject constructor(
                     r.width == it.resolutionWidth && r.height == it.resolutionHeight
                 } ?: SocialAspectRatio.PORTRAIT_9_16
                 _selectedAspectRatio.value = savedRatio
+                _activityTitle.value = it.activityTitle
             }
         }
         // Watch GPX files reactively so data appears as soon as a file is imported
@@ -473,6 +474,9 @@ class ProjectEditorViewModel @Inject constructor(
 
     fun setActivityTitle(title: String) {
         _activityTitle.value = title
+        viewModelScope.launch(Dispatchers.IO) {
+            projectDao.updateActivityTitle(projectId, title)
+        }
     }
 
     fun setClipSyncPoint(clipId: UUID, syncPoint: ClipSyncPoint) {
