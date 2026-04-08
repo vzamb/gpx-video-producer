@@ -351,16 +351,8 @@ private fun TimelineAssemblyContent(
     val mediaMap = remember(uiState.mediaItems) { uiState.mediaItems.associateBy { it.id } }
 
     // Auto-select the clip under the playhead during playback
-    val clipUnderPlayhead = remember(currentPositionMs, videoClips) {
-        if (videoClips.isEmpty()) null
-        else videoClips.find { currentPositionMs >= it.startTimeMs && currentPositionMs < it.endTimeMs }
-            ?: videoClips.lastOrNull { currentPositionMs >= it.startTimeMs }
-    }
-    LaunchedEffect(clipUnderPlayhead?.id, isPlaying) {
-        if (isPlaying && clipUnderPlayhead != null && clipUnderPlayhead.id != timelineState.selectedClipId) {
-            timelineViewModel.selectClip(clipUnderPlayhead.id)
-        }
-    }
+    // clipUnderPlayhead kept for potential future use (e.g., auto-applying transforms)
+    // but does NOT auto-select — user must tap clips to select them.
 
     Scaffold(
         containerColor = DarkBg,
@@ -1015,8 +1007,8 @@ private fun scrollPxToTime(
     for ((i, clip) in clips.withIndex()) {
         val clipWidthPx = (clip.endTimeMs - clip.startTimeMs) * pxPerMs
         if (scrollPx <= accumulated + clipWidthPx) {
-            return clip.startTimeMs + ((scrollPx - accumulated) / pxPerMs).toLong()
-                .coerceAtLeast(clip.startTimeMs)
+            val offset = ((scrollPx - accumulated) / pxPerMs).toLong().coerceAtLeast(0L)
+            return clip.startTimeMs + offset
         }
         accumulated += clipWidthPx
         if (i < clips.size - 1) {

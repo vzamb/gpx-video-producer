@@ -107,21 +107,16 @@ class PreviewEngine @Inject constructor(
 
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     if (isRebuilding) return // ignore stale events during rebuild
+                    val timeSinceSeek = System.nanoTime() - lastSeekTimeNanos
                     if (playbackState == Player.STATE_READY) {
                         _duration.value = clipRanges.lastOrNull()?.timelineEndMs ?: 0L
-                        // Only update position from player if no recent explicit seek
-                        // (seeks set position directly; STATE_READY can override with stale value)
-                        val timeSinceSeek = System.nanoTime() - lastSeekTimeNanos
-                        if (timeSinceSeek > 500_000_000L) { // 500ms grace period
+                        if (timeSinceSeek > 500_000_000L) {
                             _currentPositionMs.value = currentTimelinePosition(player)
                         }
                         updateActiveDisplayTransform(player.currentMediaItemIndex)
                     }
                     if (playbackState == Player.STATE_ENDED) {
                         _isPlaying.value = false
-                        // Only snap to end if there was no recent explicit seek
-                        // (seekTo calls prepare() which may briefly re-enter ENDED)
-                        val timeSinceSeek = System.nanoTime() - lastSeekTimeNanos
                         if (timeSinceSeek > 500_000_000L) {
                             _currentPositionMs.value = clipRanges.lastOrNull()?.timelineEndMs ?: 0L
                         }
