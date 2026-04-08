@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -95,13 +96,15 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.gpxvideo.core.model.ClipSyncPoint
 import com.gpxvideo.core.model.GpxData
+import com.gpxvideo.core.model.GpxPoint
 import com.gpxvideo.core.model.SocialAspectRatio
 import com.gpxvideo.core.model.StoryMode
 import com.gpxvideo.core.model.StoryTemplate
+import com.gpxvideo.lib.gpxparser.GpxStats
+import com.gpxvideo.lib.gpxparser.GpxStatistics
 import com.gpxvideo.core.ui.theme.AthleticCondensed
 import com.gpxvideo.core.ui.theme.AthleticType
 import com.gpxvideo.feature.preview.VideoPreview
-import com.gpxvideo.lib.gpxparser.GpxStats
 import java.util.UUID
 
 // ── Theme constants ──────────────────────────────────────────────────────
@@ -144,9 +147,18 @@ fun StyleTelemetryScreen(
     val isRunning = sportType.uppercase().let { it == "RUNNING" || it == "TRAIL_RUNNING" || it == "HIKING" }
 
     // Live GPX interpolation
-    val liveGpxValues by remember(uiState.gpxData, playbackProgress, uiState.storyMode) {
+    val liveGpxValues by remember(uiState.gpxData, playbackProgress, uiState.storyMode, uiState.gpxStats, uiState.clipSyncPoints, currentPositionMs) {
         derivedStateOf {
-            interpolateGpxAtProgress(uiState.gpxData, playbackProgress, uiState.storyMode)
+            interpolateGpxAtProgress(
+                gpxData = uiState.gpxData,
+                gpxStats = uiState.gpxStats,
+                progress = playbackProgress,
+                storyMode = uiState.storyMode,
+                clipSyncPoints = uiState.clipSyncPoints,
+                mediaItems = uiState.mediaItems.filter { it.type == "VIDEO" },
+                currentPositionMs = currentPositionMs,
+                totalDurationMs = videoDuration
+            )
         }
     }
 
@@ -288,44 +300,144 @@ data class LiveGpxValues(
     val power: Int? = null,
     val temperature: Double? = null,
     val grade: Double = 0.0,
-    val elapsedTime: Long = 0L
+    val elapsedTime: Long = 0L,
+    val gpxTimestamp: java.time.Instant? = null,
+    val latitude: Double = 0.0,
+    val longitude: Double = 0.0
 )
 
 private fun interpolateGpxAtProgress(
     gpxData: GpxData?,
+    gpxStats: GpxStats?,
     progress: Float,
-    storyMode: String
+    storyMode: String,
+    clipSyncPoints: Map<java.util.UUID, ClipSyncPoint> = emptyMap(),
+    mediaItems: List<com.gpxvideo.core.database.entity.MediaItemEntity> = emptyList(),
+    currentPositionMs: Long = 0L,
+    totalDurationMs: Long = 0L
 ): LiveGpxValues {
     if (gpxData == null) return LiveGpxValues()
     val points = gpxData.tracks.flatMap { it.segments }.flatMap { it.points }
     if (points.isEmpty()) return LiveGpxValues()
 
-    // Static mode: always return final totals
+    // Static mode: use GpxStats (moving-time-based, matches Activity Info)
     if (storyMode == StoryMode.STATIC.name) {
-        val avgSpeed = if (gpxData.totalDuration.seconds > 0)
-            gpxData.totalDistance / gpxData.totalDuration.seconds.toDouble() else 0.0
+        val avgSpeed = gpxStats?.avgSpeed
+            ?: if (gpxData.totalDuration.seconds > 0) gpxData.totalDistance / gpxData.totalDuration.seconds.toDouble() else 0.0
         val avgHr = points.mapNotNull { it.heartRate }.takeIf { it.isNotEmpty() }?.average()?.toInt()
         val avgCad = points.mapNotNull { it.cadence }.takeIf { it.isNotEmpty() }?.average()?.toInt()
         val avgPow = points.mapNotNull { it.power }.takeIf { it.isNotEmpty() }?.average()?.toInt()
         val avgTemp = points.mapNotNull { it.temperature }.takeIf { it.isNotEmpty() }?.average()
         return LiveGpxValues(
             distance = gpxData.totalDistance,
-            elevation = gpxData.totalElevationGain,
+            elevation = gpxStats?.totalElevationGain ?: gpxData.totalElevationGain,
             speed = avgSpeed,
             heartRate = avgHr,
             cadence = avgCad,
             power = avgPow,
             temperature = avgTemp,
             grade = 0.0,
-            elapsedTime = gpxData.totalDuration.toMillis()
+            elapsedTime = (gpxStats?.movingDuration ?: gpxData.totalDuration).toMillis()
         )
     }
 
-    // Fast Forward & Live Sync: progress-based interpolation
-    val idx = ((progress * (points.size - 1)).toInt()).coerceIn(0, points.lastIndex)
+    // For LIVE_SYNC: find the GPX point index based on clip sync mapping
+    val idx: Int
+    if (storyMode == StoryMode.LIVE_SYNC.name && clipSyncPoints.isNotEmpty() && mediaItems.isNotEmpty()) {
+        idx = resolveliveSyncPointIndex(
+            points, clipSyncPoints, mediaItems, currentPositionMs, totalDurationMs, gpxData.totalDistance
+        )
+    } else {
+        // FAST_FORWARD: proportional mapping
+        idx = ((progress * (points.size - 1)).toInt()).coerceIn(0, points.lastIndex)
+    }
+
+    return computeLiveValuesAtIndex(gpxData, points, idx, progress)
+}
+
+/** For Live Sync: resolve which GPX point index corresponds to the current playback position. */
+private fun resolveliveSyncPointIndex(
+    points: List<GpxPoint>,
+    clipSyncPoints: Map<java.util.UUID, ClipSyncPoint>,
+    mediaItems: List<com.gpxvideo.core.database.entity.MediaItemEntity>,
+    currentPositionMs: Long,
+    totalDurationMs: Long,
+    totalDistance: Double
+): Int {
+    if (mediaItems.isEmpty() || points.isEmpty()) return 0
+
+    // Build a timeline of clip start/end positions in ms
+    var cumulativeMs = 0L
+    var activeClipIndex = -1
+    var clipStartMs = 0L
+
+    for (i in mediaItems.indices) {
+        val clipDuration = mediaItems[i].durationMs ?: 0L
+        if (currentPositionMs < cumulativeMs + clipDuration) {
+            activeClipIndex = i
+            clipStartMs = cumulativeMs
+            break
+        }
+        cumulativeMs += clipDuration
+    }
+    if (activeClipIndex < 0) activeClipIndex = mediaItems.lastIndex
+
+    val activeClip = mediaItems[activeClipIndex]
+    val clipDuration = activeClip.durationMs ?: 1L
+    val positionWithinClip = (currentPositionMs - clipStartMs).coerceAtLeast(0L)
+    val clipProgress = (positionWithinClip.toFloat() / clipDuration).coerceIn(0f, 1f)
+
+    val syncPoint = clipSyncPoints[activeClip.id]
+    if (syncPoint == null || !syncPoint.isSynced) {
+        // Not synced — fall back to proportional
+        return ((currentPositionMs.toFloat() / totalDurationMs.coerceAtLeast(1L)) * (points.size - 1)).toInt().coerceIn(0, points.lastIndex)
+    }
+
+    val startIdx = syncPoint.gpxPointIndex.coerceIn(0, points.lastIndex)
+
+    // Determine how many GPX points this clip spans using timestamps
+    val startTime = points[startIdx].time
+    if (startTime != null && clipDuration > 0) {
+        val clipEndTime = startTime.plusMillis(clipDuration)
+        // Find the index closest to clipEndTime
+        var endIdx = startIdx
+        for (i in startIdx until points.size) {
+            if (points[i].time != null && points[i].time!! <= clipEndTime) {
+                endIdx = i
+            } else break
+        }
+        if (endIdx <= startIdx) endIdx = (startIdx + 1).coerceAtMost(points.lastIndex)
+        return (startIdx + (clipProgress * (endIdx - startIdx)).toInt()).coerceIn(0, points.lastIndex)
+    }
+
+    // Fallback: estimate span by distance
+    val clipDistanceMeters = (clipDuration.toDouble() / 1000.0) * (totalDistance / (totalDurationMs.coerceAtLeast(1L).toDouble() / 1000.0))
+    val endDist = syncPoint.gpxDistanceMeters + clipDistanceMeters
+    var endIdx = startIdx
+    for (i in startIdx until points.size) {
+        val pointDist = totalDistance * i / points.size
+        if (pointDist <= endDist) endIdx = i else break
+    }
+    return (startIdx + (clipProgress * (endIdx - startIdx)).toInt()).coerceIn(0, points.lastIndex)
+}
+
+/** Compute all live values at a given GPX point index. */
+private fun computeLiveValuesAtIndex(
+    gpxData: GpxData,
+    points: List<GpxPoint>,
+    idx: Int,
+    progress: Float
+): LiveGpxValues {
     val point = points[idx]
 
-    val distanceSoFar = gpxData.totalDistance * progress
+    // Cumulative distance up to this point
+    var distanceSoFar = 0.0
+    for (i in 1..idx) {
+        distanceSoFar += GpxStatistics.computeDistance(
+            points[i - 1].latitude, points[i - 1].longitude,
+            points[i].latitude, points[i].longitude
+        )
+    }
 
     // Accumulated vertical gain up to this point
     var cumulativeGain = 0.0
@@ -334,22 +446,27 @@ private fun interpolateGpxAtProgress(
         if (diff > 0) cumulativeGain += diff
     }
 
-    // Compute speed from neighboring points (use a window for smoothing)
-    val pointSpeed = point.speed
-    val speed: Double = if (pointSpeed != null && pointSpeed > 0) {
-        pointSpeed
-    } else {
-        // Average speed over a small window of points for smoother values
-        val windowSize = (points.size / 50).coerceIn(3, 15)
-        val windowStart = (idx - windowSize).coerceAtLeast(0)
-        val windowEnd = (idx + windowSize).coerceAtMost(points.lastIndex)
+    // Speed: compute from actual point-to-point distances (not the GPX speed field)
+    val windowSize = (points.size / 50).coerceIn(3, 15)
+    val windowStart = (idx - windowSize).coerceAtLeast(0)
+    val windowEnd = (idx + windowSize).coerceAtMost(points.lastIndex)
+    val speed: Double = run {
         val startTime = points[windowStart].time
         val endTime = points[windowEnd].time
         if (startTime != null && endTime != null) {
             val timeDiffSec = (endTime.toEpochMilli() - startTime.toEpochMilli()) / 1000.0
-            val distFraction = (windowEnd - windowStart).toDouble() / points.size * gpxData.totalDistance
-            if (timeDiffSec > 0) distFraction / timeDiffSec else 0.0
+            if (timeDiffSec > 1.0) {
+                var windowDist = 0.0
+                for (i in windowStart + 1..windowEnd) {
+                    windowDist += GpxStatistics.computeDistance(
+                        points[i - 1].latitude, points[i - 1].longitude,
+                        points[i].latitude, points[i].longitude
+                    )
+                }
+                windowDist / timeDiffSec
+            } else 0.0
         } else {
+            // No time data — use average speed
             if (gpxData.totalDuration.seconds > 0)
                 gpxData.totalDistance / gpxData.totalDuration.seconds.toDouble() else 0.0
         }
@@ -357,14 +474,22 @@ private fun interpolateGpxAtProgress(
 
     // Grade from neighboring points
     val grade = if (idx > 0 && idx < points.lastIndex) {
-        val prevElev = points[idx - 1].elevation ?: 0.0
-        val nextElev = points[idx + 1].elevation ?: 0.0
-        val elevChange = nextElev - prevElev
-        val horizDist = gpxData.totalDistance / points.size * 2
-        if (horizDist > 0) (elevChange / horizDist * 100.0) else 0.0
+        val dist = GpxStatistics.computeDistance(
+            points[idx - 1].latitude, points[idx - 1].longitude,
+            points[idx + 1].latitude, points[idx + 1].longitude
+        )
+        if (dist > 1.0) {
+            val elevChange = (points[idx + 1].elevation ?: 0.0) - (points[idx - 1].elevation ?: 0.0)
+            (elevChange / dist * 100.0)
+        } else 0.0
     } else 0.0
 
-    val elapsedTime = (gpxData.totalDuration.toMillis() * progress).toLong()
+    // Elapsed time from GPX timestamps or proportional fallback
+    val elapsedTime = if (points.first().time != null && point.time != null) {
+        java.time.Duration.between(points.first().time, point.time).toMillis()
+    } else {
+        (gpxData.totalDuration.toMillis() * progress).toLong()
+    }
 
     return LiveGpxValues(
         distance = distanceSoFar,
@@ -375,7 +500,10 @@ private fun interpolateGpxAtProgress(
         power = point.power,
         temperature = point.temperature,
         grade = grade,
-        elapsedTime = elapsedTime
+        elapsedTime = elapsedTime,
+        gpxTimestamp = point.time,
+        latitude = point.latitude,
+        longitude = point.longitude
     )
 }
 
@@ -732,14 +860,9 @@ private fun CinematicOverlay(
     isLandscape: Boolean,
     isRunning: Boolean
 ) {
-    val dist = if (isAnimated) formatMetricDistance(liveValues.distance) else gpxData?.let { formatMetricDistance(it.totalDistance) } ?: "—"
-    val elev = if (isAnimated) "${formatMetricElevation(liveValues.elevation)} m"
-              else gpxData?.let { "${formatMetricElevation(it.totalElevationGain)} m" } ?: "— m"
-    val speedPace = if (isAnimated) speedOrPaceValue(liveValues.speed, isRunning)
-                    else gpxData?.let {
-                        val s = if (it.totalDuration.seconds > 0) it.totalDistance / it.totalDuration.seconds.toDouble() else 0.0
-                        speedOrPaceValue(s, isRunning)
-                    } ?: "—"
+    val dist = formatMetricDistance(liveValues.distance)
+    val elev = "${formatMetricElevation(liveValues.elevation)} m"
+    val speedPace = speedOrPaceValue(liveValues.speed, isRunning)
 
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
@@ -802,8 +925,10 @@ private fun CinematicOverlay(
                     }
                 }
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(4.dp))
             MiniElevChart(gpxData = gpxData, accentColor = accentColor, progress = if (isAnimated) progress else 1f)
+            Spacer(Modifier.height(2.dp))
+            MiniRouteMap(gpxData = gpxData, accentColor = accentColor, progress = if (isAnimated) progress else 1f)
         }
     }
 }
@@ -823,14 +948,10 @@ private fun HeroOverlay(
     isLandscape: Boolean,
     isRunning: Boolean
 ) {
-    val dist = if (isAnimated) formatMetricDistance(liveValues.distance) else gpxData?.let { formatMetricDistance(it.totalDistance) } ?: "—"
-    val elevVal = if (isAnimated) formatMetricElevation(liveValues.elevation) else gpxData?.let { formatMetricElevation(it.totalElevationGain) } ?: "—"
-    val timeVal = if (isAnimated) styleDuration(liveValues.elapsedTime) else gpxData?.let { styleDuration(it.totalDuration.toMillis()) } ?: "—"
-    val paceVal = if (isAnimated) speedOrPaceValue(liveValues.speed, isRunning)
-                    else gpxData?.let {
-                        val s = if (it.totalDuration.seconds > 0) it.totalDistance / it.totalDuration.seconds.toDouble() else 0.0
-                        speedOrPaceValue(s, isRunning)
-                    } ?: "—"
+    val dist = formatMetricDistance(liveValues.distance)
+    val elevVal = formatMetricElevation(liveValues.elevation)
+    val timeVal = styleDuration(liveValues.elapsedTime)
+    val paceVal = speedOrPaceValue(liveValues.speed, isRunning)
 
     val heroFontSize = when {
         isLandscape -> 72.sp
@@ -888,12 +1009,19 @@ private fun HeroOverlay(
             }
         }
 
-        MiniElevChart(
-            gpxData = gpxData,
-            accentColor = accentColor,
-            progress = if (isAnimated) progress else 1f,
-            modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp)
-        )
+        Column(modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp)) {
+            MiniElevChart(
+                gpxData = gpxData,
+                accentColor = accentColor,
+                progress = if (isAnimated) progress else 1f
+            )
+            Spacer(Modifier.height(2.dp))
+            MiniRouteMap(
+                gpxData = gpxData,
+                accentColor = accentColor,
+                progress = if (isAnimated) progress else 1f
+            )
+        }
     }
 }
 
@@ -912,16 +1040,11 @@ private fun ProDashboardOverlay(
     isLandscape: Boolean,
     isRunning: Boolean
 ) {
-    val distStr = if (isAnimated) "%.1f km".format(liveValues.distance / 1000.0) else gpxData?.let { "%.1f km".format(it.totalDistance / 1000.0) } ?: "—"
-    val elevStr = if (isAnimated) "${formatMetricElevation(liveValues.elevation)} m" else gpxData?.let { "${formatMetricElevation(it.totalElevationGain)} m" } ?: "—"
-    val paceStr = "PACE: " + (if (isAnimated) speedOrPaceValue(liveValues.speed, isRunning) + " " + speedOrPaceUnit(isRunning) else gpxData?.let {
-        val s = if (it.totalDuration.seconds > 0) it.totalDistance / it.totalDuration.seconds.toDouble() else 0.0
-        speedOrPaceValue(s, isRunning) + " " + speedOrPaceUnit(isRunning)
-    } ?: "—")
-    val hrStr = if (isAnimated) (liveValues.heartRate?.let { "$it bpm" } ?: "—") else
-        gpxData?.tracks?.flatMap { it.segments }?.flatMap { it.points }?.mapNotNull { it.heartRate }
-            ?.takeIf { it.isNotEmpty() }?.let { "%.0f bpm".format(it.average()) } ?: "—"
-    val timeStr = if (isAnimated) styleDuration(liveValues.elapsedTime) else gpxData?.let { styleDuration(it.totalDuration.toMillis()) } ?: "—"
+    val distStr = "%.1f km".format(liveValues.distance / 1000.0)
+    val elevStr = "${formatMetricElevation(liveValues.elevation)} m"
+    val paceStr = speedOrPaceValue(liveValues.speed, isRunning) + " " + speedOrPaceUnit(isRunning)
+    val hrStr = liveValues.heartRate?.let { "$it bpm" } ?: "—"
+    val timeStr = styleDuration(liveValues.elapsedTime)
     val gradeStr = if (isAnimated) formatGrade(liveValues.grade) else "—"
     val tempStr = if (isAnimated) formatTemp(liveValues.temperature) else
         gpxData?.tracks?.flatMap { it.segments }?.flatMap { it.points }?.mapNotNull { it.temperature }
@@ -957,7 +1080,7 @@ private fun ProDashboardOverlay(
                         DashMetric("GAIN", elevStr, Color(0xFF66BB6A), Modifier.weight(1f))
                     }
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        DashMetric("PACE", paceStr.substringAfter(": "), Color(0xFFFFAB40), Modifier.weight(1f))
+                        DashMetric("PACE", paceStr, Color(0xFFFFAB40), Modifier.weight(1f))
                         DashMetric("HEART RATE", hrStr, Color(0xFFEF5350), Modifier.weight(1f))
                     }
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -971,6 +1094,7 @@ private fun ProDashboardOverlay(
                         }
                     }
                     MiniElevChart(gpxData = gpxData, accentColor = accentColor, progress = if (isAnimated) progress else 1f)
+                    MiniRouteMap(gpxData = gpxData, accentColor = accentColor, progress = if (isAnimated) progress else 1f)
                 }
             }
         }
@@ -990,11 +1114,17 @@ private fun ProDashboardOverlay(
                         color = if (activityTitle.isNotBlank()) Color.White.copy(alpha = 0.9f) else Color.White.copy(alpha = 0.3f)
                     )
                 }
-                MiniElevChart(
-                    gpxData = gpxData, accentColor = accentColor,
-                    progress = if (isAnimated) progress else 1f,
-                    modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp)
-                )
+                Column(modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp)) {
+                    MiniElevChart(
+                        gpxData = gpxData, accentColor = accentColor,
+                        progress = if (isAnimated) progress else 1f
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    MiniRouteMap(
+                        gpxData = gpxData, accentColor = accentColor,
+                        progress = if (isAnimated) progress else 1f
+                    )
+                }
             }
             Box(
                 modifier = Modifier
@@ -1006,7 +1136,7 @@ private fun ProDashboardOverlay(
                 Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceEvenly) {
                     DashMetric("DISTANCE", distStr, accentColor, Modifier.fillMaxWidth())
                     DashMetric("GAIN", elevStr, Color(0xFF66BB6A), Modifier.fillMaxWidth())
-                    DashMetric("PACE", paceStr.substringAfter(": "), Color(0xFFFFAB40), Modifier.fillMaxWidth())
+                    DashMetric("PACE", paceStr, Color(0xFFFFAB40), Modifier.fillMaxWidth())
                     DashMetric("HEART RATE", hrStr, Color(0xFFEF5350), Modifier.fillMaxWidth())
                     DashMetric("TIME", timeStr, Color(0xFF26A69A), Modifier.fillMaxWidth())
                 }
@@ -1436,8 +1566,42 @@ private fun LiveSyncConfigSheet(
                     Text("No GPX data loaded. Import a GPX file first.", color = Color.White.copy(alpha = 0.5f))
                 }
             } else {
-                // Elevation chart reference
-                MiniElevChart(gpxData = gpxData, accentColor = AccentBlue, progress = 1f, modifier = Modifier.padding(bottom = 12.dp))
+                // Toggle between elevation and map view
+                var showMap by remember { mutableStateOf(false) }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Align by:", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.5f))
+                    Spacer(Modifier.width(8.dp))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (!showMap) AccentBlue.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.06f),
+                        border = BorderStroke(1.dp, if (!showMap) AccentBlue.copy(alpha = 0.4f) else Color.Transparent),
+                        modifier = Modifier.clickable { showMap = false }
+                    ) {
+                        Text("📊 Elevation", modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            style = MaterialTheme.typography.labelSmall, color = Color.White)
+                    }
+                    Spacer(Modifier.width(6.dp))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (showMap) AccentBlue.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.06f),
+                        border = BorderStroke(1.dp, if (showMap) AccentBlue.copy(alpha = 0.4f) else Color.Transparent),
+                        modifier = Modifier.clickable { showMap = true }
+                    ) {
+                        Text("🗺 Map", modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            style = MaterialTheme.typography.labelSmall, color = Color.White)
+                    }
+                }
+
+                // Reference view
+                if (showMap) {
+                    MiniRouteMap(gpxData = gpxData, accentColor = AccentBlue, progress = 1f, modifier = Modifier.height(80.dp).padding(bottom = 12.dp))
+                } else {
+                    MiniElevChart(gpxData = gpxData, accentColor = AccentBlue, progress = 1f, modifier = Modifier.padding(bottom = 12.dp))
+                }
 
                 mediaItems.forEachIndexed { index, media ->
                     val clipId = media.id
@@ -1500,6 +1664,7 @@ private fun ClipSyncRow(
     onDistanceChanged: (Float) -> Unit
 ) {
     var sliderValue by remember(distanceFraction) { mutableStateOf(distanceFraction) }
+    val allPoints = gpxData?.tracks?.flatMap { it.segments }?.flatMap { it.points } ?: emptyList()
 
     Surface(
         shape = RoundedCornerShape(12.dp),
@@ -1537,7 +1702,7 @@ private fun ClipSyncRow(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                // Show current position on track
+                // Show current position on track + GPX timestamp
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
                         "%.1f km".format(sliderValue * totalDistance / 1000.0),
@@ -1545,15 +1710,27 @@ private fun ClipSyncRow(
                         fontWeight = FontWeight.Bold,
                         color = if (isSynced) AccentBlue else Color.White.copy(alpha = 0.5f)
                     )
-                    // Elevation at this point
-                    val elevations = gpxData?.tracks?.flatMap { it.segments }?.flatMap { it.points }?.mapNotNull { it.elevation }
-                    if (elevations != null && elevations.isNotEmpty()) {
-                        val elevIdx = (sliderValue * (elevations.size - 1)).toInt().coerceIn(0, elevations.lastIndex)
-                        Text(
-                            "%.0f m".format(elevations[elevIdx]),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.3f)
-                        )
+                    if (allPoints.isNotEmpty()) {
+                        val pointIdx = (sliderValue * (allPoints.size - 1)).toInt().coerceIn(0, allPoints.lastIndex)
+                        val pt = allPoints[pointIdx]
+                        // Show GPX timestamp
+                        pt.time?.let { time ->
+                            val formatter = java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss")
+                                .withZone(java.time.ZoneId.systemDefault())
+                            Text(
+                                formatter.format(time),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = AccentBlue.copy(alpha = 0.6f)
+                            )
+                        }
+                        // Show elevation
+                        pt.elevation?.let { elev ->
+                            Text(
+                                "%.0f m".format(elev),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(alpha = 0.3f)
+                            )
+                        }
                     }
                 }
             }
@@ -1585,18 +1762,21 @@ private fun ClipSyncRow(
                 // Mini elevation background
                 MiniElevChart(gpxData = gpxData, accentColor = AccentBlue, progress = sliderValue)
 
-                // Pin indicator
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.CenterStart
-                ) {
+                // Pin indicator using fractional width
+                Box(modifier = Modifier.fillMaxSize()) {
                     Box(
                         modifier = Modifier
-                            .padding(start = (sliderValue * 100).coerceIn(0f, 96f).dp)
-                            .size(width = 3.dp, height = 24.dp)
-                            .clip(RoundedCornerShape(1.5.dp))
-                            .background(Color.White)
-                    )
+                            .fillMaxWidth(fraction = sliderValue.coerceIn(0.01f, 1f))
+                            .fillMaxHeight(),
+                        contentAlignment = Alignment.CenterEnd
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(width = 3.dp, height = 24.dp)
+                                .clip(RoundedCornerShape(1.5.dp))
+                                .background(Color.White)
+                        )
+                    }
                 }
             }
         }
@@ -1678,6 +1858,81 @@ private fun MiniElevChart(
     } else {
         Box(modifier = modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(Color.White.copy(alpha = 0.1f))) {
             Box(modifier = Modifier.fillMaxWidth(animatedProgress).height(4.dp).clip(RoundedCornerShape(2.dp)).background(accentColor.copy(alpha = 0.6f)))
+        }
+    }
+}
+
+// ── Mini Route Map ───────────────────────────────────────────────────────
+
+@Composable
+private fun MiniRouteMap(
+    gpxData: GpxData?,
+    accentColor: Color,
+    progress: Float,
+    modifier: Modifier = Modifier
+) {
+    val allPoints = gpxData?.tracks?.flatMap { it.segments }?.flatMap { it.points } ?: emptyList()
+    if (allPoints.size < 2) {
+        Box(modifier = modifier.fillMaxWidth().height(24.dp).clip(RoundedCornerShape(4.dp)).background(Color.White.copy(alpha = 0.05f)))
+        return
+    }
+
+    val animatedProgress by animateFloatAsState(
+        targetValue = progress,
+        animationSpec = spring(stiffness = Spring.StiffnessLow),
+        label = "map_progress"
+    )
+
+    val bounds = gpxData?.bounds ?: return
+    val latRange = (bounds.maxLatitude - bounds.minLatitude).coerceAtLeast(0.0001)
+    val lonRange = (bounds.maxLongitude - bounds.minLongitude).coerceAtLeast(0.0001)
+
+    // Sample points for rendering
+    val sampled = if (allPoints.size > 200) {
+        val step = allPoints.size.toFloat() / 200f
+        (0 until 200).map { i -> allPoints[(i * step).toInt().coerceAtMost(allPoints.lastIndex)] }
+    } else allPoints
+
+    val tealColor = accentColor.copy(alpha = 0.8f)
+
+    Canvas(modifier = modifier.fillMaxWidth().height(24.dp).clip(RoundedCornerShape(4.dp))) {
+        val w = size.width
+        val h = size.height
+        val padding = 2f
+
+        drawRect(Color.White.copy(alpha = 0.05f))
+
+        fun projectX(lon: Double) = padding + ((lon - bounds.minLongitude) / lonRange).toFloat() * (w - 2 * padding)
+        fun projectY(lat: Double) = h - padding - ((lat - bounds.minLatitude) / latRange).toFloat() * (h - 2 * padding)
+
+        // Draw full route (dimmed)
+        val fullPath = Path().apply {
+            sampled.forEachIndexed { i, pt ->
+                val x = projectX(pt.longitude)
+                val y = projectY(pt.latitude)
+                if (i == 0) moveTo(x, y) else lineTo(x, y)
+            }
+        }
+        drawPath(fullPath, Color.White.copy(alpha = 0.15f), style = Stroke(width = 1.5f, cap = StrokeCap.Round))
+
+        // Draw progress portion
+        val progressIdx = ((animatedProgress * (sampled.size - 1)).toInt()).coerceIn(0, sampled.lastIndex)
+        if (progressIdx > 0) {
+            val progressPath = Path().apply {
+                for (i in 0..progressIdx) {
+                    val x = projectX(sampled[i].longitude)
+                    val y = projectY(sampled[i].latitude)
+                    if (i == 0) moveTo(x, y) else lineTo(x, y)
+                }
+            }
+            drawPath(progressPath, tealColor, style = Stroke(width = 2f, cap = StrokeCap.Round))
+        }
+
+        // Current position dot
+        if (animatedProgress > 0.01f) {
+            val pt = sampled[progressIdx]
+            drawCircle(Color.White, radius = 4f, center = Offset(projectX(pt.longitude), projectY(pt.latitude)))
+            drawCircle(tealColor, radius = 3f, center = Offset(projectX(pt.longitude), projectY(pt.latitude)))
         }
     }
 }
