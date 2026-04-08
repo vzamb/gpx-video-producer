@@ -313,7 +313,8 @@ data class LiveGpxValues(
     val elapsedTime: Long = 0L,
     val gpxTimestamp: java.time.Instant? = null,
     val latitude: Double = 0.0,
-    val longitude: Double = 0.0
+    val longitude: Double = 0.0,
+    val gpxProgress: Float = 0f // Progress along the GPX track (0-1), used for chart/map positioning
 )
 
 private fun interpolateGpxAtProgress(
@@ -347,7 +348,8 @@ private fun interpolateGpxAtProgress(
             power = avgPow,
             temperature = avgTemp,
             grade = 0.0,
-            elapsedTime = (gpxStats?.movingDuration ?: gpxData.totalDuration).toMillis()
+            elapsedTime = (gpxStats?.movingDuration ?: gpxData.totalDuration).toMillis(),
+            gpxProgress = 1f // Static mode shows final totals, full progress
         )
     }
 
@@ -362,7 +364,8 @@ private fun interpolateGpxAtProgress(
         idx = ((progress * (points.size - 1)).toInt()).coerceIn(0, points.lastIndex)
     }
 
-    return computeLiveValuesAtIndex(gpxData, points, idx, progress)
+    val gpxProgress = idx.toFloat() / (points.size - 1).coerceAtLeast(1).toFloat()
+    return computeLiveValuesAtIndex(gpxData, points, idx, gpxProgress)
 }
 
 /** For Live Sync: resolve which GPX point index corresponds to the current playback position. */
@@ -513,7 +516,8 @@ private fun computeLiveValuesAtIndex(
         elapsedTime = elapsedTime,
         gpxTimestamp = point.time,
         latitude = point.latitude,
-        longitude = point.longitude
+        longitude = point.longitude,
+        gpxProgress = progress
     )
 }
 
@@ -748,12 +752,16 @@ private fun StyleTemplateCard(
     val isLandscape = aspectRatio == SocialAspectRatio.LANDSCAPE_16_9
 
     Card(
-        modifier = Modifier.fillMaxWidth().aspectRatio(cardAspectRatio),
+        modifier = if (cardAspectRatio < 1f) {
+            // Portrait ratios (9:16, 4:5): constrain height first so card fits vertically
+            Modifier.aspectRatio(cardAspectRatio, matchHeightConstraintsFirst = true)
+        } else {
+            Modifier.fillMaxWidth().aspectRatio(cardAspectRatio)
+        },
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = CardBg),
         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
     ) {
-        android.util.Log.d("StyleCard", "Composing StyleTemplateCard template=${template.name} isActive=$isActivePage")
         Box(modifier = Modifier.fillMaxSize()) {
             if (isActivePage) {
                 VideoPreview(
@@ -914,13 +922,13 @@ private fun LottieOverlayPreview(
                     temperature = liveValues.temperature,
                     grade = liveValues.grade,
                     elapsedTime = liveValues.elapsedTime,
-                    progress = progress,
+                    progress = liveValues.gpxProgress, // Use GPX track progress for chart/map positioning
                     latitude = liveValues.latitude,
                     longitude = liveValues.longitude
                 )
             }
 
-            val bitmap = remember(tmpl, widthPx, heightPx, frameData, activityTitle) {
+            val bitmap = remember(tmpl, widthPx, heightPx, frameData, activityTitle, accentArgb) {
                 try {
                     renderer.render(
                         composition = tmpl.composition,
