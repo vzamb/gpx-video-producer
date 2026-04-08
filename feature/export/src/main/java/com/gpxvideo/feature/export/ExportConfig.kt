@@ -21,7 +21,8 @@ data class ExportConfig(
     val projectWidth: Int = 1920,
     val projectHeight: Int = 1080,
     val storyTemplate: String? = null,
-    val activityTitle: String = ""
+    val activityTitle: String = "",
+    val storyMode: String = "FAST_FORWARD"
 )
 
 data class ExportClip(

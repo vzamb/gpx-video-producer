@@ -248,7 +248,8 @@ class ExportPipeline @Inject constructor(
                     gpxStats = config.gpxStats,
                     syncEngine = config.syncEngine,
                     totalDurationMs = totalDurationMs,
-                    activityTitle = config.activityTitle
+                    activityTitle = config.activityTitle,
+                    storyMode = config.storyMode
                 )
             )
         }
@@ -450,7 +451,8 @@ private class DynamicStoryTemplateOverlay(
     private val syncEngine: com.gpxvideo.feature.overlays.GpxTimeSyncEngine?,
     private val totalDurationMs: Long,
     private val activityTitle: String = "",
-    private val accentColor: Int = android.graphics.Color.argb(204, 68, 138, 255)
+    private val accentColor: Int = android.graphics.Color.argb(204, 68, 138, 255),
+    private val storyMode: String = "FAST_FORWARD"
 ) : BitmapOverlay() {
 
     private val loader = LottieTemplateLoader(context)
@@ -459,31 +461,23 @@ private class DynamicStoryTemplateOverlay(
         loader.loadSync(template, width, height)
     }
 
+    // Pre-compute GPX point data for fast indexed lookups
+    private val allPoints by lazy {
+        gpxData?.tracks?.flatMap { it.segments }?.flatMap { it.points } ?: emptyList()
+    }
+    private val cumulativeDistances by lazy { computeCumulativeDistances() }
+    private val cumulativeElevGain by lazy { computeCumulativeElevGain() }
+
     override fun getBitmap(presentationTimeUs: Long): Bitmap {
         val tmpl = loadedTemplate ?: return Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
 
         val timeMs = presentationTimeUs / 1000L
         val progress = if (totalDurationMs > 0) (timeMs.toFloat() / totalDurationMs).coerceIn(0f, 1f) else 0f
-        val point = syncEngine?.getPointAtVideoTime(timeMs)
 
-        val speedMs = point?.speed ?: 0.0
-        val paceStr = if (speedMs > 0.3) {
-            val kmh = speedMs * 3.6
-            val paceMin = (60.0 / kmh).toInt()
-            val paceSec = ((60.0 / kmh - paceMin) * 60).toInt()
-            "%d:%02d".format(paceMin, paceSec)
-        } else "—"
-
-        val frameData = OverlayFrameData(
-            distance = point?.elapsedDistance ?: 0.0,
-            elevation = point?.elevation ?: 0.0,
-            elevationGain = point?.elevation ?: 0.0,
-            speed = speedMs,
-            pace = paceStr,
-            heartRate = point?.heartRate,
-            progress = progress,
-            elapsedTime = timeMs
-        )
+        val frameData = when (storyMode) {
+            "STATIC" -> buildStaticFrame(progress)
+            else -> buildAnimatedFrame(progress, timeMs)
+        }
 
         return renderer.render(
             composition = tmpl.composition,
@@ -495,6 +489,117 @@ private class DynamicStoryTemplateOverlay(
             accentColor = accentColor,
             activityTitle = activityTitle
         )
+    }
+
+    private fun buildStaticFrame(progress: Float): OverlayFrameData {
+        val stats = gpxStats
+        val avgSpeed = stats?.avgSpeed
+            ?: if (gpxData != null && gpxData.totalDuration.seconds > 0)
+                gpxData.totalDistance / gpxData.totalDuration.seconds.toDouble() else 0.0
+        val paceStr = formatPace(avgSpeed)
+        return OverlayFrameData(
+            distance = gpxData?.totalDistance ?: 0.0,
+            elevation = stats?.totalElevationGain ?: gpxData?.totalElevationGain ?: 0.0,
+            elevationGain = stats?.totalElevationGain ?: gpxData?.totalElevationGain ?: 0.0,
+            speed = avgSpeed,
+            pace = paceStr,
+            heartRate = allPoints.mapNotNull { it.heartRate }.takeIf { it.isNotEmpty() }?.average()?.toInt(),
+            progress = progress,
+            elapsedTime = (stats?.movingDuration ?: gpxData?.totalDuration)?.toMillis() ?: 0L
+        )
+    }
+
+    private fun buildAnimatedFrame(progress: Float, timeMs: Long): OverlayFrameData {
+        if (allPoints.size < 2) return OverlayFrameData(progress = progress, elapsedTime = timeMs)
+
+        val idx = (progress * (allPoints.size - 1)).toInt().coerceIn(0, allPoints.lastIndex)
+        val point = allPoints[idx]
+
+        val distance = cumulativeDistances.getOrElse(idx) { 0.0 }
+        val elevGain = cumulativeElevGain.getOrElse(idx) { 0.0 }
+
+        // Windowed speed
+        val windowSize = (allPoints.size / 50).coerceIn(3, 15)
+        val ws = (idx - windowSize).coerceAtLeast(0)
+        val we = (idx + windowSize).coerceAtMost(allPoints.lastIndex)
+        val speed = run {
+            val t0 = allPoints[ws].time
+            val t1 = allPoints[we].time
+            if (t0 != null && t1 != null) {
+                val dtSec = (t1.toEpochMilli() - t0.toEpochMilli()) / 1000.0
+                if (dtSec > 1.0) {
+                    val d = (cumulativeDistances.getOrElse(we) { 0.0 }) -
+                            (cumulativeDistances.getOrElse(ws) { 0.0 })
+                    d / dtSec
+                } else 0.0
+            } else {
+                gpxData?.let { if (it.totalDuration.seconds > 0) it.totalDistance / it.totalDuration.seconds.toDouble() else 0.0 } ?: 0.0
+            }
+        }
+
+        val grade = if (idx > 0 && idx < allPoints.lastIndex) {
+            val d = com.gpxvideo.lib.gpxparser.GpxStatistics.computeDistance(
+                allPoints[idx - 1].latitude, allPoints[idx - 1].longitude,
+                allPoints[idx + 1].latitude, allPoints[idx + 1].longitude
+            )
+            if (d > 1.0) ((allPoints[idx + 1].elevation ?: 0.0) - (allPoints[idx - 1].elevation ?: 0.0)) / d * 100.0
+            else 0.0
+        } else 0.0
+
+        val elapsedTime = if (allPoints.first().time != null && point.time != null) {
+            java.time.Duration.between(allPoints.first().time, point.time).toMillis()
+        } else {
+            (gpxData?.totalDuration?.toMillis()?.times(progress))?.toLong() ?: timeMs
+        }
+
+        return OverlayFrameData(
+            distance = distance,
+            elevation = point.elevation ?: 0.0,
+            elevationGain = elevGain,
+            speed = speed,
+            pace = formatPace(speed),
+            heartRate = point.heartRate,
+            cadence = point.cadence,
+            power = point.power,
+            temperature = point.temperature,
+            grade = grade,
+            progress = progress,
+            elapsedTime = elapsedTime,
+            latitude = point.latitude,
+            longitude = point.longitude
+        )
+    }
+
+    private fun formatPace(speedMs: Double): String {
+        if (speedMs < 0.3) return "—"
+        val kmh = speedMs * 3.6
+        val paceMin = (60.0 / kmh).toInt()
+        val paceSec = ((60.0 / kmh - paceMin) * 60).toInt()
+        return "%d:%02d".format(paceMin, paceSec)
+    }
+
+    private fun computeCumulativeDistances(): List<Double> {
+        if (allPoints.size < 2) return if (allPoints.isNotEmpty()) listOf(0.0) else emptyList()
+        val dists = ArrayList<Double>(allPoints.size)
+        dists.add(0.0)
+        for (i in 1 until allPoints.size) {
+            dists.add(dists.last() + com.gpxvideo.lib.gpxparser.GpxStatistics.computeDistance(
+                allPoints[i - 1].latitude, allPoints[i - 1].longitude,
+                allPoints[i].latitude, allPoints[i].longitude
+            ))
+        }
+        return dists
+    }
+
+    private fun computeCumulativeElevGain(): List<Double> {
+        if (allPoints.isEmpty()) return emptyList()
+        val gains = ArrayList<Double>(allPoints.size)
+        gains.add(0.0)
+        for (i in 1 until allPoints.size) {
+            val diff = (allPoints[i].elevation ?: 0.0) - (allPoints[i - 1].elevation ?: 0.0)
+            gains.add(gains.last() + if (diff > 0) diff else 0.0)
+        }
+        return gains
     }
 
     override fun getOverlaySettings(presentationTimeUs: Long): OverlaySettings {

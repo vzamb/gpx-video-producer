@@ -337,7 +337,12 @@ class ExportViewModel @Inject constructor(
         val gpxStats = gpxData?.let { GpxStatistics.computeFullStats(it) }
 
         val syncEngine = gpxData?.let {
-            GpxTimeSyncEngine(it, SyncMode.GPX_TIMESTAMP).apply {
+            val mode = when (project.storyMode) {
+                "FAST_FORWARD" -> SyncMode.CLIP_PROGRESS
+                "LIVE_SYNC" -> SyncMode.CLIP_PROGRESS // fallback until sync points are persisted
+                else -> SyncMode.GPX_TIMESTAMP
+            }
+            GpxTimeSyncEngine(it, mode).apply {
                 precomputeLookupTable()
             }
         }
@@ -362,7 +367,8 @@ class ExportViewModel @Inject constructor(
             projectWidth = settings.aspectRatio.width,
             projectHeight = settings.aspectRatio.height,
             storyTemplate = project.storyTemplate,
-            activityTitle = project.activityTitle
+            activityTitle = project.activityTitle,
+            storyMode = project.storyMode
         )
     }
 }

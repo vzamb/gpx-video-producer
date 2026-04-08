@@ -30,20 +30,19 @@ object RouteMapRenderer {
         val lonRange = (bounds.maxLongitude - bounds.minLongitude).coerceAtLeast(0.0001)
         val w = right - left
         val h = bottom - top
-        val pad = 4f * dp
+        val pad = 8f * dp
 
-        // Background
+        // Background with rounded corners
         val bgRect = RectF(left, top, right, bottom)
         val cornerR = style.cornerRadius
         canvas.drawRoundRect(bgRect, cornerR, cornerR, Paint().apply {
-            color = style.backgroundColor; isAntiAlias = true
+            color = Color.argb(100, 0, 0, 0); isAntiAlias = true
         })
         if (style.borderColor != Color.TRANSPARENT) {
-            val borderPaint = Paint().apply {
+            canvas.drawRoundRect(bgRect, cornerR, cornerR, Paint().apply {
                 color = style.borderColor; setStyle(Paint.Style.STROKE)
                 strokeWidth = style.borderWidth * dp; isAntiAlias = true
-            }
-            canvas.drawRoundRect(bgRect, cornerR, cornerR, borderPaint)
+            })
         }
 
         // Sample points
@@ -55,7 +54,7 @@ object RouteMapRenderer {
         fun projectX(lon: Double) = left + pad + ((lon - bounds.minLongitude) / lonRange).toFloat() * (w - 2 * pad)
         fun projectY(lat: Double) = bottom - pad - ((lat - bounds.minLatitude) / latRange).toFloat() * (h - 2 * pad)
 
-        // Full route (dimmed)
+        // Full route (dimmed but visible)
         val fullPath = Path().apply {
             sampled.forEachIndexed { i, pt ->
                 val x = projectX(pt.longitude)
@@ -64,12 +63,12 @@ object RouteMapRenderer {
             }
         }
         canvas.drawPath(fullPath, Paint().apply {
-            color = Color.argb(40, 255, 255, 255)
-            setStyle(Paint.Style.STROKE); strokeWidth = 1.5f * dp; isAntiAlias = true
-            strokeCap = Paint.Cap.ROUND
+            color = Color.argb(90, 255, 255, 255)
+            setStyle(Paint.Style.STROKE); strokeWidth = 2.5f * dp; isAntiAlias = true
+            strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND
         })
 
-        // Progress portion
+        // Progress portion (bright accent)
         val progressIdx = (progress * (sampled.size - 1)).toInt().coerceIn(0, sampled.lastIndex)
         if (progressIdx > 0) {
             val progressPath = Path().apply {
@@ -81,16 +80,23 @@ object RouteMapRenderer {
             }
             canvas.drawPath(progressPath, Paint().apply {
                 color = accentColor
-                setStyle(Paint.Style.STROKE); strokeWidth = 2f * dp; isAntiAlias = true
-                strokeCap = Paint.Cap.ROUND
+                setStyle(Paint.Style.STROKE); strokeWidth = 3f * dp; isAntiAlias = true
+                strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND
             })
 
-            // Current position dot
+            // Current position dot — outer glow + white ring + accent center
             val pt = sampled[progressIdx]
             val cx = projectX(pt.longitude)
             val cy = projectY(pt.latitude)
-            canvas.drawCircle(cx, cy, 4f * dp, Paint().apply { color = Color.WHITE; isAntiAlias = true })
-            canvas.drawCircle(cx, cy, 3f * dp, Paint().apply { color = accentColor; isAntiAlias = true })
+            canvas.drawCircle(cx, cy, 7f * dp, Paint().apply {
+                color = Color.argb(60, 255, 255, 255); isAntiAlias = true
+            })
+            canvas.drawCircle(cx, cy, 5f * dp, Paint().apply {
+                color = Color.WHITE; isAntiAlias = true
+            })
+            canvas.drawCircle(cx, cy, 3.5f * dp, Paint().apply {
+                color = accentColor; isAntiAlias = true
+            })
         }
     }
 }
