@@ -256,6 +256,11 @@ class PreviewEngine @Inject constructor(
     fun seekTo(positionMs: Long) {
         val player = exoPlayer ?: return
         lastSeekTimeNanos = System.nanoTime()
+        // ExoPlayer ignores seekTo in STATE_ENDED — re-prepare first
+        if (player.playbackState == Player.STATE_ENDED) {
+            player.prepare()
+            player.playWhenReady = false
+        }
         if (clipRanges.isEmpty()) {
             player.seekTo(positionMs)
             _currentPositionMs.value = positionMs

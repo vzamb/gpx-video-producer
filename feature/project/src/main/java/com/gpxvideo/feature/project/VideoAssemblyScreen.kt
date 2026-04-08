@@ -64,8 +64,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -370,9 +368,13 @@ private fun TimelineAssemblyContent(
                 title = uiState.project?.name ?: "New Story",
                 selectedRatio = uiState.selectedAspectRatio,
                 showAspectRatioMenu = showAspectRatioMenu,
+                canUndo = timelineState.canUndo,
+                canRedo = timelineState.canRedo,
                 onToggleAspectRatioMenu = onToggleAspectRatioMenu,
                 onAspectRatioSelected = onAspectRatioSelected,
-                onNavigateBack = onNavigateBack
+                onNavigateBack = onNavigateBack,
+                onUndo = timelineViewModel::undo,
+                onRedo = timelineViewModel::redo
             )
         }
     ) { padding ->
@@ -404,8 +406,6 @@ private fun TimelineAssemblyContent(
                 selectedClip?.let { clip ->
                     ClipActionBar(
                         isMuted = clip.volume == 0f,
-                        canUndo = timelineState.canUndo,
-                        canRedo = timelineState.canRedo,
                         onToggleMute = {
                             timelineViewModel.setClipVolume(
                                 clip.id,
@@ -416,9 +416,7 @@ private fun TimelineAssemblyContent(
                         onDelete = {
                             timelineViewModel.deleteClip(clip.id)
                             timelineViewModel.selectClip(null)
-                        },
-                        onUndo = timelineViewModel::undo,
-                        onRedo = timelineViewModel::redo
+                        }
                     )
                 }
             }
@@ -436,6 +434,16 @@ private fun TimelineAssemblyContent(
                     )
                 }
             }
+
+            // Mini scrubber bar above timeline
+            MiniScrubber(
+                currentPositionMs = currentPositionMs,
+                totalDurationMs = timelineState.totalDurationMs.coerceAtLeast(1L),
+                onSeek = { ms ->
+                    viewModel.seekTo(ms)
+                    timelineViewModel.setPlayheadPosition(ms)
+                }
+            )
 
             // Timeline
             FrameTimeline(
@@ -456,16 +464,6 @@ private fun TimelineAssemblyContent(
                     timelineViewModel.setPlayheadPosition(ms)
                 },
                 onAddClips = onAddClips
-            )
-
-            // Scrubber
-            TimelineScrubber(
-                currentPositionMs = currentPositionMs,
-                totalDurationMs = timelineState.totalDurationMs.coerceAtLeast(1L),
-                onSeek = { ms ->
-                    viewModel.seekTo(ms)
-                    timelineViewModel.setPlayheadPosition(ms)
-                }
             )
 
             // Bottom CTA — fixed below everything
@@ -516,7 +514,7 @@ private fun TimelineAssemblyContent(
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// 3. AssemblyTopBar — simplified (no undo/redo)
+// 3. AssemblyTopBar — with global undo/redo
 // ═════════════════════════════════════════════════════════════════════════════
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -525,9 +523,13 @@ private fun AssemblyTopBar(
     title: String,
     selectedRatio: SocialAspectRatio,
     showAspectRatioMenu: Boolean,
+    canUndo: Boolean,
+    canRedo: Boolean,
     onToggleAspectRatioMenu: () -> Unit,
     onAspectRatioSelected: (SocialAspectRatio) -> Unit,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit
 ) {
     Surface(color = DarkBg, tonalElevation = 0.dp) {
         Row(
@@ -554,6 +556,24 @@ private fun AssemblyTopBar(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+
+            // Undo / Redo
+            IconButton(onClick = onUndo, enabled = canUndo) {
+                Icon(
+                    Icons.AutoMirrored.Filled.Undo,
+                    contentDescription = "Undo",
+                    tint = if (canUndo) Color.White else Color.White.copy(alpha = 0.2f),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            IconButton(onClick = onRedo, enabled = canRedo) {
+                Icon(
+                    Icons.AutoMirrored.Filled.Redo,
+                    contentDescription = "Redo",
+                    tint = if (canRedo) Color.White else Color.White.copy(alpha = 0.2f),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
 
             // Aspect ratio dropdown
             Box {
@@ -907,20 +927,16 @@ private fun WipeTransitionEffect(progress: Float) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// 5. ClipActionBar — mute, duplicate, delete, undo, redo
+// 5. ClipActionBar — mute, duplicate, delete
 // ═════════════════════════════════════════════════════════════════════════════
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ClipActionBar(
     isMuted: Boolean,
-    canUndo: Boolean,
-    canRedo: Boolean,
     onToggleMute: () -> Unit,
     onDuplicate: () -> Unit,
-    onDelete: () -> Unit,
-    onUndo: () -> Unit,
-    onRedo: () -> Unit
+    onDelete: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -946,23 +962,6 @@ private fun ClipActionBar(
             label = "Delete",
             onClick = onDelete,
             tint = Color(0xFFFF5252)
-        )
-
-        Spacer(Modifier.width(4.dp))
-
-        ActionChip(
-            icon = Icons.AutoMirrored.Filled.Undo,
-            label = "Undo",
-            onClick = onUndo,
-            enabled = canUndo,
-            tint = if (canUndo) Color.White else Color.White.copy(alpha = 0.2f)
-        )
-        ActionChip(
-            icon = Icons.AutoMirrored.Filled.Redo,
-            label = "Redo",
-            onClick = onRedo,
-            enabled = canRedo,
-            tint = if (canRedo) Color.White else Color.White.copy(alpha = 0.2f)
         )
     }
 }
@@ -1099,13 +1098,19 @@ private fun FrameTimeline(
     }
 
     // Sync user scroll → seek position (scroll timeline = scrub)
+    // Also seek when scrolling ends to catch the final resting position after fling.
     LaunchedEffect(Unit) {
+        var wasScrolling = false
         snapshotFlow { scrollState.isScrollInProgress to scrollState.value }
             .collect { (isScrolling, scrollPx) ->
-                if (isScrolling && !isTrimming && !isAutoScrolling) {
-                    val ms = scrollPxToTime(scrollPx, currentVideoClips, pxPerMs, gapPx)
-                    onSeek(ms)
+                if (!isTrimming && !isAutoScrolling) {
+                    if (isScrolling || (!isScrolling && wasScrolling)) {
+                        // Seek during scrolling AND on the final rest position
+                        val ms = scrollPxToTime(scrollPx, currentVideoClips, pxPerMs, gapPx)
+                        onSeek(ms)
+                    }
                 }
+                wasScrolling = isScrolling
             }
     }
 
@@ -1593,11 +1598,11 @@ private fun TransitionPickerPopup(
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// 10. TimelineScrubber — time display with seek
+// 10. MiniScrubber — subtle thin bar with timestamps, sits above the timeline
 // ═════════════════════════════════════════════════════════════════════════════
 
 @Composable
-private fun TimelineScrubber(
+private fun MiniScrubber(
     currentPositionMs: Long,
     totalDurationMs: Long,
     onSeek: (Long) -> Unit
@@ -1610,35 +1615,66 @@ private fun TimelineScrubber(
         modifier = Modifier
             .fillMaxWidth()
             .background(SurfaceBg)
-            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .padding(horizontal = 16.dp)
+            .padding(top = 2.dp, bottom = 2.dp)
     ) {
-        Slider(
-            value = progress,
-            onValueChange = { frac -> onSeek((frac * totalDurationMs).toLong()) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(20.dp),
-            colors = SliderDefaults.colors(
-                thumbColor = PlayheadRed,
-                activeTrackColor = PlayheadRed.copy(alpha = 0.7f),
-                inactiveTrackColor = Color.White.copy(alpha = 0.1f)
-            )
-        )
+        // Timestamps row
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
                 formatDurationMs(currentPositionMs),
-                style = MaterialTheme.typography.labelSmall,
-                color = Color.White.copy(alpha = 0.5f),
-                fontSize = 10.sp
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color.White.copy(alpha = 0.6f),
+                letterSpacing = 0.5.sp
             )
             Text(
                 formatDurationMs(totalDurationMs),
-                style = MaterialTheme.typography.labelSmall,
+                fontSize = 10.sp,
                 color = Color.White.copy(alpha = 0.3f),
-                fontSize = 10.sp
+                letterSpacing = 0.5.sp
+            )
+        }
+
+        Spacer(Modifier.height(2.dp))
+
+        // Thin seekable progress bar
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(14.dp)
+                .pointerInput(totalDurationMs) {
+                    detectTapGestures { offset ->
+                        val frac = (offset.x / size.width).coerceIn(0f, 1f)
+                        onSeek((frac * totalDurationMs).toLong())
+                    }
+                }
+                .pointerInput(totalDurationMs) {
+                    detectHorizontalDragGestures { change, _ ->
+                        change.consume()
+                        val frac = (change.position.x / size.width).coerceIn(0f, 1f)
+                        onSeek((frac * totalDurationMs).toLong())
+                    }
+                },
+            contentAlignment = Alignment.CenterStart
+        ) {
+            // Track background
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(2.dp)
+                    .clip(RoundedCornerShape(1.dp))
+                    .background(Color.White.copy(alpha = 0.08f))
+            )
+            // Filled portion
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(fraction = progress)
+                    .height(2.dp)
+                    .clip(RoundedCornerShape(1.dp))
+                    .background(Color.White.copy(alpha = 0.35f))
             )
         }
     }
