@@ -98,6 +98,7 @@ class PreviewEngine @Inject constructor(
     fun initialize() {
         if (exoPlayer != null) return
         exoPlayer = ExoPlayer.Builder(context).build().also { player ->
+            player.playWhenReady = false // Prevent auto-play on prepare()
             player.addListener(object : Player.Listener {
                 override fun onIsPlayingChanged(playing: Boolean) {
                     _isPlaying.value = playing
@@ -118,7 +119,12 @@ class PreviewEngine @Inject constructor(
                     }
                     if (playbackState == Player.STATE_ENDED) {
                         _isPlaying.value = false
-                        _currentPositionMs.value = clipRanges.lastOrNull()?.timelineEndMs ?: 0L
+                        // Only snap to end if there was no recent explicit seek
+                        // (seekTo calls prepare() which may briefly re-enter ENDED)
+                        val timeSinceSeek = System.nanoTime() - lastSeekTimeNanos
+                        if (timeSinceSeek > 500_000_000L) {
+                            _currentPositionMs.value = clipRanges.lastOrNull()?.timelineEndMs ?: 0L
+                        }
                         stopPositionPolling()
                     }
                 }
@@ -214,8 +220,8 @@ class PreviewEngine @Inject constructor(
                 .build()
         }
         exoPlayer?.setMediaItems(items)
-        exoPlayer?.prepare()
         exoPlayer?.playWhenReady = false
+        exoPlayer?.prepare()
 
         val newDuration = clipRanges.lastOrNull()?.timelineEndMs ?: 0L
         _duration.value = newDuration
@@ -242,7 +248,17 @@ class PreviewEngine @Inject constructor(
     fun play() {
         val player = exoPlayer ?: return
         if (player.playbackState == Player.STATE_ENDED) {
-            player.seekTo(0, 0L)
+            val currentPos = _currentPositionMs.value
+            val endPos = clipRanges.lastOrNull()?.timelineEndMs ?: 0L
+            if (endPos > 0 && currentPos >= endPos - 100) {
+                // At or near the end → restart from beginning
+                _currentPositionMs.value = 0L
+                seekToInternal(0L)
+            } else {
+                // Resume from current scrubbed position
+                seekToInternal(currentPos)
+            }
+            lastSeekTimeNanos = System.nanoTime()
         }
         player.prepare()
         player.playWhenReady = true
@@ -387,8 +403,10 @@ class PreviewEngine @Inject constructor(
             while (isActive) {
                 if (!isRebuilding) {
                     exoPlayer?.let { player ->
-                        _currentPositionMs.value = currentTimelinePosition(player)
-                        _duration.value = clipRanges.lastOrNull()?.timelineEndMs ?: player.duration.coerceAtLeast(0)
+                        if (player.isPlaying) {
+                            _currentPositionMs.value = currentTimelinePosition(player)
+                            _duration.value = clipRanges.lastOrNull()?.timelineEndMs ?: player.duration.coerceAtLeast(0)
+                        }
                     }
                 }
                 delay(16)

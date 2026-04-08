@@ -71,6 +71,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -1078,16 +1079,23 @@ private fun FrameTimeline(
     var isAutoScrolling by remember { mutableStateOf(false) }
     val gapPx = with(density) { TRANSITION_GAP_DP * density.density }
 
-    // Keep a fresh ref for callbacks used inside pointer handlers
+    // Keep fresh refs for callbacks inside long-lived LaunchedEffects
     val currentVideoClips by rememberUpdatedState(videoClips)
+    val currentPosState by rememberUpdatedState(currentPositionMs)
+    val isPlayingState by rememberUpdatedState(isPlaying)
 
-    // Sync playback position → scroll (only when not trimming and user not scrolling)
-    // Uses snapshotFlow with debounce to avoid reacting to brief position glitches
-    // during media source rebuilds.
+    // Track when the user last scrolled — gives user scroll priority over auto-scroll
+    var userScrolledAtNanos by remember { mutableLongStateOf(0L) }
+
+    // Sync playback position → scroll: only during active playback, and not
+    // within 300ms of a user scroll to prevent fighting.
     LaunchedEffect(Unit) {
-        snapshotFlow { currentPositionMs }
-            .collect { posMs ->
-                if (!isTrimming && !scrollState.isScrollInProgress) {
+        snapshotFlow { currentPosState to isPlayingState }
+            .collect { (posMs, playing) ->
+                val timeSinceUserScroll = System.nanoTime() - userScrolledAtNanos
+                if (playing && !isTrimming && !scrollState.isScrollInProgress
+                    && timeSinceUserScroll > 300_000_000L
+                ) {
                     isAutoScrolling = true
                     val targetPx = timeToScrollPx(posMs, currentVideoClips, pxPerMs, gapPx)
                         .coerceIn(0, scrollState.maxValue)
@@ -1098,14 +1106,13 @@ private fun FrameTimeline(
     }
 
     // Sync user scroll → seek position (scroll timeline = scrub)
-    // Also seek when scrolling ends to catch the final resting position after fling.
     LaunchedEffect(Unit) {
         var wasScrolling = false
         snapshotFlow { scrollState.isScrollInProgress to scrollState.value }
             .collect { (isScrolling, scrollPx) ->
+                if (isScrolling) userScrolledAtNanos = System.nanoTime()
                 if (!isTrimming && !isAutoScrolling) {
                     if (isScrolling || (!isScrolling && wasScrolling)) {
-                        // Seek during scrolling AND on the final rest position
                         val ms = scrollPxToTime(scrollPx, currentVideoClips, pxPerMs, gapPx)
                         onSeek(ms)
                     }
