@@ -64,8 +64,6 @@ import com.gpxvideo.core.ui.component.GpxVideoTopAppBar
 import com.gpxvideo.lib.strava.StravaAuth
 import com.gpxvideo.lib.strava.StravaTokenStore
 import com.gpxvideo.lib.strava.StravaTokens
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -79,7 +77,6 @@ object SettingsKeys {
 @Composable
 fun SettingsScreen(
     onNavigateBack: () -> Unit,
-    stravaCallbackCode: SharedFlow<String> = MutableSharedFlow(),
     stravaAuth: StravaAuth? = null,
     stravaTokenStore: StravaTokenStore? = null,
     modifier: Modifier = Modifier
@@ -95,19 +92,6 @@ fun SettingsScreen(
 
     val stravaTokens by stravaTokenStore?.tokens?.collectAsState(initial = null)
         ?: remember { mutableStateOf<StravaTokens?>(null) }
-
-    // Handle Strava OAuth callback
-    LaunchedEffect(Unit) {
-        stravaCallbackCode.collect { code ->
-            stravaConnecting = true
-            stravaError = null
-            val result = stravaAuth?.exchangeCode(code)
-            stravaConnecting = false
-            if (result?.isFailure == true) {
-                stravaError = result.exceptionOrNull()?.message ?: "Connection failed"
-            }
-        }
-    }
 
     var units by remember { mutableStateOf("Metric") }
     var theme by remember { mutableStateOf("System") }
@@ -247,48 +231,42 @@ fun SettingsScreen(
                                 }
                             )
                         }
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-                    if (stravaConnecting) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                        // Action buttons inline
+                        if (stravaConnecting) {
                             CircularProgressIndicator(modifier = Modifier.size(20.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Connecting...", style = MaterialTheme.typography.bodySmall)
-                        }
-                    } else if (stravaTokens != null) {
-                        OutlinedButton(
-                            onClick = { showDisconnectDialog = true },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = MaterialTheme.colorScheme.error
-                            )
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.LinkOff,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Disconnect")
-                        }
-                    } else {
-                        // Official "Connect with Strava" button per Strava brand guidelines
-                        Image(
-                            painter = painterResource(id = com.gpxvideo.core.ui.R.drawable.btn_strava_connect_orange),
-                            contentDescription = "Connect with Strava",
-                            modifier = Modifier
-                                .height(48.dp)
-                                .clickable {
-                                    stravaAuth?.let { auth ->
-                                        val customTabsIntent = CustomTabsIntent.Builder().build()
-                                        customTabsIntent.launchUrl(context, auth.buildAuthUri())
+                        } else if (stravaTokens != null) {
+                            OutlinedButton(
+                                onClick = { showDisconnectDialog = true },
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.error
+                                )
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.LinkOff,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Disconnect", fontSize = 12.sp)
+                            }
+                        } else {
+                            Image(
+                                painter = painterResource(id = com.gpxvideo.core.ui.R.drawable.btn_strava_connect_orange),
+                                contentDescription = "Connect with Strava",
+                                modifier = Modifier
+                                    .height(36.dp)
+                                    .clickable {
+                                        stravaAuth?.let { auth ->
+                                            val customTabsIntent =
+                                                CustomTabsIntent.Builder().build()
+                                            customTabsIntent.launchUrl(
+                                                context,
+                                                auth.buildAuthUri()
+                                            )
+                                        }
                                     }
-                                }
-                        )
+                            )
+                        }
                     }
                     stravaError?.let { error ->
                         Spacer(modifier = Modifier.height(8.dp))

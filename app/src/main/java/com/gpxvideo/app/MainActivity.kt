@@ -6,11 +6,11 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.lifecycle.lifecycleScope
 import com.gpxvideo.core.ui.theme.GpxVideoTheme
 import com.gpxvideo.lib.strava.StravaAuth
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -25,7 +25,7 @@ class MainActivity : ComponentActivity() {
         handleStravaCallback(intent)
         setContent {
             GpxVideoTheme {
-                AppNavigation(stravaCallbackCode = _stravaCallbackCode.asSharedFlow())
+                AppNavigation()
             }
         }
     }
@@ -35,13 +35,13 @@ class MainActivity : ComponentActivity() {
         handleStravaCallback(intent)
     }
 
-    private val _stravaCallbackCode = MutableSharedFlow<String>(extraBufferCapacity = 1)
-
     private fun handleStravaCallback(intent: Intent?) {
         val uri = intent?.data ?: return
         if (uri.scheme == "gpxvideo" && uri.host == "strava" && uri.path == "/callback") {
             val code = uri.getQueryParameter("code") ?: return
-            _stravaCallbackCode.tryEmit(code)
+            lifecycleScope.launch {
+                stravaAuth.exchangeCode(code)
+            }
         }
     }
 }

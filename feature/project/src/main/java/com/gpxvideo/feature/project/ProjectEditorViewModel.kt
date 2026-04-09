@@ -160,8 +160,15 @@ class ProjectEditorViewModel @Inject constructor(
                     isSynced = true
                 )
             }
+            val autoIds = clipEntities
+                .filter { it.isAutoSynced && it.mediaItemId != null }
+                .map { it.mediaItemId!! }
+                .toSet()
             if (synced.isNotEmpty()) {
                 _clipSyncPoints.value = synced
+            }
+            if (autoIds.isNotEmpty()) {
+                _autoSyncedClipIds.value = autoIds
             }
         }
     }
@@ -547,20 +554,30 @@ class ProjectEditorViewModel @Inject constructor(
 
     fun setClipSyncPoint(clipId: UUID, syncPoint: ClipSyncPoint) {
         _clipSyncPoints.value = _clipSyncPoints.value + (clipId to syncPoint)
+        // Manual sync clears auto-synced flag
+        _autoSyncedClipIds.value = _autoSyncedClipIds.value - clipId
         viewModelScope.launch(Dispatchers.IO) {
             clipDao.updateSyncPoint(
                 mediaItemId = clipId,
                 gpxPointIndex = syncPoint.gpxPointIndex,
                 gpxDistanceMeters = syncPoint.gpxDistanceMeters,
-                isSynced = syncPoint.isSynced
+                isSynced = syncPoint.isSynced,
+                isAutoSynced = false
             )
         }
     }
 
     fun removeClipSyncPoint(clipId: UUID) {
         _clipSyncPoints.value = _clipSyncPoints.value - clipId
+        _autoSyncedClipIds.value = _autoSyncedClipIds.value - clipId
         viewModelScope.launch(Dispatchers.IO) {
-            clipDao.updateSyncPoint(clipId, -1, 0.0, false)
+            clipDao.updateSyncPoint(clipId, -1, 0.0, isSynced = false, isAutoSynced = false)
+        }
+    }
+
+    fun revertToAutoSync(clipId: UUID) {
+        viewModelScope.launch(Dispatchers.IO) {
+            autoDetectSyncPoints()
         }
     }
 
@@ -642,7 +659,7 @@ class ProjectEditorViewModel @Inject constructor(
                 autoIds.add(mediaItemId)
 
                 // Persist to DB
-                clipDao.updateSyncPoint(mediaItemId, bestIdx, cumulDist[bestIdx], true)
+                clipDao.updateSyncPoint(mediaItemId, bestIdx, cumulDist[bestIdx], isSynced = true, isAutoSynced = true)
             }
 
             if (newSyncPoints.isNotEmpty()) {

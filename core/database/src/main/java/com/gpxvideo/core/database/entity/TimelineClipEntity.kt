@@ -61,5 +61,7 @@ data class TimelineClipEntity(
     @ColumnInfo(name = "gpx_distance_meters", defaultValue = "0.0")
     val gpxDistanceMeters: Double = 0.0,
     @ColumnInfo(name = "is_synced", defaultValue = "0")
-    val isSynced: Boolean = false
+    val isSynced: Boolean = false,
+    @ColumnInfo(name = "is_auto_synced", defaultValue = "0")
+    val isAutoSynced: Boolean = false
 )

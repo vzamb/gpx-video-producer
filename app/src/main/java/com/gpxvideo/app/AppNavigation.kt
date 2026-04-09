@@ -27,16 +27,11 @@ import com.gpxvideo.feature.templates.TemplateGalleryRoute
 import com.gpxvideo.feature.templates.templateEditorScreen
 import com.gpxvideo.feature.templates.templateGalleryScreen
 
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.MutableSharedFlow
-
 private const val ONBOARDING_PREFS = "onboarding_prefs"
 private const val KEY_ONBOARDING_COMPLETE = "onboarding_complete"
 
 @Composable
-fun AppNavigation(
-    stravaCallbackCode: SharedFlow<String> = MutableSharedFlow()
-) {
+fun AppNavigation() {
     val navController = rememberNavController()
     val context = LocalContext.current
     val prefs = remember {
@@ -71,8 +66,7 @@ fun AppNavigation(
         )
 
         settingsScreen(
-            onNavigateBack = { navController.popBackStack() },
-            stravaCallbackCode = stravaCallbackCode
+            onNavigateBack = { navController.popBackStack() }
         )
 
         createProjectScreen(

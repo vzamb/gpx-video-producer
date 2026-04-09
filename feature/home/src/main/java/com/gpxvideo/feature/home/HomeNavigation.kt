@@ -7,8 +7,6 @@ import androidx.navigation.compose.composable
 import com.gpxvideo.lib.strava.StravaAuth
 import com.gpxvideo.lib.strava.StravaTokenStore
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.serialization.Serializable
 import java.util.UUID
 import javax.inject.Inject
@@ -51,14 +49,12 @@ fun NavGraphBuilder.onboardingScreen(
 }
 
 fun NavGraphBuilder.settingsScreen(
-    onNavigateBack: () -> Unit,
-    stravaCallbackCode: SharedFlow<String> = MutableSharedFlow()
+    onNavigateBack: () -> Unit
 ) {
     composable<SettingsRoute> {
         val viewModel: SettingsViewModel = hiltViewModel()
         SettingsScreen(
             onNavigateBack = onNavigateBack,
-            stravaCallbackCode = stravaCallbackCode,
             stravaAuth = viewModel.stravaAuth,
             stravaTokenStore = viewModel.stravaTokenStore
         )

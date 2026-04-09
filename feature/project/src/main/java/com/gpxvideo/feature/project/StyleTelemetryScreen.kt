@@ -53,7 +53,7 @@ import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.Photo
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Route
-import androidx.compose.material.icons.outlined.SwapHoriz
+import androidx.compose.material.icons.outlined.EditLocationAlt
 import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.Title
 import androidx.compose.material.icons.outlined.Warning
@@ -646,16 +646,17 @@ private fun StyleTopBar(
 
             Spacer(Modifier.weight(1f))
 
-            // Replace GPX activity
-            if (hasGpxData) {
-                IconButton(onClick = onReplaceGpx) {
-                    Icon(Icons.Outlined.SwapHoriz, contentDescription = "Replace Activity", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
-                }
-            }
-
+            // Info — leftmost action button
             if (hasGpxData) {
                 IconButton(onClick = onInfoClick) {
                     Icon(Icons.Outlined.Info, contentDescription = "Info", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
+                }
+            }
+
+            // Replace GPX activity
+            if (hasGpxData) {
+                IconButton(onClick = onReplaceGpx) {
+                    Icon(Icons.Outlined.EditLocationAlt, contentDescription = "Replace Activity", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
                 }
             }
 
