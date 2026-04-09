@@ -391,92 +391,94 @@ You can design templates in After Effects and export them as Lottie JSON using t
 
 > **Important:** Keep the design static (single frame). Animations in the Lottie JSON are not used — the app controls all dynamic behavior through text binding and chart rendering.
 
-## Creating Templates with Figma (Beginner-Friendly)
 
-Figma is a free, browser-based design tool. You can use it to **visually design** your overlay layout and then generate the Lottie JSON using the included Python script.
+## Creating Templates with Figma
 
-> ⚠️ **Why not export directly from Figma?** The LottieFiles Figma plugin converts text into vector shapes and strips layer names, making the output unusable for this app (which needs named text layers for dynamic data binding). Instead, use Figma **as a visual design tool** and the generator script to produce the actual JSON.
+Figma is a free, browser-based design tool. Design your overlay visually with full creative control — custom card styles, gradients, scrims, colors — then use the converter script to produce a working template.
+
+> **How it works:** The LottieFiles Figma plugin exports your visual design (cards, gradients, shapes) perfectly, but converts text into vector outlines and strips layer names. The converter script fixes this by keeping all your visual elements intact while replacing vectorized text with proper dynamic text layers.
 
 ### The Workflow
 
 ```
-┌──────────────┐     ┌──────────────────┐     ┌──────────────────┐
-│  Design in   │     │  Note positions  │     │  Run generator   │
-│  Figma       │ ──► │  (X, Y, W, H)   │ ──► │  script          │
-│  (visual)    │     │  from Figma      │     │  (produces JSON) │
-└──────────────┘     └──────────────────┘     └──────────────────┘
+┌──────────────┐     ┌──────────────────┐     ┌──────────────────┐     ┌──────────────────┐
+│  Design in   │     │  Export via      │     │  Write a small   │     │  Run converter   │
+│  Figma       │ ──► │  LottieFiles     │ ──► │  config.json     │ ──► │  script          │
+│  (full style)│     │  plugin          │     │  (layer names)   │     │  (working JSON)  │
+└──────────────┘     └──────────────────┘     └──────────────────┘     └──────────────────┘
 ```
+
+**What the converter preserves from your Figma design:**
+- Cards with custom fills, gradients, opacity, rounded corners
+- Background scrims and gradient overlays
+- Decorative shape elements (lines, circles, badges)
+
+**What the converter generates (replacing broken exports):**
+- Proper text layers (type 5) for dynamic data binding
+- Placeholder layers for charts and route map
 
 ### Prerequisites
 
-- A free [Figma](https://www.figma.com/) account (the free plan is sufficient)
+- A free [Figma](https://www.figma.com/) account
+- The [LottieFiles](https://www.figma.com/community/plugin/809860933081065308) Figma plugin installed
 - Python 3 installed on your machine
-- The generator script at `tools/generate_template.py` (already included in this project)
+- The converter script at `tools/figma_to_template.py`
 
 ### Step 1: Create a New Frame in Figma
 
-Each aspect ratio needs its own Figma frame. Start with 9:16 (vertical/Stories format).
+Start with 9:16 (vertical/Stories format):
 
-1. Open Figma and create a **New Design File**
-2. Press **F** (or click the Frame tool in the toolbar)
-3. On the right panel under **Frame**, manually set the size:
-   - **Width:** `1080`
-   - **Height:** `1920`
-4. Name this frame `overlay_9x16` (double-click the name in the left panel)
+1. Open Figma, then create a **New Design File**
+2. Press **F** (Frame tool)
+3. Set the frame size to **1080 x 1920**
+4. Name the frame `overlay_9x16`
 
-> 💡 **Tip:** Don't use Figma's preset phone sizes. The template canvas must match the exact dimensions listed in the [Canvas Dimensions](#canvas-dimensions) table above.
+> Use exact pixel dimensions from the [Canvas Dimensions](#canvas-dimensions) table. Don't use Figma's preset phone sizes.
 
-### Step 3: Set Up the Background
+### Step 2: Set Up the Background
 
-The overlay is rendered **on top of video**, so the background should be transparent. However, during design it helps to simulate a dark video frame:
+The overlay renders on top of video, so the background should be transparent. During design, simulate a dark video frame:
 
 1. Select the frame
-2. In the right panel, under **Fill**, click the color swatch
-3. Set it to a dark gray (`#1A1A1A`) with opacity at 100% — this is only for reference
-4. **Before exporting**, you'll remove this fill (or set opacity to 0%)
+2. Set fill to dark gray (`#1A1A1A`) at 100% opacity — for reference only
+3. **Before exporting:** set the frame fill opacity to **0%** (transparent)
 
-### Step 4: Design Stat Cards
+### Step 3: Design Your Visual Elements
 
-Stat cards are rounded rectangles that hold your data values. Here's how to create one:
+This is where you have full creative freedom. Design cards, scrims, decorative elements — everything that makes your template unique.
 
-1. Press **R** to draw a rectangle inside your frame
-2. In the right panel, set:
-   - **Width:** `200`, **Height:** `110`
-   - **Corner radius:** `12`
-   - **Fill color:** `#000000` (black) with **opacity** `50%`
-3. Position it where you want (e.g., bottom-left corner: X=`48`, Y=`1650`)
-4. **Name the layer** `card_distance` (double-click in the left layers panel)
+**Stat Cards — create one for each stat you want:**
+1. Press **R** to draw a rectangle
+2. Style it however you like: fill, gradient, opacity, corner radius, shadows, borders
+3. **Name the layer** with a `card_` prefix: `card_distance`, `card_hr`, `card_pace`, etc.
 
-Repeat for each stat you want (e.g., `card_elevation`, `card_pace`, `card_hr`, `card_time`).
+**Gradient Scrim (optional):**
+1. Draw a full-width rectangle at the bottom
+2. Apply a linear gradient: transparent at top, semi-transparent black at bottom
+3. Name it `scrim_bottom` or similar
 
-> ⚠️ **Layer naming is critical!** The app matches layers by name. You can name card layers anything — they're purely visual. The **text layers** are the ones that must follow the naming convention.
+> Go wild with the visual design — gradients, glass-morphism, custom colors, rounded corners, multiple scrims. The converter preserves ALL shape styling from your Figma export.
 
-### Step 5: Add Text Labels and Values
+### Step 4: Add Text Layers
 
-For each stat card, you need two text layers — a **label** (e.g., "DISTANCE") and a **value** (e.g., "12.50").
+For each stat card, add two text layers — a **label** and a **value**. The text content doesn't matter (it's replaced at runtime), but the position and approximate size do.
 
-**Add a label:**
-1. Press **T** to create a text element
-2. Type `DISTANCE` as placeholder text
-3. In the right panel, set:
-   - **Font:** Roboto (or any sans-serif; the app uses system fonts)
-   - **Weight:** Bold
-   - **Size:** `24px`
-   - **Color:** white (`#FFFFFF`)
-4. Position it above/inside the card
-5. **Name this layer exactly:** `label_distance`
+**Label:**
+1. Press **T**, type `DISTANCE`
+2. Set font to any sans-serif, ~24px, white
+3. Position it inside/above the card
+4. **Name exactly:** `label_distance`
 
-**Add a value:**
-1. Press **T** again
-2. Type `0.0` as placeholder text
-3. Set font size to `84px`, Bold, white
-4. Position it below the label
-5. **Name this layer exactly:** `stat_distance`
+**Value:**
+1. Press **T**, type `0.0`
+2. Set font to bold, ~72px, white
+3. Position it inside the card
+4. **Name exactly:** `stat_distance`
 
-Repeat for each stat. The recognized layer names are:
+**Recognized text layer names:**
 
-| What you're adding | Label layer name | Value layer name |
-|---|---|---|
+| What | Label name | Value name |
+|------|-----------|-----------|
 | Distance | `label_distance` | `stat_distance` |
 | Elevation | `label_elevation` | `stat_elevation` |
 | Pace | `label_pace` | `stat_pace` |
@@ -484,190 +486,173 @@ Repeat for each stat. The recognized layer names are:
 | Time | `label_time` | `stat_time` |
 | Speed | `label_speed` | `stat_speed` |
 | Grade | `label_grade` | `stat_grade` |
+| Title | — | `title_text` |
 
-You can also add **unit layers** (e.g., `stat_distance_unit` with text `km`).
+### Step 5: Organize Layer Order
 
-### Step 6: Add a Title Layer
-
-1. Press **T**, type a placeholder title like `My Run`
-2. Position it at the top of the overlay
-3. Set a large font size (e.g., `48px`), Bold, white
-4. **Name the layer:** `title_text`
-
-### Step 7: Add Placeholder Rectangles for Charts and Map
-
-The app draws the elevation chart and route map into invisible rectangular regions. You need to define where those go.
-
-**Elevation Chart:**
-1. Press **R** to draw a rectangle
-2. Size it to your desired chart area (e.g., **Width:** `960`, **Height:** `240`)
-3. Position it (e.g., X=`60`, Y=`1580` for the bottom area)
-4. Set **Fill opacity to 0%** (the rectangle must be invisible — the app draws the chart here at runtime)
-5. **Name the layer exactly:** `placeholder_elevation_chart`
-
-**Route Map:**
-1. Draw another rectangle
-2. Size it (e.g., **Width:** `400`, **Height:** `400`)
-3. Position it where you want the map
-4. Set **Fill opacity to 0%**
-5. **Name the layer exactly:** `placeholder_route_map`
-
-> 💡 During design, you can keep a faint fill (e.g., 5% opacity) so you can see the placeholder areas. Just set them to 0% before exporting.
-
-### Step 8: Add a Gradient Scrim (Optional but Recommended)
-
-A dark gradient at the bottom ensures text is readable over bright video:
-
-1. Draw a rectangle the full width of the frame: **Width:** `1080`, **Height:** `600`
-2. Position it at the bottom: X=`0`, Y=`1320`
-3. Set the fill to a **Linear Gradient**:
-   - Top color: `#000000` at **0% opacity**
-   - Bottom color: `#000000` at **80% opacity**
-4. Name it `scrim_bottom`
-
-### Step 9: Organize Your Layer Order
-
-In the left panel, arrange layers from **top to bottom** in this order (remember: in Figma, the top layer in the list renders on top visually):
+In the Figma layers panel, arrange from **top to bottom** (top = frontmost):
 
 ```
-title_text              (topmost — always visible)
-stat_distance
-stat_elevation
-stat_pace
-label_distance
-label_elevation
-label_pace
-placeholder_route_map
-placeholder_elevation_chart
-card_distance
-card_elevation
-card_pace
-scrim_bottom
+title_text              <-- text (frontmost)
+stat_hr                 <-- text
+stat_time               <-- text
+stat_pace               <-- text
+label_hr                <-- text
+label_time              <-- text
+label_pace              <-- text
+card_hr                 <-- shape (visual card)
+card_time               <-- shape
+card_pace               <-- shape
+scrim_bottom            <-- shape (bottommost)
 ```
 
-> The exact order depends on your design, but keep text on top of cards, and cards on top of scrims.
+> **The layer order in Figma's panel is critical** — it determines the order in the exported JSON. The converter maps names by position in this list.
 
-### Step 10: Read Positions from Figma
+### Step 6: Export with LottieFiles Plugin
 
-Now comes the key step. For each element, select it in Figma and note the **X, Y, W, H** values from the right panel ("Design" tab):
+1. Set the frame's background fill to **0% opacity** (transparent)
+2. Select the frame
+3. Run the LottieFiles plugin: **Plugins > LottieFiles > Export to Lottie**
+4. Download the exported `.json` file
+5. Save it in the project root (e.g., `my_overlay_9x16.json`)
 
-| Element | What to note |
-|---------|-------------|
-| Stat card rectangle | X, Y (top-left), W, H |
-| Chart placeholder | X, Y, W, H |
-| Map placeholder | X, Y, W, H |
-| Title text | X, Y |
-| Scrim | X, Y, W, H |
+### Step 7: Analyze the Export (Optional)
 
-Write these values down — you'll enter them into the generator script.
-
-> 💡 **Tip:** In Figma, select an element and the X/Y/W/H values appear in the right panel under "Design". X and Y are the top-left corner position relative to the frame.
-
-### Step 11: Configure the Generator Script
-
-Open `tools/generate_template.py` in any text editor. At the top, you'll find a `TEMPLATE_CONFIG` dictionary. Edit it with your values:
-
-```python
-TEMPLATE_CONFIG = {
-    "id": "my_template",               # Used in file names
-    "displayName": "My Template",       # Shown in the app
-    "description": "My custom overlay",
-
-    "ratios": {
-        "9x16": {
-            "width": 1080,
-            "height": 1920,
-            "elements": [
-                # Paste your element positions from Figma here.
-                # Each element is a dict with type + position.
-
-                # Dark gradient at bottom
-                {"type": "scrim", "x": 0, "y": 1320, "w": 1080, "h": 600,
-                 "opacity": 80, "direction": "up"},
-
-                # Stat cards (x, y = top-left of the card in Figma)
-                {"type": "stat", "name": "distance",
-                 "x": 48, "y": 1700, "w": 220, "h": 140,
-                 "value_size": 72, "label_size": 22,
-                 "card_opacity": 50, "card_radius": 12},
-
-                # ... more stats ...
-
-                # Chart and map placeholders
-                {"type": "chart", "x": 48, "y": 1380, "w": 984, "h": 140},
-                {"type": "map",   "x": 640, "y": 80,  "w": 400, "h": 400},
-
-                # Activity title
-                {"type": "title", "x": 48, "y": 80, "size": 56, "align": "left"},
-            ],
-        },
-        # Add "16x9", "1x1", "4x5" with adjusted positions
-    },
-}
-```
-
-Available element types and their properties:
-
-| Type | Required Properties | Optional Properties |
-|------|-------------------|-------------------|
-| `stat` | `name`, `x`, `y`, `w`, `h` | `value_size` (72), `label_size` (22), `card_opacity` (50), `card_radius` (12) |
-| `title` | `x`, `y` | `size` (48), `align` ("left"/"center"/"right") |
-| `chart` | `x`, `y`, `w`, `h` | — |
-| `map` | `x`, `y`, `w`, `h` | — |
-| `scrim` | `x`, `y`, `w`, `h` | `opacity` (80), `direction` ("up"/"down") |
-
-Available stat names: `distance`, `elevation`, `pace`, `hr`, `time`, `speed`, `grade`
-
-### Step 12: Run the Generator
+Run the analyzer to verify the export and get a config template:
 
 ```bash
-python3 tools/generate_template.py
+python3 tools/figma_to_template.py --analyze my_overlay_9x16.json
 ```
 
 Output:
 ```
-  ✓ my_template_9x16.json
-  ✓ my_template_16x9.json
-  ✓ my_template_1x1.json
-  ✓ my_template_4x5.json
+Canvas: 1080x1920
+Layers: 16
 
-  ✓ All 4 ratios generated for template 'my_template'
-
-  Output: .../app/src/main/assets/templates/
+Layer analysis (compare with your Figma layers panel, top to bottom):
+  Layer  0: TEXT      8 paths  bbox=(55,61)-(358,122)  ~84px
+  Layer  1: TEXT      5 paths  bbox=(886,47)-(1020,109)  ~85px
+  ...
+  Layer 11: SHAPE     1 path   bbox=(853,40)-(1053,150)  size=200x110
+  ...
 ```
 
-The script generates the files directly into the correct directory.
+The analyzer shows detected types (TEXT vs SHAPE) and bounding boxes. Compare with your Figma layers panel to verify the order matches.
 
-### Step 13: Create All 4 Aspect Ratios
+### Step 8: Create the Config File
 
-Go back to Figma and create 3 more frames for the remaining ratios:
+Create a JSON config file that maps layer names in Figma panel order:
 
-| Ratio | Frame Size |
-|-------|-----------|
-| 16:9 | 1920 × 1080 |
-| 1:1 | 1080 × 1080 |
-| 4:5 | 1080 × 1350 |
+```json
+{
+  "name": "My Template",
+  "description": "My custom overlay design",
+  "layers": [
+    "title_text",
+    "stat_hr",
+    "stat_time",
+    "stat_pace",
+    "stat_elevation",
+    "stat_distance",
+    "label_hr",
+    "label_time",
+    "label_pace",
+    "label_elevation",
+    "label_distance",
+    "card_hr",
+    "card_time",
+    "card_pace",
+    "card_elevation",
+    "card_distance"
+  ],
+  "placeholders": {
+    "route_map": {"x": 40, "y": 60, "w": 800, "h": 800},
+    "elevation_chart": {"x": 24, "y": 1600, "w": 1032, "h": 120}
+  },
+  "text_overrides": {
+    "title_text": {"size": 56, "bold": true, "align": "left"}
+  }
+}
+```
 
-For each ratio:
-1. Duplicate your 9:16 frame and resize it
-2. Rearrange elements to fit the new dimensions
-3. Note the new X/Y/W/H positions
-4. Add a matching section in `TEMPLATE_CONFIG["ratios"]`
+**Config fields:**
 
-> 💡 **Tip:** You don't need every stat in every ratio. A landscape (16:9) overlay might have fewer cards to avoid clutter.
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | Yes | Display name shown in the app |
+| `description` | No | Short description |
+| `layers` | Yes | Layer names in Figma panel order (top to bottom). Text layers (`stat_*`, `label_*`, `title_*`) are replaced; shape layers (`card_*`, `scrim*`) are kept with styling intact |
+| `placeholders` | No | Chart and map regions (x, y, w, h) — these are added as new layers since they're not in the Figma design |
+| `text_overrides` | No | Override auto-detected font size, boldness, or alignment for specific text layers |
 
-### Step 14: Build and Test
+**Text override options:**
 
-Build and run the app — your new template will appear automatically in the template selector on the Overlays screen. No code changes needed.
+| Key | Default | Description |
+|-----|---------|-------------|
+| `size` | Auto-detected from vectorized text height | Font size in pixels |
+| `bold` | `true` for `stat_*` and `title_*`, `false` for `label_*` | Whether to use bold font |
+| `align` | `"left"` for title, `"center"` for stats/labels | `"left"`, `"center"`, or `"right"` |
+| `text` | Standard placeholder text | Default text shown when no data |
+
+> See `tools/example_config.json` for a complete example.
+
+### Step 9: Run the Converter
+
+```bash
+python3 tools/figma_to_template.py my_overlay_9x16.json my_config.json output.json
+```
+
+Output:
+```
+Converting Figma export: my_overlay_9x16.json
+   Config: my_config.json
+   Output: output.json
+
+  title_text: text layer at (207, 122), size=84px
+  stat_hr: text layer at (953, 109), size=85px
+  ...
+  card_hr: shape kept, bbox (853,40)-(1053,150)
+  ...
+  placeholder_route_map: solid at (40,60) size 800x800
+  placeholder_elevation_chart: solid at (24,1600) size 1032x120
+
+Template written to output.json (42.2 KB)
+   Text layers replaced: 11
+   Shape layers kept: 5
+   Placeholders added: 2
+```
+
+### Step 10: Install and Test
+
+Copy the output to the templates directory with the correct naming convention:
+
+```bash
+cp output.json app/src/main/assets/templates/my_template_9x16.json
+```
+
+Build and run — your template appears in the template selector on the Overlays screen.
+
+### Step 11: Create All 4 Aspect Ratios
+
+Go back to Figma and create frames for the remaining ratios:
+
+| Ratio | Frame Size | File Name |
+|-------|-----------|-----------|
+| 16:9 | 1920 x 1080 | `my_template_16x9.json` |
+| 1:1 | 1080 x 1080 | `my_template_1x1.json` |
+| 4:5 | 1080 x 1350 | `my_template_4x5.json` |
+
+For each: duplicate the 9:16 frame, resize, rearrange elements, export, and convert with a matching config.
+
+> You don't need every stat in every ratio. Landscape (16:9) might use fewer cards. All 4 ratio files must exist for the template to appear in the app.
 
 ### Troubleshooting
 
 | Problem | Solution |
 |---------|----------|
-| Template doesn't appear in the app | Check file names follow the `{id}_{ratio}.json` pattern and all 4 ratios exist |
-| Text shows placeholder values (`0.0`) instead of live data | Verify layer names match exactly (case-sensitive): `stat_distance`, not `Stat_Distance`. If you used the generator script, names are correct automatically |
-| Chart or map doesn't appear | Ensure placeholder layers are type `1` (solid) with opacity `0`. Check the `nm` field is exactly `placeholder_elevation_chart` or `placeholder_route_map` |
-| Colors look different in the app | The app applies the user's accent color to labels and charts at runtime. Design labels in white — they will be recolored |
-| Text is cut off or misaligned | Adjust `value_size`/`label_size` or card dimensions. Leave room for long strings like `12:34:56` or `1234.5` |
-| Elements in wrong position | Double-check X/Y values from Figma. Remember X/Y in Figma is the top-left corner of the element |
-| Generator warns about missing ratios | Add the missing ratio configs to `TEMPLATE_CONFIG["ratios"]` and re-run |
+| Template doesn't appear in the app | Check file names follow `{id}_{ratio}.json` pattern and all 4 ratios exist |
+| Converter warns about layer count mismatch | Your Figma layer count doesn't match the config. Check for hidden layers or grouped elements |
+| Text is too large/small | Add a `text_overrides` entry for the layer with an explicit `size` value |
+| Cards not visible | Ensure cards are at the bottom of the Figma layer list (behind text) and have non-zero opacity fills |
+| Charts/map don't appear | Check `placeholders` coordinates are within the canvas bounds |
+| Colors look different in app | The app applies accent color to `title_text` and charts at runtime. Design other text in white |
