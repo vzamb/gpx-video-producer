@@ -119,6 +119,10 @@ class ProjectEditorViewModel @Inject constructor(
                     if (gpxData != null) {
                         _gpxData.value = gpxData
                         _gpxStats.value = GpxStatistics.computeFullStats(gpxData)
+                        // Auto-detect sync points if mode is LIVE_SYNC
+                        if (_storyMode.value == StoryMode.LIVE_SYNC.name) {
+                            autoDetectSyncPoints()
+                        }
                     }
                 } else if (existingFiles.isEmpty()) {
                     _gpxData.value = null
@@ -138,9 +142,9 @@ class ProjectEditorViewModel @Inject constructor(
             val tracks = trackDao.getByProjectId(projectId).first()
             val videoTrack = tracks.find { it.type == "VIDEO" } ?: return@launch
             val clipEntities = clipDao.getByTrackId(videoTrack.id).first()
-            val synced = clipEntities.filter { it.isSynced }.associate { clip ->
-                clip.id to ClipSyncPoint(
-                    clipId = clip.id,
+            val synced = clipEntities.filter { it.isSynced && it.mediaItemId != null }.associate { clip ->
+                clip.mediaItemId!! to ClipSyncPoint(
+                    clipId = clip.mediaItemId!!,
                     gpxPointIndex = clip.gpxPointIndex,
                     gpxDistanceMeters = clip.gpxDistanceMeters,
                     isSynced = true
@@ -510,7 +514,7 @@ class ProjectEditorViewModel @Inject constructor(
         _clipSyncPoints.value = _clipSyncPoints.value + (clipId to syncPoint)
         viewModelScope.launch(Dispatchers.IO) {
             clipDao.updateSyncPoint(
-                clipId = clipId,
+                mediaItemId = clipId,
                 gpxPointIndex = syncPoint.gpxPointIndex,
                 gpxDistanceMeters = syncPoint.gpxDistanceMeters,
                 isSynced = syncPoint.isSynced
@@ -556,11 +560,26 @@ class ProjectEditorViewModel @Inject constructor(
             }
 
             for (clipEntity in clipEntities) {
-                // Skip already manually synced clips
-                if (_clipSyncPoints.value[clipEntity.id]?.isSynced == true) continue
+                val mediaItemId = clipEntity.mediaItemId ?: continue
+                if (_clipSyncPoints.value[mediaItemId]?.isSynced == true) continue
 
-                val mediaItem = mediaItems.find { it.id == clipEntity.mediaItemId } ?: continue
-                val videoDate = mediaItem.videoCreatedAt ?: continue
+                val mediaItem = mediaItems.find { it.id == mediaItemId } ?: continue
+                // If videoCreatedAt is null (media imported before migration), try to re-probe
+                var videoDate = mediaItem.videoCreatedAt
+                if (videoDate == null && mediaItem.type == "VIDEO") {
+                    val file = java.io.File(mediaItem.localCopyPath)
+                    if (file.exists()) {
+                        try {
+                            val uri = android.net.Uri.fromFile(file)
+                            val info = MediaProber.probeMedia(context, uri)
+                            videoDate = info.videoCreatedAt
+                            if (videoDate != null) {
+                                mediaItemDao.update(mediaItem.copy(videoCreatedAt = videoDate))
+                            }
+                        } catch (_: Exception) { }
+                    }
+                }
+                if (videoDate == null) continue
 
                 // Check if video date falls within GPX timespan (with 1 hour tolerance)
                 val tolerance = java.time.Duration.ofHours(1)
@@ -579,16 +598,16 @@ class ProjectEditorViewModel @Inject constructor(
                 }
 
                 val syncPoint = ClipSyncPoint(
-                    clipId = clipEntity.id,
+                    clipId = mediaItemId,
                     gpxPointIndex = bestIdx,
                     gpxDistanceMeters = cumulDist[bestIdx],
                     isSynced = true
                 )
-                newSyncPoints[clipEntity.id] = syncPoint
-                autoIds.add(clipEntity.id)
+                newSyncPoints[mediaItemId] = syncPoint
+                autoIds.add(mediaItemId)
 
                 // Persist to DB
-                clipDao.updateSyncPoint(clipEntity.id, bestIdx, cumulDist[bestIdx], true)
+                clipDao.updateSyncPoint(mediaItemId, bestIdx, cumulDist[bestIdx], true)
             }
 
             if (newSyncPoints.isNotEmpty()) {

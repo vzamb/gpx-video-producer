@@ -51,6 +51,7 @@ import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.Photo
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Sync
+import androidx.compose.material.icons.outlined.Title
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material.icons.outlined.DirectionsBike
 import androidx.compose.material.icons.outlined.DirectionsRun
@@ -209,6 +210,7 @@ fun StyleTelemetryScreen(
                 onNavigateBack = onNavigateBack,
                 onColorPickerClick = { showColorPicker = true },
                 onInfoClick = { showInfoSheet = true },
+                onTitleClick = { showTitleEditor = true },
                 hasGpxData = uiState.gpxData != null
             )
         },
@@ -254,6 +256,12 @@ fun StyleTelemetryScreen(
                 selectedMode = uiState.storyMode,
                 onModeSelected = { mode ->
                     viewModel.setStoryMode(mode)
+                    if (mode == StoryMode.LIVE_SYNC.name) {
+                        showSyncSheet = true
+                    }
+                },
+                onReselected = { mode ->
+                    // Re-tap on already-selected mode: reopen sync sheet for Live Sync
                     if (mode == StoryMode.LIVE_SYNC.name) {
                         showSyncSheet = true
                     }
@@ -577,6 +585,7 @@ private fun StyleTopBar(
     onNavigateBack: () -> Unit,
     onColorPickerClick: () -> Unit,
     onInfoClick: () -> Unit,
+    onTitleClick: () -> Unit,
     hasGpxData: Boolean
 ) {
     Surface(color = DarkBg, tonalElevation = 0.dp) {
@@ -664,6 +673,10 @@ private fun StyleTopBar(
                 }
             }
 
+            IconButton(onClick = onTitleClick) {
+                Icon(Icons.Outlined.Title, contentDescription = "Edit Title", tint = Color.White.copy(alpha = 0.7f))
+            }
+
             IconButton(onClick = onColorPickerClick) {
                 Icon(Icons.Outlined.Palette, contentDescription = "Accent Color", tint = Color.White.copy(alpha = 0.7f))
             }
@@ -743,7 +756,7 @@ private fun TemplatePreviewSection(
 
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         val isPortraitRatio = aspectRatio == SocialAspectRatio.PORTRAIT_9_16 || aspectRatio == SocialAspectRatio.PORTRAIT_4_5
-        val horizontalPadding = if (isPortraitRatio) 80.dp else 20.dp
+        val horizontalPadding = if (isPortraitRatio) 16.dp else 20.dp
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.fillMaxWidth().weight(1f),
@@ -826,8 +839,8 @@ private fun StyleTemplateCard(
 
     Card(
         modifier = if (cardAspectRatio < 1f) {
-            // Portrait ratios (9:16, 4:5): constrain height first so card fits vertically
-            Modifier.aspectRatio(cardAspectRatio, matchHeightConstraintsFirst = true)
+            // Portrait ratios: fill available height, constrain width by aspect ratio
+            Modifier.fillMaxHeight().aspectRatio(cardAspectRatio)
         } else {
             Modifier.fillMaxWidth().aspectRatio(cardAspectRatio)
         },
@@ -1003,6 +1016,7 @@ private fun LottieOverlayPreview(
 private fun SyncToggle(
     selectedMode: String,
     onModeSelected: (String) -> Unit,
+    onReselected: (String) -> Unit = {},
     hasGpxData: Boolean,
     modifier: Modifier = Modifier
 ) {
@@ -1035,7 +1049,15 @@ private fun SyncToggle(
                 description = if (hasGpxData) "Per-clip sync" else "Needs GPX",
                 isSelected = selectedMode == StoryMode.LIVE_SYNC.name,
                 enabled = hasGpxData,
-                onClick = { if (hasGpxData) onModeSelected(StoryMode.LIVE_SYNC.name) },
+                onClick = {
+                    if (hasGpxData) {
+                        if (selectedMode == StoryMode.LIVE_SYNC.name) {
+                            onReselected(StoryMode.LIVE_SYNC.name)
+                        } else {
+                            onModeSelected(StoryMode.LIVE_SYNC.name)
+                        }
+                    }
+                },
                 modifier = Modifier.weight(1f)
             )
         }

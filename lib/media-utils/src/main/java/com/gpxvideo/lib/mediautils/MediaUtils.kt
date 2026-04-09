@@ -156,21 +156,51 @@ private fun MediaMetadataRetriever.setSafeDataSource(context: Context, uri: Uri)
 
 /** Parse video creation date from MediaMetadataRetriever.METADATA_KEY_DATE. */
 private fun parseVideoDate(dateStr: String): java.time.Instant? {
+    // Android METADATA_KEY_DATE returns various formats:
+    // "2024-03-15T14:30:22Z", "20240315T143022.000Z", "20240315T143022.000+0000"
+    // Some devices also return: "2024-03-15 14:30:22", "Mar 15, 2024 14:30:22"
     return try {
-        // Common format: "20240315T143022.000Z" or "2024-03-15T14:30:22Z"
         java.time.Instant.parse(dateStr)
     } catch (_: Exception) {
         try {
-            val formatter = java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss.SSS'Z'")
-            java.time.LocalDateTime.parse(dateStr, formatter)
-                .atZone(java.time.ZoneOffset.UTC).toInstant()
+            // Handle offset formats like "20240315T143022.000+0000"
+            java.time.OffsetDateTime.parse(
+                dateStr,
+                java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss.SSSZ")
+            ).toInstant()
         } catch (_: Exception) {
             try {
-                val formatter = java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'")
-                java.time.LocalDateTime.parse(dateStr, formatter)
-                    .atZone(java.time.ZoneOffset.UTC).toInstant()
+                java.time.OffsetDateTime.parse(
+                    dateStr,
+                    java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmssZ")
+                ).toInstant()
             } catch (_: Exception) {
-                null
+                try {
+                    val formatter = java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss.SSS'Z'")
+                    java.time.LocalDateTime.parse(dateStr, formatter)
+                        .atZone(java.time.ZoneOffset.UTC).toInstant()
+                } catch (_: Exception) {
+                    try {
+                        val formatter = java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'")
+                        java.time.LocalDateTime.parse(dateStr, formatter)
+                            .atZone(java.time.ZoneOffset.UTC).toInstant()
+                    } catch (_: Exception) {
+                        try {
+                            // "2024-03-15 14:30:22" (space separator)
+                            val formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+                            java.time.LocalDateTime.parse(dateStr, formatter)
+                                .atZone(java.time.ZoneOffset.UTC).toInstant()
+                        } catch (_: Exception) {
+                            try {
+                                // "yyyy-MM-dd'T'HH:mm:ss+ZZZZ" (ISO with offset)
+                                java.time.OffsetDateTime.parse(dateStr).toInstant()
+                            } catch (_: Exception) {
+                                android.util.Log.w("MediaUtils", "Could not parse video date: $dateStr")
+                                null
+                            }
+                        }
+                    }
+                }
             }
         }
     }
