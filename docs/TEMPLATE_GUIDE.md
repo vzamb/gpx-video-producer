@@ -390,3 +390,257 @@ You can design templates in After Effects and export them as Lottie JSON using t
 7. Repeat for each aspect ratio
 
 > **Important:** Keep the design static (single frame). Animations in the Lottie JSON are not used — the app controls all dynamic behavior through text binding and chart rendering.
+
+## Creating Templates with Figma (Beginner-Friendly)
+
+Figma is a free, browser-based design tool that makes it easy to visually design your overlay layout and export it as Lottie JSON. This section walks you through the entire process step by step.
+
+### Prerequisites
+
+- A free [Figma](https://www.figma.com/) account (the free plan is sufficient)
+- The **LottieFiles** plugin for Figma (free)
+
+### Step 1: Install the LottieFiles Plugin
+
+1. Open Figma in your browser or desktop app
+2. Click the **Figma logo** (top-left) → **Plugins** → **Browse plugins in Community**
+3. Search for **"LottieFiles"**
+4. Click **Install** on the plugin by LottieFiles
+5. You'll see a confirmation — the plugin is now available in your Figma workspace
+
+### Step 2: Create a New Frame
+
+Each aspect ratio needs its own Figma file (or page). Start with 9:16 (vertical/Stories format).
+
+1. Open Figma and create a **New Design File**
+2. Press **F** (or click the Frame tool in the toolbar)
+3. On the right panel under **Frame**, manually set the size:
+   - **Width:** `1080`
+   - **Height:** `1920`
+4. Name this frame `overlay_9x16` (double-click the name in the left panel)
+
+> 💡 **Tip:** Don't use Figma's preset phone sizes. The template canvas must match the exact dimensions listed in the [Canvas Dimensions](#canvas-dimensions) table above.
+
+### Step 3: Set Up the Background
+
+The overlay is rendered **on top of video**, so the background should be transparent. However, during design it helps to simulate a dark video frame:
+
+1. Select the frame
+2. In the right panel, under **Fill**, click the color swatch
+3. Set it to a dark gray (`#1A1A1A`) with opacity at 100% — this is only for reference
+4. **Before exporting**, you'll remove this fill (or set opacity to 0%)
+
+### Step 4: Design Stat Cards
+
+Stat cards are rounded rectangles that hold your data values. Here's how to create one:
+
+1. Press **R** to draw a rectangle inside your frame
+2. In the right panel, set:
+   - **Width:** `200`, **Height:** `110`
+   - **Corner radius:** `12`
+   - **Fill color:** `#000000` (black) with **opacity** `50%`
+3. Position it where you want (e.g., bottom-left corner: X=`48`, Y=`1650`)
+4. **Name the layer** `card_distance` (double-click in the left layers panel)
+
+Repeat for each stat you want (e.g., `card_elevation`, `card_pace`, `card_hr`, `card_time`).
+
+> ⚠️ **Layer naming is critical!** The app matches layers by name. You can name card layers anything — they're purely visual. The **text layers** are the ones that must follow the naming convention.
+
+### Step 5: Add Text Labels and Values
+
+For each stat card, you need two text layers — a **label** (e.g., "DISTANCE") and a **value** (e.g., "12.50").
+
+**Add a label:**
+1. Press **T** to create a text element
+2. Type `DISTANCE` as placeholder text
+3. In the right panel, set:
+   - **Font:** Roboto (or any sans-serif; the app uses system fonts)
+   - **Weight:** Bold
+   - **Size:** `24px`
+   - **Color:** white (`#FFFFFF`)
+4. Position it above/inside the card
+5. **Name this layer exactly:** `label_distance`
+
+**Add a value:**
+1. Press **T** again
+2. Type `0.0` as placeholder text
+3. Set font size to `84px`, Bold, white
+4. Position it below the label
+5. **Name this layer exactly:** `stat_distance`
+
+Repeat for each stat. The recognized layer names are:
+
+| What you're adding | Label layer name | Value layer name |
+|---|---|---|
+| Distance | `label_distance` | `stat_distance` |
+| Elevation | `label_elevation` | `stat_elevation` |
+| Pace | `label_pace` | `stat_pace` |
+| Heart Rate | `label_hr` | `stat_hr` |
+| Time | `label_time` | `stat_time` |
+| Speed | `label_speed` | `stat_speed` |
+| Grade | `label_grade` | `stat_grade` |
+
+You can also add **unit layers** (e.g., `stat_distance_unit` with text `km`).
+
+### Step 6: Add a Title Layer
+
+1. Press **T**, type a placeholder title like `My Run`
+2. Position it at the top of the overlay
+3. Set a large font size (e.g., `48px`), Bold, white
+4. **Name the layer:** `title_text`
+
+### Step 7: Add Placeholder Rectangles for Charts and Map
+
+The app draws the elevation chart and route map into invisible rectangular regions. You need to define where those go.
+
+**Elevation Chart:**
+1. Press **R** to draw a rectangle
+2. Size it to your desired chart area (e.g., **Width:** `960`, **Height:** `240`)
+3. Position it (e.g., X=`60`, Y=`1580` for the bottom area)
+4. Set **Fill opacity to 0%** (the rectangle must be invisible — the app draws the chart here at runtime)
+5. **Name the layer exactly:** `placeholder_elevation_chart`
+
+**Route Map:**
+1. Draw another rectangle
+2. Size it (e.g., **Width:** `400`, **Height:** `400`)
+3. Position it where you want the map
+4. Set **Fill opacity to 0%**
+5. **Name the layer exactly:** `placeholder_route_map`
+
+> 💡 During design, you can keep a faint fill (e.g., 5% opacity) so you can see the placeholder areas. Just set them to 0% before exporting.
+
+### Step 8: Add a Gradient Scrim (Optional but Recommended)
+
+A dark gradient at the bottom ensures text is readable over bright video:
+
+1. Draw a rectangle the full width of the frame: **Width:** `1080`, **Height:** `600`
+2. Position it at the bottom: X=`0`, Y=`1320`
+3. Set the fill to a **Linear Gradient**:
+   - Top color: `#000000` at **0% opacity**
+   - Bottom color: `#000000` at **80% opacity**
+4. Name it `scrim_bottom`
+
+### Step 9: Organize Your Layer Order
+
+In the left panel, arrange layers from **top to bottom** in this order (remember: in Figma, the top layer in the list renders on top visually):
+
+```
+title_text              (topmost — always visible)
+stat_distance
+stat_elevation
+stat_pace
+label_distance
+label_elevation
+label_pace
+placeholder_route_map
+placeholder_elevation_chart
+card_distance
+card_elevation
+card_pace
+scrim_bottom
+```
+
+> The exact order depends on your design, but keep text on top of cards, and cards on top of scrims.
+
+### Step 10: Export to Lottie JSON
+
+1. Select your frame (`overlay_9x16`)
+2. Go to **Plugins** → **LottieFiles** → **Export to Lottie**
+3. In the plugin window:
+   - Make sure your frame is selected
+   - Set **Frame rate:** `30`
+   - Click **Export** (or **Save to workspace** and then download as JSON)
+4. Save the downloaded file as `my_template_9x16.json`
+
+> ⚠️ If the plugin shows errors for certain layer types, simplify those layers. The LottieFiles plugin works best with basic shapes (rectangles, ellipses), text, and groups. Avoid masks, blur effects, or complex boolean operations.
+
+### Step 11: Add Template Metadata
+
+Open the exported JSON in a text editor (VS Code, Notepad++, or even a basic text editor). You need to add the `templateMeta` block.
+
+1. Open `my_template_9x16.json`
+2. Find the very first `{` at the beginning of the file
+3. Locate the last property before `"layers"` (usually `"ddd": 0,`)
+4. Add the following **before** the `"layers"` key:
+
+```json
+  "templateMeta": {
+    "displayName": "My Template",
+    "description": "A custom overlay template"
+  },
+```
+
+The beginning of your file should look roughly like:
+```json
+{
+  "v": "5.7.4",
+  "fr": 30,
+  "ip": 0,
+  "op": 30,
+  "w": 1080,
+  "h": 1920,
+  "nm": "overlay_9x16",
+  "ddd": 0,
+  "assets": [],
+  "fonts": { "list": [...] },
+  "templateMeta": {
+    "displayName": "My Template",
+    "description": "A custom overlay template"
+  },
+  "layers": [...]
+}
+```
+
+### Step 12: Verify and Fix Layer Names
+
+The LottieFiles plugin preserves Figma layer names, but it's good to double-check. Open the JSON and search for `"nm":` to see all layer names. Make sure:
+
+- Stat values use: `stat_distance`, `stat_pace`, `stat_hr`, etc.
+- Labels use: `label_distance`, `label_pace`, `label_hr`, etc.
+- Placeholders use: `placeholder_elevation_chart`, `placeholder_route_map`
+- Title uses: `title_text`
+
+If a name got mangled during export (e.g., `stat_distance Copy`), fix it by editing the JSON directly.
+
+### Step 13: Create All 4 Aspect Ratios
+
+Go back to Figma and create 3 more pages (or frames) for the remaining ratios:
+
+| Ratio | Frame Size | File Name |
+|-------|-----------|-----------|
+| 16:9 | 1920 × 1080 | `my_template_16x9.json` |
+| 1:1 | 1080 × 1080 | `my_template_1x1.json` |
+| 4:5 | 1080 × 1350 | `my_template_4x5.json` |
+
+For each ratio:
+1. Create a new frame at the correct dimensions
+2. Rearrange your elements to fit (re-position cards, resize chart areas, etc.)
+3. Keep the **same stats and layer names** in all variants
+4. Export each via the LottieFiles plugin
+5. Add `templateMeta` to each JSON
+
+> 💡 **Tip:** In Figma, duplicate your 9:16 frame and resize it as a starting point for each ratio. Then reposition elements to fit.
+
+### Step 14: Add Files to the Project
+
+Copy all 4 JSON files into the app's template directory:
+
+```
+app/src/main/assets/templates/my_template_9x16.json
+app/src/main/assets/templates/my_template_16x9.json
+app/src/main/assets/templates/my_template_1x1.json
+app/src/main/assets/templates/my_template_4x5.json
+```
+
+Build and run the app — your new template will appear automatically in the template selector on the Overlays screen. No code changes needed.
+
+### Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| Template doesn't appear in the app | Check file names follow the `{id}_{ratio}.json` pattern and all 4 ratios exist |
+| Text shows placeholder values (`0.0`) instead of live data | Verify layer names match exactly (case-sensitive): `stat_distance`, not `Stat_Distance` |
+| Chart or map doesn't appear | Ensure placeholder layers are type `1` (solid) with opacity `0`. Check the `nm` field is exactly `placeholder_elevation_chart` or `placeholder_route_map` |
+| Export plugin fails | Flatten complex layers. Avoid masks, effects, and boolean operations. Keep it simple: rectangles, text, and groups |
+| Colors look different in the app | The app applies the user's accent color to labels and charts at runtime. Design labels in white — they will be recolored |
+| Text is cut off or misaligned | Adjust font size and position. Remember the app replaces text content dynamically — leave room for longer strings like `12:34:56` or `1234.5` |
