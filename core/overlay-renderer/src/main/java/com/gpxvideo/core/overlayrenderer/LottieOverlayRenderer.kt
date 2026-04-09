@@ -64,7 +64,8 @@ class LottieOverlayRenderer {
 
             textPaint.typeface = if (info.fontBold) boldTypeface else normalTypeface
             textPaint.textSize = info.fontSize
-            textPaint.color = info.color
+            // Apply accent color to title text
+            textPaint.color = if (name == "title_text") accentColor else info.color
             textPaint.textAlign = when (info.justify) {
                 1 -> Paint.Align.CENTER
                 2 -> Paint.Align.RIGHT

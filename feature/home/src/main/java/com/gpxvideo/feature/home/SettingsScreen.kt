@@ -4,6 +4,8 @@ import android.content.Context
 import android.net.Uri
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -275,28 +277,18 @@ fun SettingsScreen(
                         }
                     } else {
                         // Official "Connect with Strava" button per Strava brand guidelines
-                        // Must be orange (#FC4C02), 48px height, with "Connect with Strava" text
-                        Button(
-                            onClick = {
-                                stravaAuth?.let { auth ->
-                                    val customTabsIntent = CustomTabsIntent.Builder().build()
-                                    customTabsIntent.launchUrl(context, auth.buildAuthUri())
-                                }
-                            },
+                        Image(
+                            painter = painterResource(id = com.gpxvideo.core.ui.R.drawable.btn_strava_connect_orange),
+                            contentDescription = "Connect with Strava",
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .height(48.dp),
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = StravaOrange
-                            )
-                        ) {
-                            Text(
-                                "Connect with Strava",
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                        }
+                                .height(48.dp)
+                                .clickable {
+                                    stravaAuth?.let { auth ->
+                                        val customTabsIntent = CustomTabsIntent.Builder().build()
+                                        customTabsIntent.launchUrl(context, auth.buildAuthUri())
+                                    }
+                                }
+                        )
                     }
                     stravaError?.let { error ->
                         Spacer(modifier = Modifier.height(8.dp))

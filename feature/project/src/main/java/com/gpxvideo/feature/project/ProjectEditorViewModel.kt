@@ -103,21 +103,22 @@ class ProjectEditorViewModel @Inject constructor(
     init {
         previewEngine.initialize()
         viewModelScope.launch {
-            val project = projectDao.getById(projectId)
-            _project.value = project
-            project?.let {
-                // Map legacy DB values to new enum names
-                _storyMode.value = when (it.storyMode) {
-                    "HYPER_LAPSE" -> StoryMode.FAST_FORWARD.name
-                    "DOCUMENTARY" -> StoryMode.LIVE_SYNC.name
-                    else -> it.storyMode
+            projectDao.observeById(projectId).collect { project ->
+                _project.value = project
+                project?.let {
+                    // Map legacy DB values to new enum names
+                    _storyMode.value = when (it.storyMode) {
+                        "HYPER_LAPSE" -> StoryMode.FAST_FORWARD.name
+                        "DOCUMENTARY" -> StoryMode.LIVE_SYNC.name
+                        else -> it.storyMode
+                    }
+                    _storyTemplate.value = it.storyTemplate
+                    val savedRatio = SocialAspectRatio.entries.find { r ->
+                        r.width == it.resolutionWidth && r.height == it.resolutionHeight
+                    } ?: SocialAspectRatio.PORTRAIT_9_16
+                    _selectedAspectRatio.value = savedRatio
+                    _activityTitle.value = it.activityTitle
                 }
-                _storyTemplate.value = it.storyTemplate
-                val savedRatio = SocialAspectRatio.entries.find { r ->
-                    r.width == it.resolutionWidth && r.height == it.resolutionHeight
-                } ?: SocialAspectRatio.PORTRAIT_9_16
-                _selectedAspectRatio.value = savedRatio
-                _activityTitle.value = it.activityTitle
             }
         }
         // Watch GPX files reactively so data appears as soon as a file is imported

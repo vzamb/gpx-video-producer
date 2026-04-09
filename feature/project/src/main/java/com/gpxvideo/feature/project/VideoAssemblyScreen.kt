@@ -402,7 +402,6 @@ private fun TimelineAssemblyContent(
         containerColor = DarkBg,
         topBar = {
             AssemblyTopBar(
-                title = uiState.project?.name ?: "New Story",
                 selectedRatio = uiState.selectedAspectRatio,
                 showAspectRatioMenu = showAspectRatioMenu,
                 canUndo = timelineState.canUndo,
@@ -514,23 +513,6 @@ private fun TimelineAssemblyContent(
                         .padding(bottom = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    if (hasGpx) {
-                        // Replace Activity button
-                        OutlinedButton(
-                            onClick = onAddActivity,
-                            enabled = !uiState.isImportingGpx,
-                            modifier = Modifier.height(48.dp),
-                            shape = RoundedCornerShape(14.dp),
-                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.3f))
-                        ) {
-                            Icon(
-                                Icons.Outlined.SwapHoriz,
-                                contentDescription = "Replace Activity",
-                                modifier = Modifier.size(18.dp),
-                                tint = Color.White
-                            )
-                        }
-                    }
                     Button(
                         onClick = { if (hasGpx) onGoToStyle() else onAddActivity() },
                         enabled = !uiState.isImportingGpx,
@@ -580,7 +562,6 @@ private fun TimelineAssemblyContent(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AssemblyTopBar(
-    title: String,
     selectedRatio: SocialAspectRatio,
     showAspectRatioMenu: Boolean,
     canUndo: Boolean,
@@ -607,15 +588,7 @@ private fun AssemblyTopBar(
                 )
             }
 
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                modifier = Modifier.weight(1f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Spacer(Modifier.weight(1f))
 
             // Undo / Redo
             IconButton(onClick = onUndo, enabled = canUndo) {
@@ -635,7 +608,7 @@ private fun AssemblyTopBar(
                 )
             }
 
-            // Aspect ratio dropdown
+            // Aspect ratio dropdown — always rightmost
             Box {
                 Surface(
                     onClick = onToggleAspectRatioMenu,
@@ -1955,7 +1928,7 @@ private fun ratioIcon(ratio: SocialAspectRatio): ImageVector = when (ratio) {
 // ═════════════════════════════════════════════════════════════════════════════
 
 @Composable
-private fun GpxSourcePickerDialog(
+fun GpxSourcePickerDialog(
     onPickFile: () -> Unit,
     onPickStrava: () -> Unit,
     onDismiss: () -> Unit

@@ -1,5 +1,7 @@
 package com.gpxvideo.feature.project
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -50,6 +52,8 @@ import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.Photo
 import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Route
+import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.Title
 import androidx.compose.material.icons.outlined.Warning
@@ -109,6 +113,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.collectAsState
 import com.gpxvideo.core.model.ClipSyncPoint
 import com.gpxvideo.core.model.GpxData
 import com.gpxvideo.core.model.GpxPoint
@@ -155,6 +160,16 @@ fun StyleTelemetryScreen(
     var showInfoSheet by rememberSaveable { mutableStateOf(false) }
     var showAspectRatioMenu by remember { mutableStateOf(false) }
     var showSyncSheet by rememberSaveable { mutableStateOf(false) }
+    var showGpxSourcePicker by remember { mutableStateOf(false) }
+    var showStravaSheet by remember { mutableStateOf(false) }
+
+    val stravaIsLinked by viewModel.stravaTokenStore.isLinked.collectAsState(initial = false)
+
+    val gpxPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let { viewModel.importGpxFile(it) }
+    }
 
     val playbackProgress by remember {
         derivedStateOf {
@@ -211,6 +226,7 @@ fun StyleTelemetryScreen(
                 onColorPickerClick = { showColorPicker = true },
                 onInfoClick = { showInfoSheet = true },
                 onTitleClick = { showTitleEditor = true },
+                onReplaceGpx = { showGpxSourcePicker = true },
                 hasGpxData = uiState.gpxData != null
             )
         },
@@ -317,6 +333,33 @@ fun StyleTelemetryScreen(
             autoSyncedClipIds = uiState.autoSyncedClipIds,
             onSetSyncPoint = { clipId, syncPoint -> viewModel.setClipSyncPoint(clipId, syncPoint) },
             onDismiss = { showSyncSheet = false }
+        )
+    }
+
+    if (showGpxSourcePicker) {
+        GpxSourcePickerDialog(
+            onPickFile = {
+                showGpxSourcePicker = false
+                gpxPickerLauncher.launch(arrayOf("*/*"))
+            },
+            onPickStrava = {
+                showGpxSourcePicker = false
+                showStravaSheet = true
+            },
+            onDismiss = { showGpxSourcePicker = false }
+        )
+    }
+
+    if (showStravaSheet) {
+        StravaActivityPickerSheet(
+            isLinked = stravaIsLinked,
+            stravaAuth = viewModel.stravaAuth,
+            stravaApi = viewModel.stravaApi,
+            onActivitySelected = { activity ->
+                viewModel.importFromStrava(activity)
+                showStravaSheet = false
+            },
+            onDismiss = { showStravaSheet = false }
         )
     }
 }
@@ -586,6 +629,7 @@ private fun StyleTopBar(
     onColorPickerClick: () -> Unit,
     onInfoClick: () -> Unit,
     onTitleClick: () -> Unit,
+    onReplaceGpx: () -> Unit,
     hasGpxData: Boolean
 ) {
     Surface(color = DarkBg, tonalElevation = 0.dp) {
@@ -600,15 +644,30 @@ private fun StyleTopBar(
                 Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back", tint = Color.White)
             }
 
-            Text(
-                text = "Style & Overlays",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                modifier = Modifier.weight(1f)
-            )
+            Spacer(Modifier.weight(1f))
 
-            // Aspect Ratio dropdown
+            // Replace GPX activity
+            if (hasGpxData) {
+                IconButton(onClick = onReplaceGpx) {
+                    Icon(Icons.Outlined.SwapHoriz, contentDescription = "Replace Activity", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
+                }
+            }
+
+            if (hasGpxData) {
+                IconButton(onClick = onInfoClick) {
+                    Icon(Icons.Outlined.Info, contentDescription = "Info", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
+                }
+            }
+
+            IconButton(onClick = onTitleClick) {
+                Icon(Icons.Outlined.Title, contentDescription = "Edit Title", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
+            }
+
+            IconButton(onClick = onColorPickerClick) {
+                Icon(Icons.Outlined.Palette, contentDescription = "Accent Color", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
+            }
+
+            // Aspect ratio dropdown — always rightmost
             Box {
                 Surface(
                     onClick = onToggleAspectRatioMenu,
@@ -665,20 +724,6 @@ private fun StyleTopBar(
                         )
                     }
                 }
-            }
-
-            if (hasGpxData) {
-                IconButton(onClick = onInfoClick) {
-                    Icon(Icons.Outlined.Info, contentDescription = "Info", tint = Color.White.copy(alpha = 0.7f))
-                }
-            }
-
-            IconButton(onClick = onTitleClick) {
-                Icon(Icons.Outlined.Title, contentDescription = "Edit Title", tint = Color.White.copy(alpha = 0.7f))
-            }
-
-            IconButton(onClick = onColorPickerClick) {
-                Icon(Icons.Outlined.Palette, contentDescription = "Accent Color", tint = Color.White.copy(alpha = 0.7f))
             }
         }
     }

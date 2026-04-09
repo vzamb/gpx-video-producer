@@ -1,6 +1,7 @@
 package com.gpxvideo.feature.project
 
 import androidx.browser.customtabs.CustomTabsIntent
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -50,6 +51,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -143,19 +145,16 @@ fun StravaActivityPickerSheet(
                         color = Color.White.copy(alpha = 0.7f),
                         modifier = Modifier.padding(bottom = 24.dp)
                     )
-                    Button(
-                        onClick = {
-                            val customTabsIntent = CustomTabsIntent.Builder().build()
-                            customTabsIntent.launchUrl(context, stravaAuth.buildAuthUri())
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = StravaOrange),
+                    Image(
+                        painter = painterResource(id = com.gpxvideo.core.ui.R.drawable.btn_strava_connect_orange),
+                        contentDescription = "Connect with Strava",
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text("Connect with Strava", fontWeight = FontWeight.Bold)
-                    }
+                            .height(48.dp)
+                            .clickable {
+                                val customTabsIntent = CustomTabsIntent.Builder().build()
+                                customTabsIntent.launchUrl(context, stravaAuth.buildAuthUri())
+                            }
+                    )
                 }
             } else {
                 // Connected — show activity list
