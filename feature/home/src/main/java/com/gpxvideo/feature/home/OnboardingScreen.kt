@@ -15,10 +15,10 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CloudUpload
-import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material.icons.filled.Map
-import androidx.compose.material.icons.filled.VideoLibrary
+import androidx.compose.material.icons.outlined.CloudUpload
+import androidx.compose.material.icons.outlined.Layers
+import androidx.compose.material.icons.outlined.Map
+import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -42,22 +42,22 @@ data class OnboardingPage(
 
 private val onboardingPages = listOf(
     OnboardingPage(
-        icon = Icons.Default.VideoLibrary,
+        icon = Icons.Outlined.VideoLibrary,
         title = "Import Your Media",
         description = "Easily import videos and photos from your device to start creating GPS-enhanced content."
     ),
     OnboardingPage(
-        icon = Icons.Default.Map,
+        icon = Icons.Outlined.Map,
         title = "Add GPS Data",
         description = "Load GPX files from your favorite fitness apps to sync location data with your media."
     ),
     OnboardingPage(
-        icon = Icons.Default.Layers,
+        icon = Icons.Outlined.Layers,
         title = "Create Dynamic Overlays",
         description = "Add speed, elevation, maps, and other real-time data overlays to your videos."
     ),
     OnboardingPage(
-        icon = Icons.Default.CloudUpload,
+        icon = Icons.Outlined.CloudUpload,
         title = "Export & Share",
         description = "Export your finished videos in high quality and share them with the world."
     )

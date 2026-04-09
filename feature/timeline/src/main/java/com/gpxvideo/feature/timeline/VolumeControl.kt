@@ -5,8 +5,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.outlined.VolumeUp
+import androidx.compose.material.icons.automirrored.outlined.VolumeOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -30,8 +30,8 @@ fun VolumeControl(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
-            imageVector = if (volume > 0f) Icons.AutoMirrored.Filled.VolumeUp
-            else Icons.AutoMirrored.Filled.VolumeOff,
+            imageVector = if (volume > 0f) Icons.AutoMirrored.Outlined.VolumeUp
+            else Icons.AutoMirrored.Outlined.VolumeOff,
             contentDescription = "Volume",
             tint = MaterialTheme.colorScheme.onSurfaceVariant
         )

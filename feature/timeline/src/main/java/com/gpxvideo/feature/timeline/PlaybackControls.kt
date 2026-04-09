@@ -8,12 +8,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Redo
-import androidx.compose.material.icons.automirrored.filled.Undo
-import androidx.compose.material.icons.filled.FastForward
-import androidx.compose.material.icons.filled.FastRewind
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.automirrored.outlined.Redo
+import androidx.compose.material.icons.automirrored.outlined.Undo
+import androidx.compose.material.icons.outlined.FastForward
+import androidx.compose.material.icons.outlined.FastRewind
+import androidx.compose.material.icons.outlined.Pause
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -57,7 +57,7 @@ fun PlaybackControls(
                 modifier = Modifier.size(36.dp)
             ) {
                 Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Undo,
+                    imageVector = Icons.AutoMirrored.Outlined.Undo,
                     contentDescription = "Undo",
                     modifier = Modifier.size(20.dp)
                 )
@@ -70,7 +70,7 @@ fun PlaybackControls(
                 modifier = Modifier.size(36.dp)
             ) {
                 Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Redo,
+                    imageVector = Icons.AutoMirrored.Outlined.Redo,
                     contentDescription = "Redo",
                     modifier = Modifier.size(20.dp)
                 )
@@ -84,7 +84,7 @@ fun PlaybackControls(
                 modifier = Modifier.size(36.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Default.FastRewind,
+                    imageVector = Icons.Outlined.FastRewind,
                     contentDescription = "Skip backward",
                     modifier = Modifier.size(20.dp)
                 )
@@ -96,7 +96,7 @@ fun PlaybackControls(
                 modifier = Modifier.size(44.dp)
             ) {
                 Icon(
-                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    imageVector = if (isPlaying) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
                     contentDescription = if (isPlaying) "Pause" else "Play",
                     modifier = Modifier.size(28.dp)
                 )
@@ -110,7 +110,7 @@ fun PlaybackControls(
                 modifier = Modifier.size(36.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Default.FastForward,
+                    imageVector = Icons.Outlined.FastForward,
                     contentDescription = "Skip forward",
                     modifier = Modifier.size(20.dp)
                 )

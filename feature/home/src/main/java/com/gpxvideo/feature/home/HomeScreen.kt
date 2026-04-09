@@ -16,11 +16,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.VideoLibrary
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FloatingActionButton
@@ -62,7 +62,7 @@ fun HomeScreen(
                 actions = {
                     IconButton(onClick = onNavigateToSettings) {
                         Icon(
-                            imageVector = Icons.Default.Settings,
+                            imageVector = Icons.Outlined.Settings,
                             contentDescription = "Settings"
                         )
                     }
@@ -75,7 +75,7 @@ fun HomeScreen(
                 containerColor = MaterialTheme.colorScheme.primary
             ) {
                 Icon(
-                    imageVector = Icons.Default.Add,
+                    imageVector = Icons.Outlined.Add,
                     contentDescription = "Create new project"
                 )
             }
@@ -95,7 +95,7 @@ fun HomeScreen(
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 placeholder = { Text("Search projects...") },
                 leadingIcon = {
-                    Icon(Icons.Default.Search, contentDescription = "Search")
+                    Icon(Icons.Outlined.Search, contentDescription = "Search")
                 },
                 singleLine = true
             )
@@ -179,7 +179,7 @@ private fun ProjectCard(
             // Delete button
             IconButton(onClick = onDelete) {
                 Icon(
-                    imageVector = Icons.Default.Delete,
+                    imageVector = Icons.Outlined.Delete,
                     contentDescription = "Delete project",
                     tint = MaterialTheme.colorScheme.error
                 )
@@ -199,7 +199,7 @@ private fun EmptyState(modifier: Modifier = Modifier) {
             verticalArrangement = Arrangement.Center
         ) {
             Icon(
-                imageVector = Icons.Default.VideoLibrary,
+                imageVector = Icons.Outlined.VideoLibrary,
                 contentDescription = null,
                 modifier = Modifier.size(72.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)

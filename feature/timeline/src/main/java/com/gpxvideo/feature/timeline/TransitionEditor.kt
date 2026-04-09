@@ -10,12 +10,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.Animation
-import androidx.compose.material.icons.filled.BlurOn
-import androidx.compose.material.icons.filled.ContentCut
-import androidx.compose.material.icons.filled.Gradient
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.outlined.Animation
+import androidx.compose.material.icons.outlined.BlurOn
+import androidx.compose.material.icons.outlined.ContentCut
+import androidx.compose.material.icons.outlined.Gradient
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -184,13 +184,13 @@ internal fun TransitionType.toDisplayName(): String = when (this) {
 }
 
 internal fun TransitionType.toIcon(): ImageVector = when (this) {
-    TransitionType.CUT -> Icons.Default.ContentCut
-    TransitionType.FADE -> Icons.Default.Gradient
-    TransitionType.DISSOLVE -> Icons.Default.BlurOn
-    TransitionType.SLIDE_LEFT -> Icons.AutoMirrored.Filled.ArrowBack
-    TransitionType.SLIDE_RIGHT -> Icons.AutoMirrored.Filled.ArrowForward
-    TransitionType.WIPE_LEFT -> Icons.AutoMirrored.Filled.ArrowBack
-    TransitionType.WIPE_RIGHT -> Icons.AutoMirrored.Filled.ArrowForward
+    TransitionType.CUT -> Icons.Outlined.ContentCut
+    TransitionType.FADE -> Icons.Outlined.Gradient
+    TransitionType.DISSOLVE -> Icons.Outlined.BlurOn
+    TransitionType.SLIDE_LEFT -> Icons.AutoMirrored.Outlined.ArrowBack
+    TransitionType.SLIDE_RIGHT -> Icons.AutoMirrored.Outlined.ArrowForward
+    TransitionType.WIPE_LEFT -> Icons.AutoMirrored.Outlined.ArrowBack
+    TransitionType.WIPE_RIGHT -> Icons.AutoMirrored.Outlined.ArrowForward
 }
 
 internal fun TransitionType.toColor(): androidx.compose.ui.graphics.Color = when (this) {

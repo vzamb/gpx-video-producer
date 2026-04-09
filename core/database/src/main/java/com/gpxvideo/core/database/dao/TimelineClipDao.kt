@@ -33,4 +33,7 @@ interface TimelineClipDao {
 
     @Query("SELECT * FROM timeline_clips WHERE track_id = :trackId ORDER BY start_time_ms ASC")
     fun getByTrackId(trackId: UUID): Flow<List<TimelineClipEntity>>
+
+    @Query("UPDATE timeline_clips SET gpx_point_index = :gpxPointIndex, gpx_distance_meters = :gpxDistanceMeters, is_synced = :isSynced WHERE id = :clipId")
+    suspend fun updateSyncPoint(clipId: UUID, gpxPointIndex: Int, gpxDistanceMeters: Double, isSynced: Boolean)
 }

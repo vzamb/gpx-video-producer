@@ -77,7 +77,7 @@ fun CreateProjectScreen(
                     FilterChip(
                         selected = uiState.sportType == sportType,
                         onClick = { viewModel.onSportTypeSelected(sportType) },
-                        label = { Text("${sportType.icon} ${sportType.displayName}") }
+                        label = { Text(sportType.displayName) }
                     )
                 }
             }

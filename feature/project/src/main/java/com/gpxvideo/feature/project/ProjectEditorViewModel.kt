@@ -56,7 +56,8 @@ data class ProjectEditorUiState(
     val selectedAspectRatio: SocialAspectRatio = SocialAspectRatio.PORTRAIT_9_16,
     val accentColor: Int = 0xFF448AFF.toInt(),
     val activityTitle: String = "",
-    val clipSyncPoints: Map<UUID, ClipSyncPoint> = emptyMap()
+    val clipSyncPoints: Map<UUID, ClipSyncPoint> = emptyMap(),
+    val autoSyncedClipIds: Set<UUID> = emptySet()
 )
 
 @HiltViewModel
@@ -87,6 +88,8 @@ class ProjectEditorViewModel @Inject constructor(
     private val _accentColor = MutableStateFlow(0xFF448AFF.toInt())
     private val _activityTitle = MutableStateFlow("")
     private val _clipSyncPoints = MutableStateFlow<Map<UUID, ClipSyncPoint>>(emptyMap())
+    /** Clip IDs that were auto-synced because their video creation date matched the GPX timespan. */
+    private val _autoSyncedClipIds = MutableStateFlow<Set<UUID>>(emptySet())
 
     init {
         previewEngine.initialize()
@@ -128,6 +131,23 @@ class ProjectEditorViewModel @Inject constructor(
         viewModelScope.launch {
             mediaItemDao.getByProjectId(projectId).collect { items ->
                 loadTimelineAwarePreviewClips(items)
+            }
+        }
+        // Load persisted clip sync points
+        viewModelScope.launch(Dispatchers.IO) {
+            val tracks = trackDao.getByProjectId(projectId).first()
+            val videoTrack = tracks.find { it.type == "VIDEO" } ?: return@launch
+            val clipEntities = clipDao.getByTrackId(videoTrack.id).first()
+            val synced = clipEntities.filter { it.isSynced }.associate { clip ->
+                clip.id to ClipSyncPoint(
+                    clipId = clip.id,
+                    gpxPointIndex = clip.gpxPointIndex,
+                    gpxDistanceMeters = clip.gpxDistanceMeters,
+                    isSynced = true
+                )
+            }
+            if (synced.isNotEmpty()) {
+                _clipSyncPoints.value = synced
             }
         }
     }
@@ -236,7 +256,7 @@ class ProjectEditorViewModel @Inject constructor(
         _isImportingGpx,
         _storyMode,
         _storyTemplate,
-        combine(_selectedAspectRatio, _accentColor, _activityTitle, _clipSyncPoints) { ar, ac, at, cs -> arrayOf(ar, ac, at, cs) }
+        combine(_selectedAspectRatio, _accentColor, _activityTitle, _clipSyncPoints, _autoSyncedClipIds) { ar, ac, at, cs, autoIds -> arrayOf(ar, ac, at, cs, autoIds) }
     ) { values ->
         val project = values[0] as ProjectEntity?
         val mediaItems = @Suppress("UNCHECKED_CAST") (values[1] as List<MediaItemEntity>)
@@ -254,6 +274,8 @@ class ProjectEditorViewModel @Inject constructor(
         val activityTitle = extra[2] as String
         @Suppress("UNCHECKED_CAST")
         val clipSyncPoints = extra[3] as Map<UUID, ClipSyncPoint>
+        @Suppress("UNCHECKED_CAST")
+        val autoSyncedClipIds = extra[4] as Set<UUID>
         ProjectEditorUiState(
             project = project,
             mediaItems = mediaItems,
@@ -268,7 +290,8 @@ class ProjectEditorViewModel @Inject constructor(
             selectedAspectRatio = aspectRatio,
             accentColor = accentColor,
             activityTitle = activityTitle,
-            clipSyncPoints = clipSyncPoints
+            clipSyncPoints = clipSyncPoints,
+            autoSyncedClipIds = autoSyncedClipIds
         )
     }.stateIn(
         scope = viewModelScope,
@@ -349,7 +372,8 @@ class ProjectEditorViewModel @Inject constructor(
             codec = info.codec,
             hasAudio = info.hasAudio,
             audioCodec = info.audioCodec,
-            fileSize = info.fileSize
+            fileSize = info.fileSize,
+            videoCreatedAt = info.videoCreatedAt
         )
         mediaItemDao.insert(entity)
     }
@@ -448,6 +472,9 @@ class ProjectEditorViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             projectDao.updateStoryMode(projectId, mode)
         }
+        if (mode == StoryMode.LIVE_SYNC.name) {
+            autoDetectSyncPoints()
+        }
     }
 
     fun setStoryTemplate(template: String) {
@@ -481,10 +508,94 @@ class ProjectEditorViewModel @Inject constructor(
 
     fun setClipSyncPoint(clipId: UUID, syncPoint: ClipSyncPoint) {
         _clipSyncPoints.value = _clipSyncPoints.value + (clipId to syncPoint)
+        viewModelScope.launch(Dispatchers.IO) {
+            clipDao.updateSyncPoint(
+                clipId = clipId,
+                gpxPointIndex = syncPoint.gpxPointIndex,
+                gpxDistanceMeters = syncPoint.gpxDistanceMeters,
+                isSynced = syncPoint.isSynced
+            )
+        }
     }
 
     fun removeClipSyncPoint(clipId: UUID) {
         _clipSyncPoints.value = _clipSyncPoints.value - clipId
+        viewModelScope.launch(Dispatchers.IO) {
+            clipDao.updateSyncPoint(clipId, -1, 0.0, false)
+        }
+    }
+
+    /**
+     * Auto-detect clips whose videoCreatedAt falls within the GPX track timespan.
+     * For each matching clip, compute the closest GPX point and set a sync point.
+     */
+    fun autoDetectSyncPoints() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val gpxData = _gpxData.value ?: return@launch
+            val points = gpxData.tracks.flatMap { it.segments }.flatMap { it.points }
+            if (points.isEmpty()) return@launch
+
+            val gpxStart = points.firstOrNull()?.time ?: return@launch
+            val gpxEnd = points.lastOrNull()?.time ?: return@launch
+
+            val mediaItems = mediaItemDao.getByProjectId(projectId).first()
+            val tracks = trackDao.getByProjectId(projectId).first()
+            val videoTrack = tracks.find { it.type == "VIDEO" } ?: return@launch
+            val clipEntities = clipDao.getByTrackId(videoTrack.id).first()
+
+            val newSyncPoints = mutableMapOf<UUID, ClipSyncPoint>()
+            val autoIds = mutableSetOf<UUID>()
+
+            // Precompute cumulative distances
+            val cumulDist = DoubleArray(points.size)
+            for (i in 1 until points.size) {
+                cumulDist[i] = cumulDist[i - 1] + com.gpxvideo.lib.gpxparser.GpxStatistics.computeDistance(
+                    points[i - 1].latitude, points[i - 1].longitude,
+                    points[i].latitude, points[i].longitude
+                )
+            }
+
+            for (clipEntity in clipEntities) {
+                // Skip already manually synced clips
+                if (_clipSyncPoints.value[clipEntity.id]?.isSynced == true) continue
+
+                val mediaItem = mediaItems.find { it.id == clipEntity.mediaItemId } ?: continue
+                val videoDate = mediaItem.videoCreatedAt ?: continue
+
+                // Check if video date falls within GPX timespan (with 1 hour tolerance)
+                val tolerance = java.time.Duration.ofHours(1)
+                if (videoDate.isBefore(gpxStart.minus(tolerance)) || videoDate.isAfter(gpxEnd.plus(tolerance))) continue
+
+                // Find closest GPX point by timestamp
+                var bestIdx = 0
+                var bestDiff = Long.MAX_VALUE
+                for (i in points.indices) {
+                    val ptTime = points[i].time ?: continue
+                    val diff = kotlin.math.abs(java.time.Duration.between(ptTime, videoDate).toMillis())
+                    if (diff < bestDiff) {
+                        bestDiff = diff
+                        bestIdx = i
+                    }
+                }
+
+                val syncPoint = ClipSyncPoint(
+                    clipId = clipEntity.id,
+                    gpxPointIndex = bestIdx,
+                    gpxDistanceMeters = cumulDist[bestIdx],
+                    isSynced = true
+                )
+                newSyncPoints[clipEntity.id] = syncPoint
+                autoIds.add(clipEntity.id)
+
+                // Persist to DB
+                clipDao.updateSyncPoint(clipEntity.id, bestIdx, cumulDist[bestIdx], true)
+            }
+
+            if (newSyncPoints.isNotEmpty()) {
+                _clipSyncPoints.value = _clipSyncPoints.value + newSyncPoints
+                _autoSyncedClipIds.value = _autoSyncedClipIds.value + autoIds
+            }
+        }
     }
 
     /** Force reload timeline-aware preview clips (call from Style screen). */

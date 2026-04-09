@@ -7,16 +7,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Audiotrack
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.LockOpen
-import androidx.compose.material.icons.filled.TextFields
-import androidx.compose.material.icons.filled.Videocam
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.outlined.Audiotrack
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Layers
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.LockOpen
+import androidx.compose.material.icons.outlined.TextFields
+import androidx.compose.material.icons.outlined.Videocam
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -77,8 +77,8 @@ fun TrackHeader(
             modifier = Modifier.size(22.dp)
         ) {
             Icon(
-                imageVector = if (track.isVisible) Icons.Default.Visibility
-                else Icons.Default.VisibilityOff,
+                imageVector = if (track.isVisible) Icons.Outlined.Visibility
+                else Icons.Outlined.VisibilityOff,
                 contentDescription = "Toggle visibility",
                 modifier = Modifier.size(14.dp)
             )
@@ -89,7 +89,7 @@ fun TrackHeader(
             modifier = Modifier.size(22.dp)
         ) {
             Icon(
-                imageVector = if (track.isLocked) Icons.Default.Lock else Icons.Default.LockOpen,
+                imageVector = if (track.isLocked) Icons.Outlined.Lock else Icons.Outlined.LockOpen,
                 contentDescription = "Toggle lock",
                 modifier = Modifier.size(14.dp)
             )
@@ -100,7 +100,7 @@ fun TrackHeader(
             modifier = Modifier.size(22.dp)
         ) {
             Icon(
-                imageVector = Icons.Default.Delete,
+                imageVector = Icons.Outlined.Delete,
                 contentDescription = "Delete track",
                 modifier = Modifier.size(14.dp),
                 tint = MaterialTheme.colorScheme.error
@@ -110,9 +110,9 @@ fun TrackHeader(
 }
 
 private fun TrackType.toIcon(): ImageVector = when (this) {
-    TrackType.VIDEO -> Icons.Default.Videocam
-    TrackType.IMAGE -> Icons.Default.Image
-    TrackType.AUDIO -> Icons.Default.Audiotrack
-    TrackType.OVERLAY -> Icons.Default.Layers
-    TrackType.TEXT -> Icons.Default.TextFields
+    TrackType.VIDEO -> Icons.Outlined.Videocam
+    TrackType.IMAGE -> Icons.Outlined.Image
+    TrackType.AUDIO -> Icons.Outlined.Audiotrack
+    TrackType.OVERLAY -> Icons.Outlined.Layers
+    TrackType.TEXT -> Icons.Outlined.TextFields
 }

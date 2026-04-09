@@ -20,12 +20,12 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Verified
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -69,14 +69,14 @@ fun TemplateGalleryScreen(
                 title = { Text("Templates") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
         },
         floatingActionButton = {
             FloatingActionButton(onClick = onCreateTemplate) {
-                Icon(Icons.Default.Add, contentDescription = "Create template")
+                Icon(Icons.Outlined.Add, contentDescription = "Create template")
             }
         }
     ) { padding ->
@@ -93,11 +93,11 @@ fun TemplateGalleryScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp),
                 placeholder = { Text("Search templates…") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
                         IconButton(onClick = { viewModel.setSearchQuery("") }) {
-                            Icon(Icons.Default.Close, contentDescription = "Clear search")
+                            Icon(Icons.Outlined.Close, contentDescription = "Clear search")
                         }
                     }
                 },
@@ -127,7 +127,7 @@ fun TemplateGalleryScreen(
                                 if (selectedSport == sport) null else sport
                             )
                         },
-                        label = { Text("${sport.icon} ${sport.displayName}") }
+                        label = { Text(sport.displayName) }
                     )
                 }
             }
@@ -201,7 +201,7 @@ private fun TemplateCard(
                         modifier = Modifier.size(24.dp)
                     ) {
                         Icon(
-                            Icons.Default.Delete,
+                            Icons.Outlined.Delete,
                             contentDescription = "Delete",
                             modifier = Modifier.size(16.dp),
                             tint = MaterialTheme.colorScheme.error
@@ -224,7 +224,7 @@ private fun TemplateCard(
                         tonalElevation = 1.dp
                     ) {
                         Text(
-                            text = "${template.sportType!!.icon} ${template.sportType!!.displayName}",
+                            text = template.sportType!!.displayName,
                             style = MaterialTheme.typography.labelSmall,
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                             color = MaterialTheme.colorScheme.onSecondaryContainer
@@ -247,7 +247,7 @@ private fun TemplateCard(
 
                 if (template.isBuiltIn) {
                     Icon(
-                        Icons.Default.Verified,
+                        Icons.Outlined.Verified,
                         contentDescription = "Built-in",
                         modifier = Modifier.size(14.dp),
                         tint = MaterialTheme.colorScheme.primary

@@ -13,9 +13,9 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -99,7 +99,7 @@ private fun MediaGridItem(
             )
         ) {
             Icon(
-                imageVector = Icons.Default.Close,
+                imageVector = Icons.Outlined.Close,
                 contentDescription = "Delete media",
                 modifier = Modifier.size(16.dp)
             )
@@ -117,9 +117,9 @@ private fun MediaGridItem(
         ) {
             Icon(
                 imageVector = if (mediaItem.type == "VIDEO") {
-                    Icons.Default.Videocam
+                    Icons.Outlined.Videocam
                 } else {
-                    Icons.Default.Image
+                    Icons.Outlined.Image
                 },
                 contentDescription = mediaItem.type,
                 modifier = Modifier.size(14.dp),

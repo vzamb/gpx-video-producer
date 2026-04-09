@@ -27,13 +27,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Audiotrack
-import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.TextFields
-import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Audiotrack
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Layers
+import androidx.compose.material.icons.outlined.MusicNote
+import androidx.compose.material.icons.outlined.TextFields
+import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -170,7 +170,7 @@ fun EditorTimeline(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Add,
+                                    imageVector = Icons.Outlined.Add,
                                     contentDescription = "Add clip",
                                     modifier = Modifier.size(20.dp),
                                     tint = MaterialTheme.colorScheme.onPrimaryContainer
@@ -212,7 +212,7 @@ fun EditorTimeline(
                         totalDurationMs = timelineState.totalDurationMs,
                         onSeekTo = onSeekTo,
                         onAction = onAction,
-                        iconOverride = Icons.Default.MusicNote
+                        iconOverride = Icons.Outlined.MusicNote
                     )
                 }
 
@@ -227,7 +227,7 @@ fun EditorTimeline(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = Icons.Default.MusicNote,
+                            imageVector = Icons.Outlined.MusicNote,
                             contentDescription = null,
                             modifier = Modifier.size(18.dp),
                             tint = AudioClipColor.copy(alpha = 0.6f)
@@ -718,7 +718,7 @@ private fun EmptyVideoTrackRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
-            imageVector = Icons.Default.Videocam,
+            imageVector = Icons.Outlined.Videocam,
             contentDescription = null,
             modifier = Modifier.size(18.dp),
             tint = VideoClipColor.copy(alpha = 0.6f)
@@ -733,11 +733,11 @@ private fun EmptyVideoTrackRow(
 }
 
 private fun TrackType.toTrackIcon(): ImageVector = when (this) {
-    TrackType.VIDEO -> Icons.Default.Videocam
-    TrackType.IMAGE -> Icons.Default.Image
-    TrackType.AUDIO -> Icons.Default.Audiotrack
-    TrackType.OVERLAY -> Icons.Default.Layers
-    TrackType.TEXT -> Icons.Default.TextFields
+    TrackType.VIDEO -> Icons.Outlined.Videocam
+    TrackType.IMAGE -> Icons.Outlined.Image
+    TrackType.AUDIO -> Icons.Outlined.Audiotrack
+    TrackType.OVERLAY -> Icons.Outlined.Layers
+    TrackType.TEXT -> Icons.Outlined.TextFields
 }
 
 private fun formatRulerTime(ms: Long): String {

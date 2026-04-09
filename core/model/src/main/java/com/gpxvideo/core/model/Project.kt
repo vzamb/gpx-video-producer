@@ -15,18 +15,18 @@ data class Project(
     val templateId: UUID? = null
 )
 
-enum class SportType(val displayName: String, val icon: String) {
-    CYCLING("Cycling", "🚴"),
-    RUNNING("Running", "🏃"),
-    HIKING("Hiking", "🥾"),
-    TRAIL_RUNNING("Trail Running", "🏔️"),
-    SKIING("Skiing", "⛷️"),
-    SNOWBOARDING("Snowboarding", "🏂"),
-    SWIMMING("Swimming", "🏊"),
-    KAYAKING("Kayaking", "🛶"),
-    CLIMBING("Climbing", "🧗"),
-    MULTI_SPORT("Multi-Sport", "🏅"),
-    OTHER("Other", "🏋️")
+enum class SportType(val displayName: String) {
+    CYCLING("Cycling"),
+    RUNNING("Running"),
+    HIKING("Hiking"),
+    TRAIL_RUNNING("Trail Running"),
+    SKIING("Skiing"),
+    SNOWBOARDING("Snowboarding"),
+    SWIMMING("Swimming"),
+    KAYAKING("Kayaking"),
+    CLIMBING("Climbing"),
+    MULTI_SPORT("Multi-Sport"),
+    OTHER("Other")
 }
 
 data class OutputSettings(
@@ -49,13 +49,12 @@ enum class SocialAspectRatio(
     val displayName: String,
     val description: String,
     val width: Int,
-    val height: Int,
-    val icon: String
+    val height: Int
 ) {
-    LANDSCAPE_16_9("16:9", "YouTube, Twitter", 1920, 1080, "📺"),
-    PORTRAIT_9_16("9:16", "Reels, TikTok, Shorts", 1080, 1920, "📱"),
-    SQUARE_1_1("1:1", "Instagram Post", 1080, 1080, "⬜"),
-    PORTRAIT_4_5("4:5", "Instagram Feed", 1080, 1350, "📷")
+    LANDSCAPE_16_9("16:9", "YouTube, Twitter", 1920, 1080),
+    PORTRAIT_9_16("9:16", "Reels, TikTok, Shorts", 1080, 1920),
+    SQUARE_1_1("1:1", "Instagram Post", 1080, 1080),
+    PORTRAIT_4_5("4:5", "Instagram Feed", 1080, 1350)
 }
 
 enum class ExportFormat(val displayName: String, val extension: String) {

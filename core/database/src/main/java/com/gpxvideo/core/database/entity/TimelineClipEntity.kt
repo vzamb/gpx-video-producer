@@ -55,5 +55,11 @@ data class TimelineClipEntity(
     val positionX: Float = 0.5f,
     @ColumnInfo(name = "position_y")
     val positionY: Float = 0.5f,
-    val opacity: Float = 1.0f
+    val opacity: Float = 1.0f,
+    @ColumnInfo(name = "gpx_point_index", defaultValue = "-1")
+    val gpxPointIndex: Int = -1,
+    @ColumnInfo(name = "gpx_distance_meters", defaultValue = "0.0")
+    val gpxDistanceMeters: Double = 0.0,
+    @ColumnInfo(name = "is_synced", defaultValue = "0")
+    val isSynced: Boolean = false
 )

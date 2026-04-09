@@ -40,19 +40,23 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Redo
-import androidx.compose.material.icons.automirrored.filled.Undo
-import androidx.compose.material.icons.automirrored.filled.VolumeOff
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Movie
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Route
-import androidx.compose.material.icons.filled.VideoLibrary
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.Redo
+import androidx.compose.material.icons.automirrored.outlined.Undo
+import androidx.compose.material.icons.automirrored.outlined.VolumeOff
+import androidx.compose.material.icons.automirrored.outlined.VolumeUp
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.CropLandscape
+import androidx.compose.material.icons.outlined.CropPortrait
+import androidx.compose.material.icons.outlined.CropSquare
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Movie
+import androidx.compose.material.icons.outlined.Pause
+import androidx.compose.material.icons.outlined.Photo
+import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Route
+import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -488,7 +492,7 @@ private fun TimelineAssemblyContent(
                         Text("Importing GPX…", fontWeight = FontWeight.Bold)
                     } else {
                         Icon(
-                            if (hasGpx) Icons.Default.Route else Icons.Default.Route,
+                            if (hasGpx) Icons.Outlined.Route else Icons.Outlined.Route,
                             contentDescription = null,
                             modifier = Modifier.size(18.dp)
                         )
@@ -535,7 +539,7 @@ private fun AssemblyTopBar(
         ) {
             IconButton(onClick = onNavigateBack) {
                 Icon(
-                    Icons.AutoMirrored.Filled.ArrowBack,
+                    Icons.AutoMirrored.Outlined.ArrowBack,
                     contentDescription = "Back",
                     tint = Color.White
                 )
@@ -554,7 +558,7 @@ private fun AssemblyTopBar(
             // Undo / Redo
             IconButton(onClick = onUndo, enabled = canUndo) {
                 Icon(
-                    Icons.AutoMirrored.Filled.Undo,
+                    Icons.AutoMirrored.Outlined.Undo,
                     contentDescription = "Undo",
                     tint = if (canUndo) Color.White else Color.White.copy(alpha = 0.2f),
                     modifier = Modifier.size(20.dp)
@@ -562,7 +566,7 @@ private fun AssemblyTopBar(
             }
             IconButton(onClick = onRedo, enabled = canRedo) {
                 Icon(
-                    Icons.AutoMirrored.Filled.Redo,
+                    Icons.AutoMirrored.Outlined.Redo,
                     contentDescription = "Redo",
                     tint = if (canRedo) Color.White else Color.White.copy(alpha = 0.2f),
                     modifier = Modifier.size(20.dp)
@@ -603,7 +607,12 @@ private fun AssemblyTopBar(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Text(ratio.icon, fontSize = 16.sp)
+                                    Icon(
+                                        ratioIcon(ratio),
+                                        contentDescription = ratio.displayName,
+                                        modifier = Modifier.size(18.dp),
+                                        tint = MaterialTheme.colorScheme.onSurface
+                                    )
                                     Column {
                                         Text(
                                             ratio.displayName,
@@ -722,7 +731,7 @@ private fun PlayPauseOverlay(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    imageVector = if (isPlaying) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
                     contentDescription = if (isPlaying) "Pause" else "Play",
                     modifier = Modifier.size(32.dp),
                     tint = Color.White
@@ -769,7 +778,7 @@ private fun EmptyPreviewState() {
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                Icons.Default.Movie,
+                Icons.Outlined.Movie,
                 contentDescription = null,
                 modifier = Modifier.size(36.dp),
                 tint = Color.White.copy(alpha = 0.3f)
@@ -940,19 +949,19 @@ private fun ClipActionBar(
         horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally)
     ) {
         ActionChip(
-            icon = if (isMuted) Icons.AutoMirrored.Filled.VolumeOff
-                   else Icons.AutoMirrored.Filled.VolumeUp,
+            icon = if (isMuted) Icons.AutoMirrored.Outlined.VolumeOff
+                   else Icons.AutoMirrored.Outlined.VolumeUp,
             label = if (isMuted) "Unmute" else "Mute",
             onClick = onToggleMute,
             tint = if (isMuted) Color.White.copy(alpha = 0.4f) else Color.White
         )
         ActionChip(
-            icon = Icons.Default.ContentCopy,
+            icon = Icons.Outlined.ContentCopy,
             label = "Duplicate",
             onClick = onDuplicate
         )
         ActionChip(
-            icon = Icons.Default.Delete,
+            icon = Icons.Outlined.Delete,
             label = "Delete",
             onClick = onDelete,
             tint = Color(0xFFFF5252)
@@ -1185,7 +1194,7 @@ private fun FrameTimeline(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Icon(
-                                Icons.Default.VideoLibrary,
+                                Icons.Outlined.VideoLibrary,
                                 contentDescription = null,
                                 modifier = Modifier.size(20.dp),
                                 tint = AccentBlue
@@ -1251,7 +1260,7 @@ private fun FrameTimeline(
                                             )
                                         } else {
                                             Icon(
-                                                Icons.Default.Add,
+                                                Icons.Outlined.Add,
                                                 contentDescription = "Add transition",
                                                 modifier = Modifier.size(14.dp),
                                                 tint = Color.White.copy(alpha = 0.7f)
@@ -1320,7 +1329,7 @@ private fun FrameTimeline(
                             )
                         } else {
                             Icon(
-                                Icons.Default.Add,
+                                Icons.Outlined.Add,
                                 contentDescription = "Add clips",
                                 modifier = Modifier.size(24.dp),
                                 tint = Color.White.copy(alpha = 0.4f)
@@ -1870,4 +1879,11 @@ private fun effectColorMatrix(
     cm *= brightnessMatrix
 
     return cm
+}
+
+private fun ratioIcon(ratio: SocialAspectRatio): ImageVector = when (ratio) {
+    SocialAspectRatio.LANDSCAPE_16_9 -> Icons.Outlined.CropLandscape
+    SocialAspectRatio.PORTRAIT_9_16 -> Icons.Outlined.CropPortrait
+    SocialAspectRatio.SQUARE_1_1 -> Icons.Outlined.CropSquare
+    SocialAspectRatio.PORTRAIT_4_5 -> Icons.Outlined.Photo
 }

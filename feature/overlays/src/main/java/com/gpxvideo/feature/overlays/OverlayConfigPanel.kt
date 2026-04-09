@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
@@ -103,7 +103,7 @@ fun OverlayConfigPanel(
                 containerColor = MaterialTheme.colorScheme.error
             )
         ) {
-            Icon(Icons.Default.Delete, contentDescription = "Delete")
+            Icon(Icons.Outlined.Delete, contentDescription = "Delete")
             Text("Delete Overlay", modifier = Modifier.padding(start = 8.dp))
         }
     }

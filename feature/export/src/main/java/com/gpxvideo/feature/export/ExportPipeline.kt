@@ -513,16 +513,31 @@ private class DynamicStoryTemplateOverlay(
     private fun buildAnimatedFrame(progress: Float, timeMs: Long): OverlayFrameData {
         if (allPoints.size < 2) return OverlayFrameData(progress = progress, elapsedTime = timeMs)
 
-        val idx = (progress * (allPoints.size - 1)).toInt().coerceIn(0, allPoints.lastIndex)
-        val point = allPoints[idx]
+        val fractionalIdx = (progress * (allPoints.size - 1)).coerceIn(0f, allPoints.lastIndex.toFloat())
+        val loIdx = fractionalIdx.toInt().coerceIn(0, allPoints.lastIndex)
+        val hiIdx = (loIdx + 1).coerceAtMost(allPoints.lastIndex)
+        val frac = fractionalIdx - loIdx
 
-        val distance = cumulativeDistances.getOrElse(idx) { 0.0 }
-        val elevGain = cumulativeElevGain.getOrElse(idx) { 0.0 }
+        val pointLo = allPoints[loIdx]
+        val pointHi = allPoints[hiIdx]
+
+        val distance = if (loIdx == hiIdx) cumulativeDistances.getOrElse(loIdx) { 0.0 }
+            else {
+                val dLo = cumulativeDistances.getOrElse(loIdx) { 0.0 }
+                val dHi = cumulativeDistances.getOrElse(hiIdx) { 0.0 }
+                dLo + frac * (dHi - dLo)
+            }
+        val elevGain = if (loIdx == hiIdx) cumulativeElevGain.getOrElse(loIdx) { 0.0 }
+            else {
+                val gLo = cumulativeElevGain.getOrElse(loIdx) { 0.0 }
+                val gHi = cumulativeElevGain.getOrElse(hiIdx) { 0.0 }
+                gLo + frac * (gHi - gLo)
+            }
 
         // Windowed speed
         val windowSize = (allPoints.size / 50).coerceIn(3, 15)
-        val ws = (idx - windowSize).coerceAtLeast(0)
-        val we = (idx + windowSize).coerceAtMost(allPoints.lastIndex)
+        val ws = (loIdx - windowSize).coerceAtLeast(0)
+        val we = (loIdx + windowSize).coerceAtMost(allPoints.lastIndex)
         val speed = run {
             val t0 = allPoints[ws].time
             val t1 = allPoints[we].time
@@ -538,36 +553,44 @@ private class DynamicStoryTemplateOverlay(
             }
         }
 
-        val grade = if (idx > 0 && idx < allPoints.lastIndex) {
+        val grade = if (loIdx > 0 && hiIdx < allPoints.lastIndex) {
             val d = com.gpxvideo.lib.gpxparser.GpxStatistics.computeDistance(
-                allPoints[idx - 1].latitude, allPoints[idx - 1].longitude,
-                allPoints[idx + 1].latitude, allPoints[idx + 1].longitude
+                allPoints[loIdx - 1].latitude, allPoints[loIdx - 1].longitude,
+                allPoints[hiIdx + 1].latitude, allPoints[hiIdx + 1].longitude
             )
-            if (d > 1.0) ((allPoints[idx + 1].elevation ?: 0.0) - (allPoints[idx - 1].elevation ?: 0.0)) / d * 100.0
+            if (d > 1.0) ((allPoints[hiIdx + 1].elevation ?: 0.0) - (allPoints[loIdx - 1].elevation ?: 0.0)) / d * 100.0
             else 0.0
         } else 0.0
 
-        val elapsedTime = if (allPoints.first().time != null && point.time != null) {
-            java.time.Duration.between(allPoints.first().time, point.time).toMillis()
+        val elapsedTime = if (pointLo.time != null && pointHi.time != null && allPoints.first().time != null) {
+            val loMs = java.time.Duration.between(allPoints.first().time, pointLo.time).toMillis()
+            val hiMs = java.time.Duration.between(allPoints.first().time, pointHi.time).toMillis()
+            (loMs + frac * (hiMs - loMs)).toLong()
+        } else if (allPoints.first().time != null && pointLo.time != null) {
+            java.time.Duration.between(allPoints.first().time, pointLo.time).toMillis()
         } else {
             (gpxData?.totalDuration?.toMillis()?.times(progress))?.toLong() ?: timeMs
         }
 
+        val lat = pointLo.latitude + frac * (pointHi.latitude - pointLo.latitude)
+        val lng = pointLo.longitude + frac * (pointHi.longitude - pointLo.longitude)
+        val nearestPoint = if (frac < 0.5f) pointLo else pointHi
+
         return OverlayFrameData(
             distance = distance,
-            elevation = point.elevation ?: 0.0,
+            elevation = nearestPoint.elevation ?: 0.0,
             elevationGain = elevGain,
             speed = speed,
             pace = formatPace(speed),
-            heartRate = point.heartRate,
-            cadence = point.cadence,
-            power = point.power,
-            temperature = point.temperature,
+            heartRate = nearestPoint.heartRate,
+            cadence = nearestPoint.cadence,
+            power = nearestPoint.power,
+            temperature = nearestPoint.temperature,
             grade = grade,
             progress = progress,
             elapsedTime = elapsedTime,
-            latitude = point.latitude,
-            longitude = point.longitude
+            latitude = lat,
+            longitude = lng
         )
     }
 

@@ -43,6 +43,20 @@ object AppModule {
         }
     }
 
+    private val MIGRATION_4_5 = object : Migration(4, 5) {
+        override fun migrate(database: SupportSQLiteDatabase) {
+            database.execSQL("ALTER TABLE timeline_clips ADD COLUMN gpx_point_index INTEGER NOT NULL DEFAULT -1")
+            database.execSQL("ALTER TABLE timeline_clips ADD COLUMN gpx_distance_meters REAL NOT NULL DEFAULT 0.0")
+            database.execSQL("ALTER TABLE timeline_clips ADD COLUMN is_synced INTEGER NOT NULL DEFAULT 0")
+        }
+    }
+
+    private val MIGRATION_5_6 = object : Migration(5, 6) {
+        override fun migrate(database: SupportSQLiteDatabase) {
+            database.execSQL("ALTER TABLE media_items ADD COLUMN video_created_at INTEGER")
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): AppDatabase {
@@ -51,7 +65,7 @@ object AppModule {
             AppDatabase::class.java,
             "gpx_video_producer.db"
         )
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
             .build()
     }
 }

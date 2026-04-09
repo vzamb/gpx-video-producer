@@ -48,5 +48,7 @@ data class MediaItemEntity(
     @ColumnInfo(name = "gps_latitude")
     val gpsLatitude: Double? = null,
     @ColumnInfo(name = "gps_longitude")
-    val gpsLongitude: Double? = null
+    val gpsLongitude: Double? = null,
+    @ColumnInfo(name = "video_created_at")
+    val videoCreatedAt: Instant? = null
 )

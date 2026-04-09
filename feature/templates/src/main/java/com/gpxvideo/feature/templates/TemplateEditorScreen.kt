@@ -12,7 +12,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -59,7 +59,7 @@ fun TemplateEditorScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
@@ -202,7 +202,7 @@ private fun SportTypeSelector(
         onExpandedChange = { expanded = it }
     ) {
         OutlinedTextField(
-            value = selectedSport?.let { "${it.icon} ${it.displayName}" } ?: "Universal",
+            value = selectedSport?.let { it.displayName } ?: "Universal",
             onValueChange = {},
             readOnly = true,
             label = { Text("Sport Type") },
@@ -219,7 +219,7 @@ private fun SportTypeSelector(
             options.forEach { sport ->
                 DropdownMenuItem(
                     text = {
-                        Text(sport?.let { "${it.icon} ${it.displayName}" } ?: "Universal")
+                        Text(sport?.let { it.displayName } ?: "Universal")
                     },
                     onClick = {
                         onSportSelected(sport)

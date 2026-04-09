@@ -19,7 +19,8 @@ data class MediaInfo(
     val codec: String?,
     val hasAudio: Boolean,
     val audioCodec: String?,
-    val fileSize: Long
+    val fileSize: Long,
+    val videoCreatedAt: java.time.Instant? = null
 )
 
 object MediaProber {
@@ -48,6 +49,11 @@ object MediaProber {
                 MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO
             ) == "yes"
 
+            val dateStr = retriever.extractMetadata(
+                MediaMetadataRetriever.METADATA_KEY_DATE
+            )
+            val videoCreatedAt = dateStr?.let { parseVideoDate(it) }
+
             val fileSize = when (uri.scheme) {
                 null, ContentResolver.SCHEME_FILE -> uri.path?.let(::File)?.takeIf(File::exists)?.length()
                 else -> context.contentResolver.openFileDescriptor(uri, "r")?.use { it.statSize }
@@ -72,7 +78,8 @@ object MediaProber {
                 codec = codec,
                 hasAudio = hasAudio,
                 audioCodec = null,
-                fileSize = fileSize
+                fileSize = fileSize,
+                videoCreatedAt = videoCreatedAt
             )
         } finally {
             retriever.release()
@@ -144,5 +151,27 @@ private fun MediaMetadataRetriever.setSafeDataSource(context: Context, uri: Uri)
     when (uri.scheme) {
         null, ContentResolver.SCHEME_FILE -> setDataSource(uri.path ?: uri.toString())
         else -> setDataSource(context, uri)
+    }
+}
+
+/** Parse video creation date from MediaMetadataRetriever.METADATA_KEY_DATE. */
+private fun parseVideoDate(dateStr: String): java.time.Instant? {
+    return try {
+        // Common format: "20240315T143022.000Z" or "2024-03-15T14:30:22Z"
+        java.time.Instant.parse(dateStr)
+    } catch (_: Exception) {
+        try {
+            val formatter = java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss.SSS'Z'")
+            java.time.LocalDateTime.parse(dateStr, formatter)
+                .atZone(java.time.ZoneOffset.UTC).toInstant()
+        } catch (_: Exception) {
+            try {
+                val formatter = java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'")
+                java.time.LocalDateTime.parse(dateStr, formatter)
+                    .atZone(java.time.ZoneOffset.UTC).toInstant()
+            } catch (_: Exception) {
+                null
+            }
+        }
     }
 }

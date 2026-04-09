@@ -1,16 +1,21 @@
 package com.gpxvideo.feature.project
 
+import android.content.Context
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.gpxvideo.core.common.settingsDataStore
 import com.gpxvideo.core.database.dao.ProjectDao
 import com.gpxvideo.core.database.entity.ProjectEntity
 import com.gpxvideo.core.model.ExportFormat
 import com.gpxvideo.core.model.Resolution
 import com.gpxvideo.core.model.SportType
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -28,11 +33,29 @@ data class CreateProjectUiState(
 
 @HiltViewModel
 class CreateProjectViewModel @Inject constructor(
-    private val projectDao: ProjectDao
+    private val projectDao: ProjectDao,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CreateProjectUiState())
     val uiState: StateFlow<CreateProjectUiState> = _uiState.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            try {
+                val prefs = context.settingsDataStore.data.first()
+                val savedSport = prefs[stringPreferencesKey("default_sport_type")]
+                if (savedSport != null) {
+                    val sportType = SportType.entries.find {
+                        it.displayName.equals(savedSport, ignoreCase = true) || it.name.equals(savedSport, ignoreCase = true)
+                    }
+                    if (sportType != null) {
+                        _uiState.update { it.copy(sportType = sportType) }
+                    }
+                }
+            } catch (_: Exception) { /* use default */ }
+        }
+    }
 
     fun onNameChanged(name: String) {
         _uiState.update { it.copy(name = name, nameError = null) }

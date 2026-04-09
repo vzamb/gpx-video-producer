@@ -17,7 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -311,7 +311,7 @@ private fun AddTrackButton(
             containerColor = MaterialTheme.colorScheme.secondaryContainer
         ) {
             Icon(
-                imageVector = Icons.Default.Add,
+                imageVector = Icons.Outlined.Add,
                 contentDescription = "Add track"
             )
         }

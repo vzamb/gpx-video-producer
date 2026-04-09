@@ -34,21 +34,27 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.DirectionsBike
-import androidx.compose.material.icons.filled.DirectionsRun
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.FileUpload
-import androidx.compose.material.icons.filled.Hiking
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.LinkOff
-import androidx.compose.material.icons.filled.MyLocation
-import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Sync
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.CropLandscape
+import androidx.compose.material.icons.outlined.CropPortrait
+import androidx.compose.material.icons.outlined.CropSquare
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.FastForward
+import androidx.compose.material.icons.outlined.FileUpload
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.LinkOff
+import androidx.compose.material.icons.outlined.MyLocation
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.Pause
+import androidx.compose.material.icons.outlined.Photo
+import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Sync
+import androidx.compose.material.icons.outlined.Warning
+import androidx.compose.material.icons.outlined.DirectionsBike
+import androidx.compose.material.icons.outlined.DirectionsRun
+import androidx.compose.material.icons.outlined.Hiking
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
@@ -91,6 +97,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -206,10 +213,14 @@ fun StyleTelemetryScreen(
             )
         },
         bottomBar = {
+            val isLiveSyncWithoutPoints = uiState.storyMode == StoryMode.LIVE_SYNC.name &&
+                uiState.clipSyncPoints.values.none { it.isSynced }
             StyleBottomBar(
                 onExport = {
                     if (projectIdStr.isNotBlank()) onNavigateToExport(projectIdStr)
-                }
+                },
+                enabled = !isLiveSyncWithoutPoints,
+                warningMessage = if (isLiveSyncWithoutPoints) "Sync clips with GPX before exporting" else null
             )
         }
     ) { padding ->
@@ -295,6 +306,7 @@ fun StyleTelemetryScreen(
             gpxData = uiState.gpxData,
             mediaItems = uiState.mediaItems.filter { it.type == "VIDEO" },
             clipSyncPoints = uiState.clipSyncPoints,
+            autoSyncedClipIds = uiState.autoSyncedClipIds,
             onSetSyncPoint = { clipId, syncPoint -> viewModel.setClipSyncPoint(clipId, syncPoint) },
             onDismiss = { showSyncSheet = false }
         )
@@ -356,21 +368,21 @@ private fun interpolateGpxAtProgress(
     }
 
     // For LIVE_SYNC: find the GPX point index based on clip sync mapping
-    val idx: Int
+    val fractionalIdx: Float
     if (storyMode == StoryMode.LIVE_SYNC.name && clipSyncPoints.isNotEmpty() && mediaItems.isNotEmpty()) {
-        idx = resolveliveSyncPointIndex(
+        fractionalIdx = resolveliveSyncPointIndex(
             points, clipSyncPoints, mediaItems, currentPositionMs, totalDurationMs, gpxData.totalDistance
         )
     } else {
         // FAST_FORWARD: proportional mapping
-        idx = ((progress * (points.size - 1)).toInt()).coerceIn(0, points.lastIndex)
+        fractionalIdx = progress * (points.size - 1)
     }
 
-    val gpxProgress = idx.toFloat() / (points.size - 1).coerceAtLeast(1).toFloat()
-    return computeLiveValuesAtIndex(gpxData, points, idx, gpxProgress)
+    val gpxProgress = fractionalIdx / (points.size - 1).coerceAtLeast(1).toFloat()
+    return computeLiveValuesAtIndex(gpxData, points, fractionalIdx, gpxProgress)
 }
 
-/** For Live Sync: resolve which GPX point index corresponds to the current playback position. */
+/** For Live Sync: resolve which GPX point index corresponds to the current playback position (fractional for smooth interpolation). */
 private fun resolveliveSyncPointIndex(
     points: List<GpxPoint>,
     clipSyncPoints: Map<java.util.UUID, ClipSyncPoint>,
@@ -378,8 +390,8 @@ private fun resolveliveSyncPointIndex(
     currentPositionMs: Long,
     totalDurationMs: Long,
     totalDistance: Double
-): Int {
-    if (mediaItems.isEmpty() || points.isEmpty()) return 0
+): Float {
+    if (mediaItems.isEmpty() || points.isEmpty()) return 0f
 
     // Build a timeline of clip start/end positions in ms
     var cumulativeMs = 0L
@@ -405,7 +417,7 @@ private fun resolveliveSyncPointIndex(
     val syncPoint = clipSyncPoints[activeClip.id]
     if (syncPoint == null || !syncPoint.isSynced) {
         // Not synced — fall back to proportional
-        return ((currentPositionMs.toFloat() / totalDurationMs.coerceAtLeast(1L)) * (points.size - 1)).toInt().coerceIn(0, points.lastIndex)
+        return (currentPositionMs.toFloat() / totalDurationMs.coerceAtLeast(1L)) * (points.size - 1)
     }
 
     val startIdx = syncPoint.gpxPointIndex.coerceIn(0, points.lastIndex)
@@ -414,7 +426,6 @@ private fun resolveliveSyncPointIndex(
     val startTime = points[startIdx].time
     if (startTime != null && clipDuration > 0) {
         val clipEndTime = startTime.plusMillis(clipDuration)
-        // Find the index closest to clipEndTime
         var endIdx = startIdx
         for (i in startIdx until points.size) {
             if (points[i].time != null && points[i].time!! <= clipEndTime) {
@@ -422,7 +433,7 @@ private fun resolveliveSyncPointIndex(
             } else break
         }
         if (endIdx <= startIdx) endIdx = (startIdx + 1).coerceAtMost(points.lastIndex)
-        return (startIdx + (clipProgress * (endIdx - startIdx)).toInt()).coerceIn(0, points.lastIndex)
+        return (startIdx + clipProgress * (endIdx - startIdx)).coerceIn(0f, points.lastIndex.toFloat())
     }
 
     // Fallback: estimate span by distance
@@ -433,92 +444,124 @@ private fun resolveliveSyncPointIndex(
         val pointDist = totalDistance * i / points.size
         if (pointDist <= endDist) endIdx = i else break
     }
-    return (startIdx + (clipProgress * (endIdx - startIdx)).toInt()).coerceIn(0, points.lastIndex)
+    return (startIdx + clipProgress * (endIdx - startIdx)).coerceIn(0f, points.lastIndex.toFloat())
 }
 
-/** Compute all live values at a given GPX point index. */
-private fun computeLiveValuesAtIndex(
-    gpxData: GpxData,
-    points: List<GpxPoint>,
-    idx: Int,
-    progress: Float
-): LiveGpxValues {
-    val point = points[idx]
+/** Pre-computed cumulative distances for O(1) lookup during interpolation. */
+private var cachedCumulativeDistances: DoubleArray? = null
+private var cachedCumulativeGain: DoubleArray? = null
+private var cachedPointsSize: Int = 0
 
-    // Cumulative distance up to this point
-    var distanceSoFar = 0.0
-    for (i in 1..idx) {
-        distanceSoFar += GpxStatistics.computeDistance(
+private fun ensureCumulativeArrays(points: List<GpxPoint>) {
+    if (points.size == cachedPointsSize && cachedCumulativeDistances != null) return
+    cachedPointsSize = points.size
+    val distances = DoubleArray(points.size)
+    val gains = DoubleArray(points.size)
+    for (i in 1 until points.size) {
+        distances[i] = distances[i - 1] + GpxStatistics.computeDistance(
             points[i - 1].latitude, points[i - 1].longitude,
             points[i].latitude, points[i].longitude
         )
-    }
-
-    // Accumulated vertical gain up to this point
-    var cumulativeGain = 0.0
-    for (i in 1..idx) {
         val diff = (points[i].elevation ?: 0.0) - (points[i - 1].elevation ?: 0.0)
-        if (diff > 0) cumulativeGain += diff
+        gains[i] = gains[i - 1] + if (diff > 0) diff else 0.0
     }
+    cachedCumulativeDistances = distances
+    cachedCumulativeGain = gains
+}
 
-    // Speed: compute from actual point-to-point distances (not the GPX speed field)
+/** Compute all live values at a fractional GPX point index with interpolation between adjacent points. */
+private fun computeLiveValuesAtIndex(
+    gpxData: GpxData,
+    points: List<GpxPoint>,
+    fractionalIdx: Float,
+    progress: Float
+): LiveGpxValues {
+    ensureCumulativeArrays(points)
+    val distances = cachedCumulativeDistances ?: return LiveGpxValues()
+    val gains = cachedCumulativeGain ?: return LiveGpxValues()
+
+    val clampedIdx = fractionalIdx.coerceIn(0f, points.lastIndex.toFloat())
+    val loIdx = clampedIdx.toInt().coerceIn(0, points.lastIndex)
+    val hiIdx = (loIdx + 1).coerceAtMost(points.lastIndex)
+    val frac = clampedIdx - loIdx // 0..1 between loIdx and hiIdx
+
+    val pointLo = points[loIdx]
+    val pointHi = points[hiIdx]
+
+    // Interpolated distance
+    val distanceSoFar = if (loIdx == hiIdx) distances[loIdx]
+        else distances[loIdx] + frac * (distances[hiIdx] - distances[loIdx])
+
+    // Interpolated elevation gain
+    val cumulativeGain = if (loIdx == hiIdx) gains[loIdx]
+        else gains[loIdx] + frac * (gains[hiIdx] - gains[loIdx])
+
+    // Speed: compute from actual point-to-point distances over a time window
     val windowSize = (points.size / 50).coerceIn(3, 15)
-    val windowStart = (idx - windowSize).coerceAtLeast(0)
-    val windowEnd = (idx + windowSize).coerceAtMost(points.lastIndex)
+    val windowStart = (loIdx - windowSize).coerceAtLeast(0)
+    val windowEnd = (loIdx + windowSize).coerceAtMost(points.lastIndex)
     val speed: Double = run {
         val startTime = points[windowStart].time
         val endTime = points[windowEnd].time
         if (startTime != null && endTime != null) {
             val timeDiffSec = (endTime.toEpochMilli() - startTime.toEpochMilli()) / 1000.0
             if (timeDiffSec > 1.0) {
-                var windowDist = 0.0
-                for (i in windowStart + 1..windowEnd) {
-                    windowDist += GpxStatistics.computeDistance(
-                        points[i - 1].latitude, points[i - 1].longitude,
-                        points[i].latitude, points[i].longitude
-                    )
-                }
-                windowDist / timeDiffSec
+                (distances[windowEnd] - distances[windowStart]) / timeDiffSec
             } else 0.0
         } else {
-            // No time data — use average speed
             if (gpxData.totalDuration.seconds > 0)
                 gpxData.totalDistance / gpxData.totalDuration.seconds.toDouble() else 0.0
         }
     }
 
-    // Grade from neighboring points
-    val grade = if (idx > 0 && idx < points.lastIndex) {
-        val dist = GpxStatistics.computeDistance(
-            points[idx - 1].latitude, points[idx - 1].longitude,
-            points[idx + 1].latitude, points[idx + 1].longitude
-        )
+    // Interpolated grade
+    val grade = if (loIdx > 0 && hiIdx < points.lastIndex) {
+        val dist = distances[hiIdx + 1] - distances[(loIdx - 1).coerceAtLeast(0)]
         if (dist > 1.0) {
-            val elevChange = (points[idx + 1].elevation ?: 0.0) - (points[idx - 1].elevation ?: 0.0)
+            val elevChange = (points[(hiIdx + 1).coerceAtMost(points.lastIndex)].elevation ?: 0.0) -
+                (points[(loIdx - 1).coerceAtLeast(0)].elevation ?: 0.0)
             (elevChange / dist * 100.0)
         } else 0.0
     } else 0.0
 
-    // Elapsed time from GPX timestamps or proportional fallback
-    val elapsedTime = if (points.first().time != null && point.time != null) {
-        java.time.Duration.between(points.first().time, point.time).toMillis()
+    // Interpolated elapsed time
+    val elapsedTime = if (pointLo.time != null && pointHi.time != null && points.first().time != null) {
+        val loMs = java.time.Duration.between(points.first().time, pointLo.time).toMillis()
+        val hiMs = java.time.Duration.between(points.first().time, pointHi.time).toMillis()
+        (loMs + frac * (hiMs - loMs)).toLong()
+    } else if (points.first().time != null && pointLo.time != null) {
+        java.time.Duration.between(points.first().time, pointLo.time).toMillis()
     } else {
         (gpxData.totalDuration.toMillis() * progress).toLong()
     }
+
+    // Interpolated lat/lng
+    val lat = pointLo.latitude + frac * (pointHi.latitude - pointLo.latitude)
+    val lng = pointLo.longitude + frac * (pointHi.longitude - pointLo.longitude)
+
+    // Interpolated GPX timestamp
+    val gpxTimestamp = if (pointLo.time != null && pointHi.time != null) {
+        val loEpoch = pointLo.time!!.toEpochMilli()
+        val hiEpoch = pointHi.time!!.toEpochMilli()
+        java.time.Instant.ofEpochMilli((loEpoch + frac * (hiEpoch - loEpoch)).toLong())
+    } else pointLo.time
+
+    // Use closest point's HR/cadence/power/temp (these are discrete sensor values)
+    val nearestPoint = if (frac < 0.5f) pointLo else pointHi
 
     return LiveGpxValues(
         distance = distanceSoFar,
         elevation = cumulativeGain,
         speed = speed,
-        heartRate = point.heartRate,
-        cadence = point.cadence,
-        power = point.power,
-        temperature = point.temperature,
+        heartRate = nearestPoint.heartRate,
+        cadence = nearestPoint.cadence,
+        power = nearestPoint.power,
+        temperature = nearestPoint.temperature,
         grade = grade,
         elapsedTime = elapsedTime,
-        gpxTimestamp = point.time,
-        latitude = point.latitude,
-        longitude = point.longitude,
+        gpxTimestamp = gpxTimestamp,
+        latitude = lat,
+        longitude = lng,
         gpxProgress = progress
     )
 }
@@ -545,7 +588,7 @@ private fun StyleTopBar(
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onNavigateBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+                Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back", tint = Color.White)
             }
 
             Text(
@@ -590,7 +633,12 @@ private fun StyleTopBar(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Text(ratio.icon, fontSize = 16.sp)
+                                    Icon(
+                                        ratioIcon(ratio),
+                                        contentDescription = ratio.displayName,
+                                        modifier = Modifier.size(18.dp),
+                                        tint = MaterialTheme.colorScheme.onSurface
+                                    )
                                     Column {
                                         Text(
                                             ratio.displayName,
@@ -612,12 +660,12 @@ private fun StyleTopBar(
 
             if (hasGpxData) {
                 IconButton(onClick = onInfoClick) {
-                    Icon(Icons.Default.Info, contentDescription = "Info", tint = Color.White.copy(alpha = 0.7f))
+                    Icon(Icons.Outlined.Info, contentDescription = "Info", tint = Color.White.copy(alpha = 0.7f))
                 }
             }
 
             IconButton(onClick = onColorPickerClick) {
-                Icon(Icons.Default.Palette, contentDescription = "Accent Color", tint = Color.White.copy(alpha = 0.7f))
+                Icon(Icons.Outlined.Palette, contentDescription = "Accent Color", tint = Color.White.copy(alpha = 0.7f))
             }
         }
     }
@@ -626,7 +674,7 @@ private fun StyleTopBar(
 // ── Bottom Bar ───────────────────────────────────────────────────────────
 
 @Composable
-private fun StyleBottomBar(onExport: () -> Unit) {
+private fun StyleBottomBar(onExport: () -> Unit, enabled: Boolean = true, warningMessage: String? = null) {
     Surface(color = DarkBg, tonalElevation = 0.dp) {
         Column(
             modifier = Modifier
@@ -634,13 +682,27 @@ private fun StyleBottomBar(onExport: () -> Unit) {
                 .navigationBarsPadding()
                 .padding(horizontal = 16.dp, vertical = 10.dp)
         ) {
+            if (warningMessage != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Outlined.Warning, contentDescription = null, tint = Color(0xFFFFAB40), modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(warningMessage, style = MaterialTheme.typography.labelSmall, color = Color(0xFFFFAB40))
+                }
+            }
             Button(
                 onClick = onExport,
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (enabled) AccentBlue else AccentBlue.copy(alpha = 0.3f)
+                ),
+                enabled = enabled
             ) {
-                Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(20.dp))
+                Icon(Icons.Outlined.FileUpload, contentDescription = null, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("Export Story", fontWeight = FontWeight.Bold, fontSize = 15.sp)
             }
@@ -680,10 +742,12 @@ private fun TemplatePreviewSection(
     }
 
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        val isPortraitRatio = aspectRatio == SocialAspectRatio.PORTRAIT_9_16 || aspectRatio == SocialAspectRatio.PORTRAIT_4_5
+        val horizontalPadding = if (isPortraitRatio) 80.dp else 20.dp
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.fillMaxWidth().weight(1f),
-            contentPadding = PaddingValues(horizontal = 20.dp),
+            contentPadding = PaddingValues(horizontal = horizontalPadding),
             pageSpacing = 12.dp,
             beyondViewportPageCount = 0
         ) { page ->
@@ -814,7 +878,7 @@ private fun StyleTemplateCard(
                                 .background(Color.Black.copy(alpha = 0.5f)),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.PlayArrow, contentDescription = "Play", tint = Color.White, modifier = Modifier.size(32.dp))
+                            Icon(Icons.Outlined.PlayArrow, contentDescription = "Play", tint = Color.White, modifier = Modifier.size(32.dp))
                         }
                     }
                 }
@@ -950,21 +1014,24 @@ private fun SyncToggle(
     ) {
         Row(modifier = Modifier.padding(4.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
             SyncToggleOption(
-                label = "📊 Static",
+                icon = Icons.Outlined.BarChart,
+                label = "Static",
                 description = "Final totals",
                 isSelected = selectedMode == StoryMode.STATIC.name,
                 onClick = { onModeSelected(StoryMode.STATIC.name) },
                 modifier = Modifier.weight(1f)
             )
             SyncToggleOption(
-                label = "⚡ Fast Fwd",
+                icon = Icons.Outlined.FastForward,
+                label = "Fast Fwd",
                 description = "Animated journey",
                 isSelected = selectedMode == StoryMode.FAST_FORWARD.name,
                 onClick = { onModeSelected(StoryMode.FAST_FORWARD.name) },
                 modifier = Modifier.weight(1f)
             )
             SyncToggleOption(
-                label = "🔗 Live Sync",
+                icon = Icons.Outlined.Sync,
+                label = "Live Sync",
                 description = if (hasGpxData) "Per-clip sync" else "Needs GPX",
                 isSelected = selectedMode == StoryMode.LIVE_SYNC.name,
                 enabled = hasGpxData,
@@ -977,6 +1044,7 @@ private fun SyncToggle(
 
 @Composable
 private fun SyncToggleOption(
+    icon: ImageVector,
     label: String,
     description: String,
     isSelected: Boolean,
@@ -997,6 +1065,13 @@ private fun SyncToggleOption(
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Icon(
+                icon,
+                contentDescription = label,
+                modifier = Modifier.size(16.dp),
+                tint = (if (isSelected) Color.White else Color.White.copy(alpha = 0.5f)).copy(alpha = alpha)
+            )
+            Spacer(Modifier.height(2.dp))
             Text(
                 label, style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Bold,
@@ -1161,7 +1236,7 @@ private fun ColorSwatch(color: Int, name: String, isSelected: Boolean, onClick: 
             contentAlignment = Alignment.Center
         ) {
             if (isSelected) {
-                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(20.dp),
+                Icon(Icons.Outlined.Check, contentDescription = null, modifier = Modifier.size(20.dp),
                     tint = if (color == 0xFFFFFFFF.toInt() || color == 0xFFFFD600.toInt()) Color.Black else Color.White)
             }
         }
@@ -1215,9 +1290,9 @@ private fun ActivityInfoBottomSheet(
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 32.dp).navigationBarsPadding()) {
             val sportIcon = when (sportType.uppercase()) {
-                "RUNNING", "TRAIL_RUNNING" -> Icons.Default.DirectionsRun
-                "HIKING" -> Icons.Default.Hiking
-                else -> Icons.Default.DirectionsBike
+                "RUNNING", "TRAIL_RUNNING" -> Icons.Outlined.DirectionsRun
+                "HIKING" -> Icons.Outlined.Hiking
+                else -> Icons.Outlined.DirectionsBike
             }
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 20.dp)) {
                 Box(modifier = Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(AccentBlue.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
@@ -1302,6 +1377,7 @@ private fun LiveSyncConfigSheet(
     gpxData: GpxData?,
     mediaItems: List<com.gpxvideo.core.database.entity.MediaItemEntity>,
     clipSyncPoints: Map<UUID, ClipSyncPoint>,
+    autoSyncedClipIds: Set<UUID>,
     onSetSyncPoint: (UUID, ClipSyncPoint) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -1322,7 +1398,7 @@ private fun LiveSyncConfigSheet(
                 .navigationBarsPadding()
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 4.dp)) {
-                Icon(Icons.Default.Sync, contentDescription = null, tint = AccentBlue, modifier = Modifier.size(24.dp))
+                Icon(Icons.Outlined.Sync, contentDescription = null, tint = AccentBlue, modifier = Modifier.size(24.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("Live Sync — Clip Alignment", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
             }
@@ -1339,7 +1415,7 @@ private fun LiveSyncConfigSheet(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
                     horizontalArrangement = Arrangement.Center
                 ) {
-                    Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFFFAB40), modifier = Modifier.size(20.dp))
+                    Icon(Icons.Outlined.Warning, contentDescription = null, tint = Color(0xFFFFAB40), modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(8.dp))
                     Text("No GPX data loaded. Import a GPX file first.", color = Color.White.copy(alpha = 0.5f))
                 }
@@ -1366,6 +1442,7 @@ private fun LiveSyncConfigSheet(
                     val clipId = media.id
                     val syncPoint = clipSyncPoints[clipId]
                     val isSynced = syncPoint?.isSynced == true
+                    val isAutoSynced = clipId in autoSyncedClipIds
                     val currentDist = syncPoint?.gpxDistanceMeters ?: (totalDistance * index / mediaItems.size.coerceAtLeast(1))
                     val distFraction = if (totalDistance > 0) (currentDist / totalDistance).toFloat().coerceIn(0f, 1f) else 0f
 
@@ -1374,6 +1451,7 @@ private fun LiveSyncConfigSheet(
                         clipName = media.localCopyPath.substringAfterLast("/").take(20),
                         durationMs = media.durationMs ?: 0L,
                         isSynced = isSynced,
+                        isAutoSynced = isAutoSynced,
                         distanceFraction = distFraction,
                         totalDistance = totalDistance,
                         gpxData = gpxData,
@@ -1417,6 +1495,7 @@ private fun ClipSyncRow(
     clipName: String,
     durationMs: Long,
     isSynced: Boolean,
+    isAutoSynced: Boolean = false,
     distanceFraction: Float,
     totalDistance: Double,
     gpxData: GpxData?,
@@ -1440,9 +1519,9 @@ private fun ClipSyncRow(
                     contentAlignment = Alignment.Center
                 ) {
                     if (isSynced) {
-                        Icon(Icons.Default.Check, contentDescription = null, tint = AccentBlue, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Outlined.Check, contentDescription = null, tint = AccentBlue, modifier = Modifier.size(16.dp))
                     } else {
-                        Icon(Icons.Default.LinkOff, contentDescription = null, tint = Color.White.copy(alpha = 0.3f), modifier = Modifier.size(14.dp))
+                        Icon(Icons.Outlined.LinkOff, contentDescription = null, tint = Color.White.copy(alpha = 0.3f), modifier = Modifier.size(14.dp))
                     }
                 }
                 Spacer(Modifier.width(8.dp))
@@ -1460,6 +1539,14 @@ private fun ClipSyncRow(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                    if (isAutoSynced) {
+                        Text(
+                            "✓ Auto-synced from video timestamp",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF66BB6A),
+                            maxLines = 1
+                        )
+                    }
                 }
                 // Show current position on track + GPX timestamp
                 Column(horizontalAlignment = Alignment.End) {
@@ -1786,3 +1873,10 @@ private fun styleDuration(ms: Long): String {
 }
 
 private fun formatDurationMs(ms: Long) = FormatUtils.formatDurationMs(ms)
+
+private fun ratioIcon(ratio: SocialAspectRatio): ImageVector = when (ratio) {
+    SocialAspectRatio.LANDSCAPE_16_9 -> Icons.Outlined.CropLandscape
+    SocialAspectRatio.PORTRAIT_9_16 -> Icons.Outlined.CropPortrait
+    SocialAspectRatio.SQUARE_1_1 -> Icons.Outlined.CropSquare
+    SocialAspectRatio.PORTRAIT_4_5 -> Icons.Outlined.Photo
+}

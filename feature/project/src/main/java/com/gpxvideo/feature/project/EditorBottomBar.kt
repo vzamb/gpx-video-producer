@@ -10,11 +10,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.PhotoLibrary
-import androidx.compose.material.icons.filled.Route
-import androidx.compose.material.icons.filled.SpaceDashboard
-import androidx.compose.material.icons.filled.TextFields
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.PhotoLibrary
+import androidx.compose.material.icons.outlined.Route
+import androidx.compose.material.icons.outlined.SpaceDashboard
+import androidx.compose.material.icons.outlined.TextFields
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -29,11 +29,11 @@ enum class EditorTool(
     val label: String,
     val icon: ImageVector
 ) {
-    MEDIA("Media", Icons.Default.PhotoLibrary),
-    GPX_OVERLAYS("Overlays", Icons.Default.Route),
-    GPX_FILE("GPX", Icons.Default.SpaceDashboard),
-    TEXT("Text", Icons.Default.TextFields),
-    EFFECTS("Effects", Icons.Default.AutoAwesome)
+    MEDIA("Media", Icons.Outlined.PhotoLibrary),
+    GPX_OVERLAYS("Overlays", Icons.Outlined.Route),
+    GPX_FILE("GPX", Icons.Outlined.SpaceDashboard),
+    TEXT("Text", Icons.Outlined.TextFields),
+    EFFECTS("Effects", Icons.Outlined.AutoAwesome)
 }
 
 @Composable

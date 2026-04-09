@@ -8,9 +8,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.ContentCut
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.ContentCut
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -175,19 +175,19 @@ fun ClipPropertiesPanel(
             ) {
                 IconButton(onClick = onSplit) {
                     Icon(
-                        imageVector = Icons.Default.ContentCut,
+                        imageVector = Icons.Outlined.ContentCut,
                         contentDescription = "Split"
                     )
                 }
                 IconButton(onClick = onDuplicate) {
                     Icon(
-                        imageVector = Icons.Default.ContentCopy,
+                        imageVector = Icons.Outlined.ContentCopy,
                         contentDescription = "Duplicate"
                     )
                 }
                 IconButton(onClick = onDelete) {
                     Icon(
-                        imageVector = Icons.Default.Delete,
+                        imageVector = Icons.Outlined.Delete,
                         contentDescription = "Delete",
                         tint = MaterialTheme.colorScheme.error
                     )

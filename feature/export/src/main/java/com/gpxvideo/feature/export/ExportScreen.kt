@@ -18,11 +18,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -81,7 +81,7 @@ fun ExportScreen(
                 .align(Alignment.TopStart)
         ) {
             Icon(
-                Icons.AutoMirrored.Filled.ArrowBack,
+                Icons.AutoMirrored.Outlined.ArrowBack,
                 contentDescription = "Back",
                 tint = Color.White
             )
@@ -206,7 +206,7 @@ private fun ExportProgressSection(
                 brush = Brush.linearGradient(listOf(Color.White.copy(alpha = 0.2f), Color.White.copy(alpha = 0.2f)))
             )
         ) {
-            Icon(Icons.Default.Close, contentDescription = null)
+            Icon(Icons.Outlined.Close, contentDescription = null)
             Spacer(Modifier.width(8.dp))
             Text("Cancel")
         }
@@ -235,7 +235,7 @@ private fun ExportCompleteSection(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    Icons.Default.CheckCircle,
+                    Icons.Outlined.CheckCircle,
                     contentDescription = "Success",
                     modifier = Modifier.size(48.dp),
                     tint = AccentBlue
@@ -275,7 +275,7 @@ private fun ExportCompleteSection(
             colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
             shape = RoundedCornerShape(12.dp)
         ) {
-            Icon(Icons.Default.Share, contentDescription = null)
+            Icon(Icons.Outlined.Share, contentDescription = null)
             Spacer(Modifier.width(8.dp))
             Text("Share", modifier = Modifier.padding(vertical = 4.dp))
         }
@@ -286,7 +286,7 @@ private fun ExportCompleteSection(
             colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
             shape = RoundedCornerShape(12.dp)
         ) {
-            Icon(Icons.Default.FolderOpen, contentDescription = null)
+            Icon(Icons.Outlined.FolderOpen, contentDescription = null)
             Spacer(Modifier.width(8.dp))
             Text("Save to Gallery")
         }
