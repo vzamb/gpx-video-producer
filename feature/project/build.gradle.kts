@@ -36,6 +36,7 @@ dependencies {
     implementation(project(":feature:timeline"))
     implementation(project(":feature:overlays"))
     implementation(project(":lib:gpx-parser"))
+    implementation(project(":lib:strava"))
 
     implementation(libs.lottie)
     implementation(libs.lottie.compose)
@@ -63,6 +64,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.coil.compose)
+    implementation(libs.androidx.browser)
 
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.ui)

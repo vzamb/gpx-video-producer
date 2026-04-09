@@ -69,6 +69,62 @@ class GpxImportManager @Inject constructor(
         }
     }
 
+    suspend fun importFromGpxData(projectId: UUID, name: String, gpxData: GpxData): Result<GpxFile> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val gpxFileId = UUID.randomUUID()
+                // Write a minimal GPX file for persistence
+                val dir = File(context.filesDir, "gpx/$projectId")
+                dir.mkdirs()
+                val destFile = File(dir, "${gpxFileId}_$name.gpx")
+                destFile.writeText(buildMinimalGpx(gpxData))
+
+                val entity = GpxFileEntity(
+                    id = gpxFileId,
+                    projectId = projectId,
+                    name = name,
+                    filePath = destFile.absolutePath
+                )
+                gpxFileDao.insert(entity)
+
+                Result.success(
+                    GpxFile(
+                        id = gpxFileId,
+                        projectId = projectId,
+                        name = name,
+                        filePath = destFile.absolutePath,
+                        parsedData = gpxData
+                    )
+                )
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+    }
+
+    private fun buildMinimalGpx(gpxData: GpxData): String {
+        val sb = StringBuilder()
+        sb.appendLine("""<?xml version="1.0" encoding="UTF-8"?>""")
+        sb.appendLine("""<gpx version="1.1" creator="GpxVideoProducer-Strava">""")
+        for (track in gpxData.tracks) {
+            sb.appendLine("  <trk>")
+            track.name?.let { sb.appendLine("    <name>$it</name>") }
+            for (segment in track.segments) {
+                sb.appendLine("    <trkseg>")
+                for (p in segment.points) {
+                    sb.append("""      <trkpt lat="${p.latitude}" lon="${p.longitude}">""")
+                    p.elevation?.let { sb.append("<ele>$it</ele>") }
+                    p.time?.let { sb.append("<time>$it</time>") }
+                    sb.appendLine("</trkpt>")
+                }
+                sb.appendLine("    </trkseg>")
+            }
+            sb.appendLine("  </trk>")
+        }
+        sb.appendLine("</gpx>")
+        return sb.toString()
+    }
+
     suspend fun deleteGpxFile(gpxFileId: UUID) {
         withContext(Dispatchers.IO) {
             gpxFileDao.getById(gpxFileId)?.let { entity ->

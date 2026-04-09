@@ -1,6 +1,8 @@
 package com.gpxvideo.feature.home
 
 import android.content.Context
+import android.net.Uri
+import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -10,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -17,16 +20,24 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.LinkOff
+import androidx.compose.material.icons.outlined.SyncAlt
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -42,8 +53,12 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.gpxvideo.core.common.settingsDataStore
 import com.gpxvideo.core.ui.component.GpxVideoTopAppBar
+import com.gpxvideo.lib.strava.StravaAuth
+import com.gpxvideo.lib.strava.StravaTokenStore
+import com.gpxvideo.lib.strava.StravaTokens
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 object SettingsKeys {
@@ -56,6 +71,9 @@ object SettingsKeys {
 @Composable
 fun SettingsScreen(
     onNavigateBack: () -> Unit,
+    stravaCallbackCode: SharedFlow<String> = MutableSharedFlow(),
+    stravaAuth: StravaAuth? = null,
+    stravaTokenStore: StravaTokenStore? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -63,6 +81,25 @@ fun SettingsScreen(
     var showClearCacheDialog by remember { mutableStateOf(false) }
     var cacheSize by remember { mutableLongStateOf(calculateCacheSize(context)) }
     var showAboutDialog by remember { mutableStateOf(false) }
+    var showDisconnectDialog by remember { mutableStateOf(false) }
+    var stravaConnecting by remember { mutableStateOf(false) }
+    var stravaError by remember { mutableStateOf<String?>(null) }
+
+    val stravaTokens by stravaTokenStore?.tokens?.collectAsState(initial = null)
+        ?: remember { mutableStateOf<StravaTokens?>(null) }
+
+    // Handle Strava OAuth callback
+    LaunchedEffect(Unit) {
+        stravaCallbackCode.collect { code ->
+            stravaConnecting = true
+            stravaError = null
+            val result = stravaAuth?.exchangeCode(code)
+            stravaConnecting = false
+            if (result?.isFailure == true) {
+                stravaError = result.exceptionOrNull()?.message ?: "Connection failed"
+            }
+        }
+    }
 
     var units by remember { mutableStateOf("Metric") }
     var theme by remember { mutableStateOf("System") }
@@ -165,6 +202,96 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
+            // Connected Accounts
+            SettingsSection(title = "Connected Accounts") {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.SyncAlt,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Strava",
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                            Text(
+                                text = if (stravaTokens != null) {
+                                    "Connected as ${stravaTokens?.athleteName}"
+                                } else {
+                                    "Not connected"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (stravaTokens != null) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                }
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    if (stravaConnecting) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Connecting...", style = MaterialTheme.typography.bodySmall)
+                        }
+                    } else if (stravaTokens != null) {
+                        OutlinedButton(
+                            onClick = { showDisconnectDialog = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.LinkOff,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Disconnect Strava")
+                        }
+                    } else {
+                        Button(
+                            onClick = {
+                                stravaAuth?.let { auth ->
+                                    val customTabsIntent = CustomTabsIntent.Builder().build()
+                                    customTabsIntent.launchUrl(context, auth.buildAuthUri())
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = StravaOrange
+                            )
+                        ) {
+                            Text("Connect to Strava")
+                        }
+                    }
+                    stravaError?.let { error ->
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = error,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
             // Cache
             SettingsSection(title = "Storage") {
                 Row(
@@ -249,6 +376,29 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showClearCacheDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showDisconnectDialog) {
+        AlertDialog(
+            onDismissRequest = { showDisconnectDialog = false },
+            title = { Text("Disconnect Strava") },
+            text = { Text("This will remove your Strava connection. You can reconnect at any time.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch {
+                        stravaAuth?.disconnect()
+                    }
+                    showDisconnectDialog = false
+                }) {
+                    Text("Disconnect", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDisconnectDialog = false }) {
                     Text("Cancel")
                 }
             }
@@ -350,3 +500,5 @@ private fun formatFileSize(bytes: Long): String {
         else -> "%.1f GB".format(bytes / (1024.0 * 1024 * 1024))
     }
 }
+
+private val StravaOrange = androidx.compose.ui.graphics.Color(0xFFFC4C02)

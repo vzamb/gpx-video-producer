@@ -29,6 +29,7 @@ dependencies {
     implementation(project(":core:database"))
     implementation(project(":core:common"))
     implementation(project(":core:ui"))
+    implementation(project(":lib:strava"))
 
     // Compose
     implementation(platform(libs.androidx.compose.bom))
@@ -60,4 +61,7 @@ dependencies {
 
     // DataStore
     implementation(libs.androidx.datastore.preferences)
+
+    // Browser (Custom Tabs for Strava OAuth)
+    implementation(libs.androidx.browser)
 }

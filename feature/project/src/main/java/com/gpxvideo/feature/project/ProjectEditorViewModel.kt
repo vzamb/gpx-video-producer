@@ -21,6 +21,7 @@ import com.gpxvideo.core.model.GpxData
 import com.gpxvideo.core.model.SocialAspectRatio
 import com.gpxvideo.core.model.StoryMode
 import com.gpxvideo.feature.gpx.GpxImportManager
+import com.gpxvideo.feature.gpx.StravaStreamConverter
 import com.gpxvideo.feature.preview.PreviewClip
 import com.gpxvideo.feature.preview.PreviewDisplayTransform
 import com.gpxvideo.feature.preview.PreviewEngine
@@ -28,6 +29,10 @@ import com.gpxvideo.lib.gpxparser.GpxStatistics
 import com.gpxvideo.lib.gpxparser.GpxStats
 import com.gpxvideo.lib.mediautils.MediaProber
 import com.gpxvideo.lib.mediautils.ThumbnailGenerator
+import com.gpxvideo.lib.strava.StravaActivity
+import com.gpxvideo.lib.strava.StravaApi
+import com.gpxvideo.lib.strava.StravaAuth
+import com.gpxvideo.lib.strava.StravaTokenStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -70,6 +75,10 @@ class ProjectEditorViewModel @Inject constructor(
     private val trackDao: TimelineTrackDao,
     private val clipDao: TimelineClipDao,
     val previewEngine: PreviewEngine,
+    val stravaApi: StravaApi,
+    val stravaAuth: StravaAuth,
+    val stravaTokenStore: StravaTokenStore,
+    private val stravaStreamConverter: StravaStreamConverter,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -396,6 +405,31 @@ class ProjectEditorViewModel @Inject constructor(
                     gpxFile.parsedData?.let { data ->
                         _gpxData.value = data
                         _gpxStats.value = GpxStatistics.computeFullStats(data)
+                    }
+                }
+            } finally {
+                _isImportingGpx.value = false
+            }
+        }
+    }
+
+    fun importFromStrava(activity: StravaActivity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _isImportingGpx.value = true
+            try {
+                val streamsResult = stravaApi.getActivityStreams(activity.id)
+                streamsResult.onSuccess { streams ->
+                    val gpxData = stravaStreamConverter.convert(activity, streams)
+                    val existingFiles = gpxFileDao.getByProjectId(projectId).first()
+                    val result = gpxImportManager.importFromGpxData(
+                        projectId, activity.name, gpxData
+                    )
+                    result.onSuccess {
+                        existingFiles.forEach { existing ->
+                            gpxImportManager.deleteGpxFile(existing.id)
+                        }
+                        _gpxData.value = gpxData
+                        _gpxStats.value = GpxStatistics.computeFullStats(gpxData)
                     }
                 }
             } finally {

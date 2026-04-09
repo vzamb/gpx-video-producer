@@ -58,6 +58,7 @@ dependencies {
     implementation(project(":lib:ffmpeg"))
     implementation(project(":lib:gpx-parser"))
     implementation(project(":lib:media-utils"))
+    implementation(project(":lib:strava"))
 
     // AndroidX
     implementation(libs.androidx.core.ktx)

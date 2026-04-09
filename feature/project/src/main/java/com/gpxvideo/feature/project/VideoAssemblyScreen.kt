@@ -73,6 +73,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -180,6 +181,10 @@ fun VideoAssemblyScreen(
     val projectIdStr = uiState.project?.id?.toString() ?: ""
 
     var showAspectRatioMenu by remember { mutableStateOf(false) }
+    var showGpxSourcePicker by remember { mutableStateOf(false) }
+    var showStravaSheet by remember { mutableStateOf(false) }
+
+    val stravaIsLinked by viewModel.stravaTokenStore.isLinked.collectAsState(initial = false)
 
     val pickMedia = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickMultipleVisualMedia()
@@ -304,10 +309,42 @@ fun VideoAssemblyScreen(
                     PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
                 )
             },
-            onAddActivity = { gpxPickerLauncher.launch(arrayOf("*/*")) },
+            onAddActivity = { showGpxSourcePicker = true },
             onGoToStyle = {
                 if (projectIdStr.isNotBlank()) onNavigateToStyle(projectIdStr)
             }
+        )
+    }
+
+    // GPX source picker dialog
+    if (showGpxSourcePicker) {
+        GpxSourcePickerDialog(
+            onPickFile = {
+                showGpxSourcePicker = false
+                gpxPickerLauncher.launch(arrayOf("*/*"))
+            },
+            onPickStrava = {
+                showGpxSourcePicker = false
+                showStravaSheet = true
+            },
+            onDismiss = { showGpxSourcePicker = false }
+        )
+    }
+
+    // Strava activity picker sheet
+    if (showStravaSheet) {
+        StravaActivityPickerSheet(
+            isLinked = stravaIsLinked,
+            stravaAuth = viewModel.stravaAuth,
+            stravaApi = viewModel.stravaApi,
+            onActivitySelected = { activity ->
+                viewModel.importFromStrava(activity)
+                showStravaSheet = false
+                if (projectIdStr.isNotBlank()) {
+                    onNavigateToStyle(projectIdStr)
+                }
+            },
+            onDismiss = { showStravaSheet = false }
         )
     }
 
@@ -1886,4 +1923,63 @@ private fun ratioIcon(ratio: SocialAspectRatio): ImageVector = when (ratio) {
     SocialAspectRatio.PORTRAIT_9_16 -> Icons.Outlined.CropPortrait
     SocialAspectRatio.SQUARE_1_1 -> Icons.Outlined.CropSquare
     SocialAspectRatio.PORTRAIT_4_5 -> Icons.Outlined.Photo
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// GPX Source Picker Dialog
+// ═════════════════════════════════════════════════════════════════════════════
+
+@Composable
+private fun GpxSourcePickerDialog(
+    onPickFile: () -> Unit,
+    onPickStrava: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF1C1C1E),
+        title = {
+            Text(
+                "Add GPS Activity",
+                color = Color.White,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "Choose how to import your GPS data:",
+                    color = Color.White.copy(alpha = 0.7f),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(Modifier.height(8.dp))
+                Button(
+                    onClick = onPickFile,
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C853))
+                ) {
+                    Icon(Icons.Outlined.Route, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Import GPX/TCX File", fontWeight = FontWeight.SemiBold)
+                }
+                Button(
+                    onClick = onPickStrava,
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFC4C02))
+                ) {
+                    Icon(Icons.Outlined.Route, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Import from Strava", fontWeight = FontWeight.SemiBold)
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) {
+                Text("Cancel", color = Color.White.copy(alpha = 0.6f))
+            }
+        }
+    )
 }
