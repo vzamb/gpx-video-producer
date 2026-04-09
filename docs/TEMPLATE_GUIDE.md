@@ -393,24 +393,29 @@ You can design templates in After Effects and export them as Lottie JSON using t
 
 ## Creating Templates with Figma (Beginner-Friendly)
 
-Figma is a free, browser-based design tool that makes it easy to visually design your overlay layout and export it as Lottie JSON. This section walks you through the entire process step by step.
+Figma is a free, browser-based design tool. You can use it to **visually design** your overlay layout and then generate the Lottie JSON using the included Python script.
+
+> ⚠️ **Why not export directly from Figma?** The LottieFiles Figma plugin converts text into vector shapes and strips layer names, making the output unusable for this app (which needs named text layers for dynamic data binding). Instead, use Figma **as a visual design tool** and the generator script to produce the actual JSON.
+
+### The Workflow
+
+```
+┌──────────────┐     ┌──────────────────┐     ┌──────────────────┐
+│  Design in   │     │  Note positions  │     │  Run generator   │
+│  Figma       │ ──► │  (X, Y, W, H)   │ ──► │  script          │
+│  (visual)    │     │  from Figma      │     │  (produces JSON) │
+└──────────────┘     └──────────────────┘     └──────────────────┘
+```
 
 ### Prerequisites
 
 - A free [Figma](https://www.figma.com/) account (the free plan is sufficient)
-- The **LottieFiles** plugin for Figma (free)
+- Python 3 installed on your machine
+- The generator script at `tools/generate_template.py` (already included in this project)
 
-### Step 1: Install the LottieFiles Plugin
+### Step 1: Create a New Frame in Figma
 
-1. Open Figma in your browser or desktop app
-2. Click the **Figma logo** (top-left) → **Plugins** → **Browse plugins in Community**
-3. Search for **"LottieFiles"**
-4. Click **Install** on the plugin by LottieFiles
-5. You'll see a confirmation — the plugin is now available in your Figma workspace
-
-### Step 2: Create a New Frame
-
-Each aspect ratio needs its own Figma file (or page). Start with 9:16 (vertical/Stories format).
+Each aspect ratio needs its own Figma frame. Start with 9:16 (vertical/Stories format).
 
 1. Open Figma and create a **New Design File**
 2. Press **F** (or click the Frame tool in the toolbar)
@@ -542,95 +547,116 @@ scrim_bottom
 
 > The exact order depends on your design, but keep text on top of cards, and cards on top of scrims.
 
-### Step 10: Export to Lottie JSON
+### Step 10: Read Positions from Figma
 
-1. Select your frame (`overlay_9x16`)
-2. Go to **Plugins** → **LottieFiles** → **Export to Lottie**
-3. In the plugin window:
-   - Make sure your frame is selected
-   - Set **Frame rate:** `30`
-   - Click **Export** (or **Save to workspace** and then download as JSON)
-4. Save the downloaded file as `my_template_9x16.json`
+Now comes the key step. For each element, select it in Figma and note the **X, Y, W, H** values from the right panel ("Design" tab):
 
-> ⚠️ If the plugin shows errors for certain layer types, simplify those layers. The LottieFiles plugin works best with basic shapes (rectangles, ellipses), text, and groups. Avoid masks, blur effects, or complex boolean operations.
+| Element | What to note |
+|---------|-------------|
+| Stat card rectangle | X, Y (top-left), W, H |
+| Chart placeholder | X, Y, W, H |
+| Map placeholder | X, Y, W, H |
+| Title text | X, Y |
+| Scrim | X, Y, W, H |
 
-### Step 11: Add Template Metadata
+Write these values down — you'll enter them into the generator script.
 
-Open the exported JSON in a text editor (VS Code, Notepad++, or even a basic text editor). You need to add the `templateMeta` block.
+> 💡 **Tip:** In Figma, select an element and the X/Y/W/H values appear in the right panel under "Design". X and Y are the top-left corner position relative to the frame.
 
-1. Open `my_template_9x16.json`
-2. Find the very first `{` at the beginning of the file
-3. Locate the last property before `"layers"` (usually `"ddd": 0,`)
-4. Add the following **before** the `"layers"` key:
+### Step 11: Configure the Generator Script
 
-```json
-  "templateMeta": {
-    "displayName": "My Template",
-    "description": "A custom overlay template"
-  },
-```
+Open `tools/generate_template.py` in any text editor. At the top, you'll find a `TEMPLATE_CONFIG` dictionary. Edit it with your values:
 
-The beginning of your file should look roughly like:
-```json
-{
-  "v": "5.7.4",
-  "fr": 30,
-  "ip": 0,
-  "op": 30,
-  "w": 1080,
-  "h": 1920,
-  "nm": "overlay_9x16",
-  "ddd": 0,
-  "assets": [],
-  "fonts": { "list": [...] },
-  "templateMeta": {
-    "displayName": "My Template",
-    "description": "A custom overlay template"
-  },
-  "layers": [...]
+```python
+TEMPLATE_CONFIG = {
+    "id": "my_template",               # Used in file names
+    "displayName": "My Template",       # Shown in the app
+    "description": "My custom overlay",
+
+    "ratios": {
+        "9x16": {
+            "width": 1080,
+            "height": 1920,
+            "elements": [
+                # Paste your element positions from Figma here.
+                # Each element is a dict with type + position.
+
+                # Dark gradient at bottom
+                {"type": "scrim", "x": 0, "y": 1320, "w": 1080, "h": 600,
+                 "opacity": 80, "direction": "up"},
+
+                # Stat cards (x, y = top-left of the card in Figma)
+                {"type": "stat", "name": "distance",
+                 "x": 48, "y": 1700, "w": 220, "h": 140,
+                 "value_size": 72, "label_size": 22,
+                 "card_opacity": 50, "card_radius": 12},
+
+                # ... more stats ...
+
+                # Chart and map placeholders
+                {"type": "chart", "x": 48, "y": 1380, "w": 984, "h": 140},
+                {"type": "map",   "x": 640, "y": 80,  "w": 400, "h": 400},
+
+                # Activity title
+                {"type": "title", "x": 48, "y": 80, "size": 56, "align": "left"},
+            ],
+        },
+        # Add "16x9", "1x1", "4x5" with adjusted positions
+    },
 }
 ```
 
-### Step 12: Verify and Fix Layer Names
+Available element types and their properties:
 
-The LottieFiles plugin preserves Figma layer names, but it's good to double-check. Open the JSON and search for `"nm":` to see all layer names. Make sure:
+| Type | Required Properties | Optional Properties |
+|------|-------------------|-------------------|
+| `stat` | `name`, `x`, `y`, `w`, `h` | `value_size` (72), `label_size` (22), `card_opacity` (50), `card_radius` (12) |
+| `title` | `x`, `y` | `size` (48), `align` ("left"/"center"/"right") |
+| `chart` | `x`, `y`, `w`, `h` | — |
+| `map` | `x`, `y`, `w`, `h` | — |
+| `scrim` | `x`, `y`, `w`, `h` | `opacity` (80), `direction` ("up"/"down") |
 
-- Stat values use: `stat_distance`, `stat_pace`, `stat_hr`, etc.
-- Labels use: `label_distance`, `label_pace`, `label_hr`, etc.
-- Placeholders use: `placeholder_elevation_chart`, `placeholder_route_map`
-- Title uses: `title_text`
+Available stat names: `distance`, `elevation`, `pace`, `hr`, `time`, `speed`, `grade`
 
-If a name got mangled during export (e.g., `stat_distance Copy`), fix it by editing the JSON directly.
+### Step 12: Run the Generator
+
+```bash
+python3 tools/generate_template.py
+```
+
+Output:
+```
+  ✓ my_template_9x16.json
+  ✓ my_template_16x9.json
+  ✓ my_template_1x1.json
+  ✓ my_template_4x5.json
+
+  ✓ All 4 ratios generated for template 'my_template'
+
+  Output: .../app/src/main/assets/templates/
+```
+
+The script generates the files directly into the correct directory.
 
 ### Step 13: Create All 4 Aspect Ratios
 
-Go back to Figma and create 3 more pages (or frames) for the remaining ratios:
+Go back to Figma and create 3 more frames for the remaining ratios:
 
-| Ratio | Frame Size | File Name |
-|-------|-----------|-----------|
-| 16:9 | 1920 × 1080 | `my_template_16x9.json` |
-| 1:1 | 1080 × 1080 | `my_template_1x1.json` |
-| 4:5 | 1080 × 1350 | `my_template_4x5.json` |
+| Ratio | Frame Size |
+|-------|-----------|
+| 16:9 | 1920 × 1080 |
+| 1:1 | 1080 × 1080 |
+| 4:5 | 1080 × 1350 |
 
 For each ratio:
-1. Create a new frame at the correct dimensions
-2. Rearrange your elements to fit (re-position cards, resize chart areas, etc.)
-3. Keep the **same stats and layer names** in all variants
-4. Export each via the LottieFiles plugin
-5. Add `templateMeta` to each JSON
+1. Duplicate your 9:16 frame and resize it
+2. Rearrange elements to fit the new dimensions
+3. Note the new X/Y/W/H positions
+4. Add a matching section in `TEMPLATE_CONFIG["ratios"]`
 
-> 💡 **Tip:** In Figma, duplicate your 9:16 frame and resize it as a starting point for each ratio. Then reposition elements to fit.
+> 💡 **Tip:** You don't need every stat in every ratio. A landscape (16:9) overlay might have fewer cards to avoid clutter.
 
-### Step 14: Add Files to the Project
-
-Copy all 4 JSON files into the app's template directory:
-
-```
-app/src/main/assets/templates/my_template_9x16.json
-app/src/main/assets/templates/my_template_16x9.json
-app/src/main/assets/templates/my_template_1x1.json
-app/src/main/assets/templates/my_template_4x5.json
-```
+### Step 14: Build and Test
 
 Build and run the app — your new template will appear automatically in the template selector on the Overlays screen. No code changes needed.
 
@@ -639,8 +665,9 @@ Build and run the app — your new template will appear automatically in the tem
 | Problem | Solution |
 |---------|----------|
 | Template doesn't appear in the app | Check file names follow the `{id}_{ratio}.json` pattern and all 4 ratios exist |
-| Text shows placeholder values (`0.0`) instead of live data | Verify layer names match exactly (case-sensitive): `stat_distance`, not `Stat_Distance` |
+| Text shows placeholder values (`0.0`) instead of live data | Verify layer names match exactly (case-sensitive): `stat_distance`, not `Stat_Distance`. If you used the generator script, names are correct automatically |
 | Chart or map doesn't appear | Ensure placeholder layers are type `1` (solid) with opacity `0`. Check the `nm` field is exactly `placeholder_elevation_chart` or `placeholder_route_map` |
-| Export plugin fails | Flatten complex layers. Avoid masks, effects, and boolean operations. Keep it simple: rectangles, text, and groups |
 | Colors look different in the app | The app applies the user's accent color to labels and charts at runtime. Design labels in white — they will be recolored |
-| Text is cut off or misaligned | Adjust font size and position. Remember the app replaces text content dynamically — leave room for longer strings like `12:34:56` or `1234.5` |
+| Text is cut off or misaligned | Adjust `value_size`/`label_size` or card dimensions. Leave room for long strings like `12:34:56` or `1234.5` |
+| Elements in wrong position | Double-check X/Y values from Figma. Remember X/Y in Figma is the top-left corner of the element |
+| Generator warns about missing ratios | Add the missing ratio configs to `TEMPLATE_CONFIG["ratios"]` and re-run |
