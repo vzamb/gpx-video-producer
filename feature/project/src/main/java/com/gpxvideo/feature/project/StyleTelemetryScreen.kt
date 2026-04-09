@@ -548,21 +548,30 @@ private fun computeLiveValuesAtIndex(
         else gains[loIdx] + frac * (gains[hiIdx] - gains[loIdx])
 
     // Speed: compute from actual point-to-point distances over a time window
+    // If speed is too low, progressively widen the window to avoid "—" pace at edge points
     val windowSize = (points.size / 50).coerceIn(3, 15)
-    val windowStart = (loIdx - windowSize).coerceAtLeast(0)
-    val windowEnd = (loIdx + windowSize).coerceAtMost(points.lastIndex)
     val speed: Double = run {
-        val startTime = points[windowStart].time
-        val endTime = points[windowEnd].time
-        if (startTime != null && endTime != null) {
-            val timeDiffSec = (endTime.toEpochMilli() - startTime.toEpochMilli()) / 1000.0
-            if (timeDiffSec > 1.0) {
-                (distances[windowEnd] - distances[windowStart]) / timeDiffSec
-            } else 0.0
-        } else {
-            if (gpxData.totalDuration.seconds > 0)
-                gpxData.totalDistance / gpxData.totalDuration.seconds.toDouble() else 0.0
+        var currentSpeed = 0.0
+        var currentWindowSize = windowSize
+        while (currentWindowSize <= windowSize * 4) {
+            val ws = (loIdx - currentWindowSize).coerceAtLeast(0)
+            val we = (loIdx + currentWindowSize).coerceAtMost(points.lastIndex)
+            val startTime = points[ws].time
+            val endTime = points[we].time
+            if (startTime != null && endTime != null) {
+                val timeDiffSec = (endTime.toEpochMilli() - startTime.toEpochMilli()) / 1000.0
+                if (timeDiffSec > 1.0) {
+                    currentSpeed = (distances[we] - distances[ws]) / timeDiffSec
+                    if (currentSpeed >= 0.3) break
+                }
+            } else {
+                currentSpeed = if (gpxData.totalDuration.seconds > 0)
+                    gpxData.totalDistance / gpxData.totalDuration.seconds.toDouble() else 0.0
+                break
+            }
+            currentWindowSize *= 2
         }
+        currentSpeed
     }
 
     // Interpolated grade

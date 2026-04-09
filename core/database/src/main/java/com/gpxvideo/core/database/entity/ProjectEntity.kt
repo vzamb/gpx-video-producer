@@ -39,5 +39,7 @@ data class ProjectEntity(
     @ColumnInfo(name = "story_template", defaultValue = "CINEMATIC")
     val storyTemplate: String = "CINEMATIC",
     @ColumnInfo(name = "activity_title", defaultValue = "")
-    val activityTitle: String = ""
+    val activityTitle: String = "",
+    @ColumnInfo(name = "accent_color", defaultValue = "-12010753")
+    val accentColor: Int = 0xFF448AFF.toInt()
 )

@@ -45,4 +45,7 @@ interface ProjectDao {
 
     @Query("UPDATE projects SET activity_title = :title WHERE id = :id")
     suspend fun updateActivityTitle(id: UUID, title: String)
+
+    @Query("UPDATE projects SET accent_color = :color WHERE id = :id")
+    suspend fun updateAccentColor(id: UUID, color: Int)
 }

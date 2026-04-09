@@ -280,7 +280,11 @@ class ExportViewModel @Inject constructor(
                         trimEndMs = clip.trimEndMs,
                         speed = clip.speed,
                         volume = clip.volume,
-                        transition = transition
+                        transition = transition,
+                        clipId = clip.id,
+                        gpxPointIndex = if (clip.gpxPointIndex >= 0) clip.gpxPointIndex else null,
+                        gpxDistanceMeters = if (clip.isSynced) clip.gpxDistanceMeters else null,
+                        isSynced = clip.isSynced
                     )
                 )
             }
@@ -368,7 +372,8 @@ class ExportViewModel @Inject constructor(
             projectHeight = settings.aspectRatio.height,
             storyTemplate = project.storyTemplate,
             activityTitle = project.activityTitle,
-            storyMode = project.storyMode
+            storyMode = project.storyMode,
+            accentColor = project.accentColor
         )
     }
 }

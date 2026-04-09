@@ -118,6 +118,7 @@ class ProjectEditorViewModel @Inject constructor(
                     } ?: SocialAspectRatio.PORTRAIT_9_16
                     _selectedAspectRatio.value = savedRatio
                     _activityTitle.value = it.activityTitle
+                    _accentColor.value = it.accentColor
                 }
             }
         }
@@ -543,6 +544,9 @@ class ProjectEditorViewModel @Inject constructor(
 
     fun setAccentColor(color: Int) {
         _accentColor.value = color
+        viewModelScope.launch(Dispatchers.IO) {
+            projectDao.updateAccentColor(projectId, color)
+        }
     }
 
     fun setActivityTitle(title: String) {

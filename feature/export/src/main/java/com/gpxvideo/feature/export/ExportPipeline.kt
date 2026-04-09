@@ -250,7 +250,9 @@ class ExportPipeline @Inject constructor(
                     syncEngine = config.syncEngine,
                     totalDurationMs = totalDurationMs,
                     activityTitle = config.activityTitle,
-                    storyMode = config.storyMode
+                    storyMode = config.storyMode,
+                    accentColor = config.accentColor,
+                    exportClips = config.clips
                 )
             )
         }
@@ -453,7 +455,8 @@ private class DynamicStoryTemplateOverlay(
     private val totalDurationMs: Long,
     private val activityTitle: String = "",
     private val accentColor: Int = android.graphics.Color.argb(204, 68, 138, 255),
-    private val storyMode: String = "FAST_FORWARD"
+    private val storyMode: String = "FAST_FORWARD",
+    private val exportClips: List<ExportClip> = emptyList()
 ) : BitmapOverlay() {
 
     private val loader = LottieTemplateLoader(context)
@@ -477,6 +480,7 @@ private class DynamicStoryTemplateOverlay(
 
         val frameData = when (storyMode) {
             "STATIC" -> buildStaticFrame(progress)
+            "LIVE_SYNC" -> buildLiveSyncFrame(progress, timeMs)
             else -> buildAnimatedFrame(progress, timeMs)
         }
 
@@ -534,23 +538,31 @@ private class DynamicStoryTemplateOverlay(
                 gLo + frac * (gHi - gLo)
             }
 
-        // Windowed speed
+        // Windowed speed — widen progressively if speed is too low (avoids "—" pace at edge points)
         val windowSize = (allPoints.size / 50).coerceIn(3, 15)
-        val ws = (loIdx - windowSize).coerceAtLeast(0)
-        val we = (loIdx + windowSize).coerceAtMost(allPoints.lastIndex)
         val speed = run {
-            val t0 = allPoints[ws].time
-            val t1 = allPoints[we].time
-            if (t0 != null && t1 != null) {
-                val dtSec = (t1.toEpochMilli() - t0.toEpochMilli()) / 1000.0
-                if (dtSec > 1.0) {
-                    val d = (cumulativeDistances.getOrElse(we) { 0.0 }) -
-                            (cumulativeDistances.getOrElse(ws) { 0.0 })
-                    d / dtSec
-                } else 0.0
-            } else {
-                gpxData?.let { if (it.totalDuration.seconds > 0) it.totalDistance / it.totalDuration.seconds.toDouble() else 0.0 } ?: 0.0
+            var currentSpeed = 0.0
+            var currentWindowSize = windowSize
+            while (currentWindowSize <= windowSize * 4) {
+                val ws = (loIdx - currentWindowSize).coerceAtLeast(0)
+                val we = (loIdx + currentWindowSize).coerceAtMost(allPoints.lastIndex)
+                val t0 = allPoints[ws].time
+                val t1 = allPoints[we].time
+                if (t0 != null && t1 != null) {
+                    val dtSec = (t1.toEpochMilli() - t0.toEpochMilli()) / 1000.0
+                    if (dtSec > 1.0) {
+                        val d = (cumulativeDistances.getOrElse(we) { 0.0 }) -
+                                (cumulativeDistances.getOrElse(ws) { 0.0 })
+                        currentSpeed = d / dtSec
+                        if (currentSpeed >= 0.3) break
+                    }
+                } else {
+                    currentSpeed = gpxData?.let { if (it.totalDuration.seconds > 0) it.totalDistance / it.totalDuration.seconds.toDouble() else 0.0 } ?: 0.0
+                    break
+                }
+                currentWindowSize *= 2
             }
+            currentSpeed
         }
 
         val grade = if (loIdx > 0 && hiIdx < allPoints.lastIndex) {
@@ -595,6 +607,67 @@ private class DynamicStoryTemplateOverlay(
     }
 
     private fun formatPace(speedMs: Double) = FormatUtils.formatPaceFromSpeed(speedMs)
+
+    /** LIVE_SYNC: map current time to the correct GPX point index based on clip sync points */
+    private fun buildLiveSyncFrame(progress: Float, timeMs: Long): OverlayFrameData {
+        if (allPoints.size < 2) return OverlayFrameData(progress = progress, elapsedTime = timeMs)
+
+        val syncedClips = exportClips.filter { it.isSynced && it.gpxPointIndex != null }
+        if (syncedClips.isEmpty()) {
+            // No sync data — fall back to animated (proportional)
+            return buildAnimatedFrame(progress, timeMs)
+        }
+
+        // Determine which clip is active at this timeMs
+        var cumulativeMs = 0L
+        var activeClipIdx = -1
+        var clipStartMs = 0L
+        for (i in exportClips.indices) {
+            val clipDuration = exportClips[i].trimEndMs - exportClips[i].trimStartMs
+            if (timeMs < cumulativeMs + clipDuration) {
+                activeClipIdx = i
+                clipStartMs = cumulativeMs
+                break
+            }
+            cumulativeMs += clipDuration
+        }
+        if (activeClipIdx < 0) activeClipIdx = exportClips.lastIndex
+
+        val activeClip = exportClips[activeClipIdx]
+        val clipDuration = (activeClip.trimEndMs - activeClip.trimStartMs).coerceAtLeast(1L)
+        val positionWithinClip = (timeMs - clipStartMs).coerceAtLeast(0L)
+        val clipProgress = (positionWithinClip.toFloat() / clipDuration).coerceIn(0f, 1f)
+
+        val syncGpxIdx = activeClip.gpxPointIndex
+        if (syncGpxIdx == null || !activeClip.isSynced) {
+            return buildAnimatedFrame(progress, timeMs)
+        }
+
+        val startIdx = syncGpxIdx.coerceIn(0, allPoints.lastIndex)
+
+        // Determine how many GPX points this clip spans using timestamps
+        val startTime = allPoints[startIdx].time
+        val endIdx: Int
+        if (startTime != null && clipDuration > 0) {
+            val clipEndTime = startTime.plusMillis(clipDuration)
+            var ei = startIdx
+            for (i in startIdx until allPoints.size) {
+                if (allPoints[i].time != null && allPoints[i].time!! <= clipEndTime) {
+                    ei = i
+                } else break
+            }
+            if (ei <= startIdx) ei = (startIdx + 1).coerceAtMost(allPoints.lastIndex)
+            endIdx = ei
+        } else {
+            endIdx = (startIdx + (allPoints.size / exportClips.size.coerceAtLeast(1)))
+                .coerceAtMost(allPoints.lastIndex)
+        }
+
+        val fractionalIdx = (startIdx + clipProgress * (endIdx - startIdx))
+            .coerceIn(0f, allPoints.lastIndex.toFloat())
+
+        return buildAnimatedFrame(fractionalIdx / (allPoints.size - 1).coerceAtLeast(1).toFloat(), timeMs)
+    }
 
     private fun computeCumulativeDistances(): List<Double> {
         if (allPoints.size < 2) return if (allPoints.isNotEmpty()) listOf(0.0) else emptyList()

@@ -22,7 +22,8 @@ data class ExportConfig(
     val projectHeight: Int = 1080,
     val storyTemplate: String? = null,
     val activityTitle: String = "",
-    val storyMode: String = "FAST_FORWARD"
+    val storyMode: String = "FAST_FORWARD",
+    val accentColor: Int = 0xFF448AFF.toInt()
 )
 
 data class ExportClip(
@@ -33,7 +34,11 @@ data class ExportClip(
     val trimEndMs: Long,
     val speed: Float,
     val volume: Float,
-    val transition: Transition?
+    val transition: Transition?,
+    val clipId: UUID? = null,
+    val gpxPointIndex: Int? = null,
+    val gpxDistanceMeters: Double? = null,
+    val isSynced: Boolean = false
 )
 
 data class ExportOverlay(
