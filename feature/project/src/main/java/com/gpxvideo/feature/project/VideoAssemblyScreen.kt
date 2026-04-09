@@ -56,6 +56,7 @@ import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.Photo
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Route
+import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -67,6 +68,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -504,41 +506,64 @@ private fun TimelineAssemblyContent(
             // Bottom CTA — fixed below everything
             if (uiState.mediaItems.isNotEmpty()) {
                 val hasGpx = uiState.gpxData != null
-                Button(
-                    onClick = { if (hasGpx) onGoToStyle() else onAddActivity() },
-                    enabled = !uiState.isImportingGpx,
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp)
                         .navigationBarsPadding()
-                        .padding(bottom = 8.dp)
-                        .height(48.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (hasGpx) AccentBlue else Color(0xFF00C853),
-                        disabledContainerColor = Color(0xFF00C853).copy(alpha = 0.4f)
-                    )
+                        .padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    if (uiState.isImportingGpx) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp,
-                            color = Color.White
+                    if (hasGpx) {
+                        // Replace Activity button
+                        OutlinedButton(
+                            onClick = onAddActivity,
+                            enabled = !uiState.isImportingGpx,
+                            modifier = Modifier.height(48.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.3f))
+                        ) {
+                            Icon(
+                                Icons.Outlined.SwapHoriz,
+                                contentDescription = "Replace Activity",
+                                modifier = Modifier.size(18.dp),
+                                tint = Color.White
+                            )
+                        }
+                    }
+                    Button(
+                        onClick = { if (hasGpx) onGoToStyle() else onAddActivity() },
+                        enabled = !uiState.isImportingGpx,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (hasGpx) AccentBlue else Color(0xFF00C853),
+                            disabledContainerColor = Color(0xFF00C853).copy(alpha = 0.4f)
                         )
-                        Spacer(Modifier.width(8.dp))
-                        Text("Importing GPX…", fontWeight = FontWeight.Bold)
-                    } else {
-                        Icon(
-                            if (hasGpx) Icons.Outlined.Route else Icons.Outlined.Route,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            if (hasGpx) "Continue to Overlays →" else "Next: Add GPX Activity",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp
-                        )
+                    ) {
+                        if (uiState.isImportingGpx) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = Color.White
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("Importing GPX…", fontWeight = FontWeight.Bold)
+                        } else {
+                            Icon(
+                                Icons.Outlined.Route,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                if (hasGpx) "Continue to Overlays →" else "Next: Add GPX Activity",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                        }
                     }
                 }
             }

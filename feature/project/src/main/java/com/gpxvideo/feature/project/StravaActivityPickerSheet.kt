@@ -92,11 +92,11 @@ fun StravaActivityPickerSheet(
         scope.launch {
             isLoading = true
             error = null
-            val result = stravaApi.listActivities(page = page, perPage = 20)
+            val result = stravaApi.listActivities(page = page, perPage = 30)
             result.onSuccess { list ->
                 if (page == 1) activities.clear()
-                activities.addAll(list.filter { !it.isManual && !it.isTrainer })
-                hasMore = list.size == 20
+                activities.addAll(list)
+                hasMore = list.size == 30
                 currentPage = page
             }.onFailure {
                 error = it.message ?: "Failed to load activities"
@@ -152,9 +152,9 @@ fun StravaActivityPickerSheet(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(48.dp),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(8.dp)
                     ) {
-                        Text("Connect to Strava", fontWeight = FontWeight.Bold)
+                        Text("Connect with Strava", fontWeight = FontWeight.Bold)
                     }
                 }
             } else {
@@ -191,7 +191,7 @@ fun StravaActivityPickerSheet(
 
                     LazyColumn(
                         state = listState,
-                        modifier = Modifier.height(400.dp),
+                        modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(activities, key = { it.id }) { activity ->
