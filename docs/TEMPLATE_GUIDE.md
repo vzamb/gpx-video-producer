@@ -63,11 +63,11 @@ Templates use standard Lottie layer types:
 
 | Type (`ty`) | Name | Purpose |
 |-------------|------|---------|
-| 4 (shape)   | Cards, backgrounds, text, placeholders | All visual elements — rectangles, text (vectorized as paths), chart/map regions |
+| 4 (shape)   | Cards, backgrounds, text, charts/maps | All visual elements — rectangles, text (vectorized as paths), chart/map regions |
 | 5 (text)    | Stats, labels, title | Dynamic text bound at runtime (hand-written JSON or After Effects export) |
 | 1 (solid)   | Placeholders (legacy) | Invisible regions for chart/map rendering |
 
-> **Lottie Studio note:** When exporting from Lottie Studio, all layers are type 4 (shape) — including text and placeholders. The app handles this correctly: text layers named `stat_*`, `label_*`, or `title_*` are hidden from Lottie rendering and replaced with native text; placeholder layers are hidden and replaced with chart/map renderers.
+> **Lottie Studio note:** When exporting from Lottie Studio, all layers are type 4 (shape) — including text and chart/map layers. The app handles this correctly: text layers named `stat_*`, `label_*`, or `title_*` are hidden from Lottie rendering and replaced with native text; chart/map layers are hidden and replaced with native data-driven renderers.
 
 ## Dynamic Text Layers
 
@@ -159,100 +159,192 @@ Key fields in `t.d.k[0].s`:
 - `j` — justification (0=left, 1=right, 2=center)
 - `fc` — font color as [R, G, B] (0.0–1.0)
 
-## Placeholder Layers (Charts & Maps)
+## Chart & Map Layers (Design-Driven)
 
-The renderer draws data-driven visualizations in special placeholder regions. These can be **solid layers** (`ty: 1`) or **shape layers** (`ty: 4`) with specific names:
+The app renders data-driven charts and maps (elevation profile, route map) using styles extracted directly from your Lottie design. Instead of invisible placeholder boxes, you create **fully styled visual mockups** using named sub-groups inside the layer. The app reads the colors, sizes, and opacities from your design elements and uses them to render the live data visualization.
 
-| Layer Name | Rendering |
-|------------|-----------|
-| `placeholder_elevation_chart` | Elevation profile with progress indicator |
-| `placeholder_route_map` | Route map with current position dot |
+### Layer Names
 
-### Shape-layer placeholders (recommended — Lottie Studio)
+| Layer Name | Also accepts (legacy) | Rendering |
+|------------|----------------------|-----------|
+| `elevation_chart` | `placeholder_elevation_chart` | Elevation profile with area gradient + progress dot |
+| `route_map` | `placeholder_route_map` | Route map with visited/unvisited path + position dot |
 
-When using Lottie Studio, placeholders are shape layers containing a rectangle that defines the rendering region. You can add **fill** and **stroke** shapes to control the visual style of the chart/map:
+### Architecture: Named Sub-Groups
+
+Each chart/map layer is a **shape layer** (`ty: 4`) containing named groups (`ty: "gr"`). Each group represents a specific visual element of the chart. The app extracts the style (colors, sizes, opacities) from each group and draws the live data using those exact styles.
+
+**Elevation chart groups:**
+
+| Group Name | Purpose | Key Properties Read |
+|------------|---------|-------------------|
+| `background` | Chart background card | Rectangle → bounds & corner radius; Fill → bg color & opacity |
+| `line` | Visited elevation trace | Stroke → line color & width |
+| `area` | Gradient fill under the line | Fill → area color & opacity |
+| `full_path` | Unvisited (future) portion | Stroke → line color, width & opacity |
+| `dot` | Current position indicator | Ellipse → dot radius; Fill → dot color |
+| `glow` | Outer glow around the dot | Ellipse → glow radius; Fill → glow color & opacity |
+
+**Route map groups:**
+
+| Group Name | Purpose | Key Properties Read |
+|------------|---------|-------------------|
+| `background` | Map background card | Rectangle → bounds & corner radius; Fill → bg color & opacity |
+| `route` | Visited route path | Stroke → line color & width |
+| `full_route` | Full unvisited route | Stroke → line color, width & opacity |
+| `dot` | Current position marker | Ellipse → dot radius; Fill → dot color |
+| `glow` | Outer glow around marker | Ellipse → glow radius; Fill → glow color & opacity |
+
+### Creating a Chart Layer in Lottie Studio
+
+1. **Create a shape layer** and name it `elevation_chart` (or `route_map`)
+2. **Inside the layer, create named groups** (each group is a visual mockup element):
+
+```
+elevation_chart (Shape Layer)
+  ├── background (Group)
+  │   ├── Rectangle — defines the chart bounds (size = chart area)
+  │   ├── Fill — background color and opacity
+  │   └── Transform
+  ├── line (Group)
+  │   ├── Rectangle — mockup path (any shape, just carries the stroke)
+  │   ├── Stroke — the line color and width
+  │   └── Transform
+  ├── area (Group)
+  │   ├── Rectangle — mockup area shape
+  │   ├── Fill — gradient area color and opacity
+  │   └── Transform
+  ├── full_path (Group)
+  │   ├── Rectangle — mockup for unvisited portion
+  │   ├── Stroke — color, width, and opacity for unvisited line
+  │   └── Transform
+  ├── dot (Group)
+  │   ├── Ellipse — size defines the dot radius
+  │   ├── Fill — dot color
+  │   └── Transform
+  └── glow (Group)
+      ├── Ellipse — size defines the glow radius
+      ├── Fill — glow color and opacity
+      └── Transform
+```
+
+3. **Position the layer** at the correct location on your canvas (using layer transform `ks.p`)
+
+### JSON Example — Elevation Chart
 
 ```json
 {
   "ty": 4,
-  "nm": "placeholder_elevation_chart",
-  "ind": 16,
+  "nm": "elevation_chart",
   "ks": {
     "o": { "a": 0, "k": 100 },
-    "p": { "a": 0, "k": [540, 1820, 0] }
+    "p": { "a": 0, "k": [540, 1820, 0] },
+    "s": { "a": 0, "k": [100, 100] }
   },
-  "shapes": [{
-    "ty": "gr",
-    "it": [
-      {
-        "ty": "rc",
-        "p": { "a": 0, "k": [0, 0] },
-        "s": { "a": 0, "k": [1000, 200] },
-        "r": { "a": 0, "k": 8 }
-      },
-      {
-        "ty": "fl",
-        "c": { "a": 0, "k": [0.267, 0.867, 0.467, 1] },
-        "o": { "a": 0, "k": 30 }
-      },
-      {
-        "ty": "st",
-        "c": { "a": 0, "k": [0.267, 0.867, 0.467, 1] },
-        "o": { "a": 0, "k": 100 },
-        "w": { "a": 0, "k": 3 }
-      },
-      { "ty": "tr", "p": { "a": 0, "k": [0, 0] } }
-    ]
-  }]
+  "shapes": [
+    {
+      "ty": "gr", "nm": "background", "bm": 0, "hd": false,
+      "it": [
+        { "ty": "rc", "nm": "Bounds", "d": 1,
+          "p": { "a": 0, "k": [0, 0] },
+          "s": { "a": 0, "k": [1000, 200] },
+          "r": { "a": 0, "k": 8 } },
+        { "ty": "fl", "nm": "BgFill", "bm": 0, "r": 1,
+          "c": { "a": 0, "k": [0.06, 0.06, 0.08] },
+          "o": { "a": 0, "k": 20 } },
+        { "ty": "tr", "p": { "a": 0, "k": [0, 0] },
+          "a": { "a": 0, "k": [0, 0] },
+          "s": { "a": 0, "k": [100, 100] },
+          "o": { "a": 0, "k": 100 },
+          "r": { "a": 0, "k": 0 } }
+      ]
+    },
+    {
+      "ty": "gr", "nm": "line", "bm": 0, "hd": false,
+      "it": [
+        { "ty": "rc", "nm": "LineShape", "d": 1,
+          "p": { "a": 0, "k": [0, 0] },
+          "s": { "a": 0, "k": [900, 3] },
+          "r": { "a": 0, "k": 0 } },
+        { "ty": "st", "nm": "LineStroke", "bm": 0, "lc": 2, "lj": 2, "ml": 0,
+          "c": { "a": 0, "k": [0.267, 0.867, 0.467] },
+          "o": { "a": 0, "k": 100 },
+          "w": { "a": 0, "k": 3 } },
+        { "ty": "tr", "p": { "a": 0, "k": [0, 0] },
+          "a": { "a": 0, "k": [0, 0] },
+          "s": { "a": 0, "k": [100, 100] },
+          "o": { "a": 0, "k": 100 },
+          "r": { "a": 0, "k": 0 } }
+      ]
+    },
+    {
+      "ty": "gr", "nm": "area", "bm": 0, "hd": false,
+      "it": [
+        { "ty": "rc", "nm": "AreaShape", "d": 1,
+          "p": { "a": 0, "k": [0, 0] },
+          "s": { "a": 0, "k": [500, 120] },
+          "r": { "a": 0, "k": 0 } },
+        { "ty": "fl", "nm": "AreaFill", "bm": 0, "r": 1,
+          "c": { "a": 0, "k": [0.267, 0.867, 0.467] },
+          "o": { "a": 0, "k": 30 } },
+        { "ty": "tr", "p": { "a": 0, "k": [0, 0] },
+          "a": { "a": 0, "k": [0, 0] },
+          "s": { "a": 0, "k": [100, 100] },
+          "o": { "a": 0, "k": 100 },
+          "r": { "a": 0, "k": 0 } }
+      ]
+    },
+    {
+      "ty": "gr", "nm": "dot", "bm": 0, "hd": false,
+      "it": [
+        { "ty": "el", "nm": "DotCircle", "d": 1,
+          "p": { "a": 0, "k": [0, 0] },
+          "s": { "a": 0, "k": [10, 10] } },
+        { "ty": "fl", "nm": "DotFill", "bm": 0, "r": 1,
+          "c": { "a": 0, "k": [1, 1, 1] },
+          "o": { "a": 0, "k": 100 } },
+        { "ty": "tr", "p": { "a": 0, "k": [0, 0] },
+          "a": { "a": 0, "k": [0, 0] },
+          "s": { "a": 0, "k": [100, 100] },
+          "o": { "a": 0, "k": 100 },
+          "r": { "a": 0, "k": 0 } }
+      ]
+    },
+    {
+      "ty": "gr", "nm": "glow", "bm": 0, "hd": false,
+      "it": [
+        { "ty": "el", "nm": "GlowCircle", "d": 1,
+          "p": { "a": 0, "k": [0, 0] },
+          "s": { "a": 0, "k": [18, 18] } },
+        { "ty": "fl", "nm": "GlowFill", "bm": 0, "r": 1,
+          "c": { "a": 0, "k": [0.267, 0.867, 0.467] },
+          "o": { "a": 0, "k": 40 } },
+        { "ty": "tr", "p": { "a": 0, "k": [0, 0] },
+          "a": { "a": 0, "k": [0, 0] },
+          "s": { "a": 0, "k": [100, 100] },
+          "o": { "a": 0, "k": 100 },
+          "r": { "a": 0, "k": 0 } }
+      ]
+    }
+  ]
 }
 ```
 
-**Chart/map style properties extracted from the shape:**
+### Design Tips
 
-| Shape | Property | Effect |
-|-------|----------|--------|
-| `fl` (fill) | `c.k` | Area fill color (elevation chart gradient, map background) |
-| `fl` (fill) | `o.k` | Fill opacity (0–100) |
-| `st` (stroke) | `c.k` | Line color for the visited path / elevation trace |
-| `st` (stroke) | `w.k` | Line width in dp |
-| `rc` (rect) | `r.k` | Corner radius for the background |
-| `rc` (rect) | `s.k` | Size `[width, height]` — the rendering region |
+- **All groups are optional.** If you omit `dot`/`glow`, the app uses sensible defaults (white dot, semi-transparent glow).
+- **The `background` group's rectangle defines the chart bounds.** Its size determines where the chart is drawn.
+- **Colors are in [0–1] range** — e.g., `[0.267, 0.867, 0.467]` = green (#44DD77).
+- **Opacity is 0–100** — e.g., `"o": { "a": 0, "k": 30 }` = 30% opacity.
+- **Dot/glow radii come from the ellipse size.** An ellipse `"s": [10, 10]` gives a 5dp radius dot.
+- **The layer is hidden** from Lottie's own rendering — the app draws charts natively in its place.
 
-> **Design tip:** Set the stroke color to your desired accent for the chart line and route path. Set the fill to a complementary color at low opacity for the background/area gradient. The app uses these as the primary visual style rather than hardcoded defaults.
+### Backward Compatibility
 
-### Solid-layer placeholders (legacy — After Effects / hand-written)
+The app also supports two legacy approaches (auto-detected):
 
-```json
-{
-  "ty": 1,
-  "nm": "placeholder_elevation_chart",
-  "ind": 16,
-  "ks": {
-    "o": { "a": 0, "k": 0 },
-    "p": { "a": 0, "k": [540, 1700, 0] },
-    "a": { "a": 0, "k": [480, 120, 0] }
-  },
-  "sw": 960,
-  "sh": 240,
-  "sc": "#000000"
-}
-```
-
-Key fields:
-- `p` — center position `[x, y, 0]`
-- `a` — anchor point `[width/2, height/2, 0]`
-- `sw`, `sh` — solid width and height (the rendering region size)
-- `o.k: 0` — opacity 0 (the solid itself is invisible; the renderer draws on top)
-
-**Bounds calculation:**
-```
-left  = p.x - a.x
-top   = p.y - a.y
-right = left + sw
-bottom = top + sh
-```
-
-> Legacy solid-layer placeholders use default chart colors (white lines, derived gradients). To control chart colors, use shape-layer placeholders with fill/stroke definitions.
+1. **Flat shapes** (no named groups): A layer containing only `rc`, `fl`, `st` at the top level. The fill becomes the area color and the stroke becomes the line color.
+2. **Solid layers** (`ty: 1`): Legacy After Effects approach using `sw`/`sh` for dimensions. Uses default chart colors.
 
 ## Shape Layers (Cards & Backgrounds)
 
@@ -383,7 +475,7 @@ Layers render **back to front** in the order listed. Typical order:
 2. Card shapes
 3. Label text layers
 4. Stat text layers (on top of cards)
-5. Placeholder layers (chart, map)
+5. Chart/map layers (elevation chart, route map)
 6. Title text (topmost)
 
 ## Design Rules
@@ -394,9 +486,7 @@ Layers render **back to front** in the order listed. Typical order:
 
 3. **Consistent stats across ratios** — all 4 ratio files for a template should display the same stats, just laid out differently.
 
-4. **Use opacity 0 for placeholders** — the chart/map renderer draws into the placeholder bounds. The solid itself should be invisible.
-
-5. **Accent color** — the user-selected accent color is applied to label text. Design with this in mind (white stat values + colored labels is the standard pattern).
+4. **Accent color** — the user-selected accent color is applied to label text. Design with this in mind (white stat values + colored labels is the standard pattern).
 
 ## Step-by-Step: Adding a New Template
 
@@ -409,7 +499,7 @@ Layers render **back to front** in the order listed. Typical order:
 
 3. **Add `templateMeta`** to the file with `displayName` and `description`.
 
-4. **Use recognized layer names** for text (`stat_*`, `label_*`, `title_text`) and placeholders (`placeholder_elevation_chart`, `placeholder_route_map`).
+4. **Use recognized layer names** for text (`stat_*`, `label_*`, `title_text`) and chart/map layers (`elevation_chart`, `route_map`).
 
 5. **Build and run** — the app will automatically discover your new template and show it in the template pager. No code changes required.
 
@@ -432,7 +522,7 @@ You can study these existing JSON files as reference when creating new templates
 
 - **Direct export** — no conversion scripts or post-processing
 - **Full style control** — design exactly what you see
-- **Chart styling** — define chart/map colors through fill and stroke on placeholder shapes
+- **Chart styling** — define chart/map colors through named sub-groups inside chart layers
 - **Single-file workflow** — create one ratio, the app scales the rest
 
 ### Prerequisites
@@ -456,7 +546,7 @@ You can study these existing JSON files as reference when creating new templates
 
 3. **Decorative elements:** Add any lines, shapes, badges, or visual flourishes you want. Name them descriptively (e.g., `separator_line`, `badge_bg`).
 
-> **Important:** All non-text, non-placeholder layers render as pure Lottie visuals. The app preserves every fill, gradient, stroke, and opacity exactly as designed.
+> **Important:** All non-text, non-chart layers render as pure Lottie visuals. The app preserves every fill, gradient, stroke, and opacity exactly as designed.
 
 ### Step 3: Add Text Layers
 
@@ -476,29 +566,28 @@ For each stat, add two text elements:
 
 > **Layer names are critical.** The app identifies text layers by name to bind live data. Use the exact names from the [Dynamic Text Layers](#dynamic-text-layers) table. Layers with unrecognized names are rendered as static Lottie visuals.
 
-### Step 4: Add Chart and Map Placeholders
+### Step 4: Add Chart and Map Layers
 
-Draw rectangles where you want the elevation chart and route map to appear:
+Create chart/map layers with named sub-groups to define every visual detail:
 
 1. **Elevation chart:**
-   - Draw a wide rectangle (e.g., 1000×200) at the desired position
-   - Name exactly: `placeholder_elevation_chart`
-   - **Style the chart colors:**
-     - Set the **stroke** color to your desired chart line color (e.g., green `#44DD77`)
-     - Set the **stroke width** to control line thickness (e.g., 3px)
-     - Set the **fill** color to the area gradient color (same as stroke, or complementary)
-     - Set the **fill opacity** low (e.g., 30%) for the translucent gradient below the elevation line
+   - Create a shape layer named `elevation_chart`
+   - Inside it, create named groups: `background`, `line`, `area`, `full_path`, `dot`, `glow`
+   - **`background`:** Rectangle (defines chart bounds) + Fill (bg color/opacity)
+   - **`line`:** Stroke (chart line color & width)
+   - **`area`:** Fill (gradient area color & opacity, e.g., 30%)
+   - **`dot`:** Ellipse (dot size) + Fill (dot color, e.g., white)
+   - **`glow`:** Ellipse (glow size) + Fill (glow color & opacity)
 
 2. **Route map:**
-   - Draw a rectangle (e.g., 400×300) where you want the map
-   - Name exactly: `placeholder_route_map`
-   - **Style the map colors:**
-     - Set the **stroke** color to the route line color
-     - Set the **stroke width** for the route line thickness
-     - Set the **fill** color to the map background (e.g., dark `#0D0D14`)
-     - Set the **fill opacity** for the background (e.g., 80%)
+   - Create a shape layer named `route_map`
+   - Inside it, create named groups: `background`, `route`, `full_route`, `dot`, `glow`
+   - **`background`:** Rectangle (map bounds) + Fill (bg color/opacity)
+   - **`route`:** Stroke (visited route line color & width)
+   - **`full_route`:** Stroke (unvisited route color & opacity)
+   - **`dot`/`glow`:** Same as elevation chart
 
-> The app hides these placeholder shapes from Lottie rendering and draws native charts/maps in their exact bounds, using the colors and line widths you defined.
+> The app hides these layers from Lottie rendering and draws live data-driven charts/maps using the exact styles you designed. See the [Chart & Map Layers](#chart--map-layers-design-driven) section for the full JSON structure.
 
 ### Step 5: Layer Ordering
 
@@ -512,8 +601,8 @@ stat_pace                        <-- text
 label_pace                       <-- text
 stat_distance                    <-- text
 label_distance                   <-- text
-placeholder_route_map            <-- placeholder (rendered natively)
-placeholder_elevation_chart      <-- placeholder (rendered natively)
+route_map                        <-- chart/map (rendered natively)
+elevation_chart                  <-- chart/map (rendered natively)
 card_hr                          <-- shape (visual card)
 card_pace                        <-- shape
 card_distance                    <-- shape
@@ -558,7 +647,7 @@ Verify:
 ### Tips for Lottie Studio Templates
 
 - **One file is enough** — create the 9:16 version and the app auto-scales to 16:9, 1:1, and 4:5
-- **Test chart styling** — the stroke and fill on placeholder shapes directly control chart appearance
+- **Test chart styling** — the named sub-groups control every visual aspect: line colors, area gradients, dot/glow colors
 - **Keep it single-frame** — the app doesn't use Lottie animations; all motion comes from live data updates
 - **Use system fonts** — the app replaces text with native rendering using Android system fonts (`sans-serif`, `sans-serif-condensed`, `monospace`, `serif`)
 - **Transparent background** — don't add a solid background fill to the root canvas; the overlay renders on top of video
@@ -570,7 +659,7 @@ You can design templates in After Effects and export them as Lottie JSON using t
 1. Create a comp at the target canvas size (e.g. 1080×1920 for 9:16)
 2. Design your layout using shape layers and text layers
 3. **Name your layers** using the conventions above (`stat_distance`, `label_pace`, etc.)
-4. For chart/map regions, use solid layers named `placeholder_elevation_chart` / `placeholder_route_map`
+4. For chart/map regions, use shape layers named `elevation_chart` / `route_map` with named sub-groups (see [Chart & Map Layers](#chart--map-layers-design-driven))
 5. Export via Bodymovin as JSON
 6. Add `templateMeta` to the exported JSON
 7. Repeat for each aspect ratio (or use just one and let auto-scaling handle the rest)
@@ -583,7 +672,7 @@ You can design templates in After Effects and export them as Lottie JSON using t
 |---------|----------|
 | Template doesn't appear in the app | Check file name follows `{id}_{ratio}.json` pattern. At least one ratio file must exist. |
 | Text layers don't show live data | Verify layer names match exactly (`stat_distance`, not `distance` or `stat_Distance`) |
-| Chart colors are default white | Add `fl` (fill) and `st` (stroke) shapes inside the placeholder layer's shape group |
-| Charts/map don't appear | Check placeholder layer name is exactly `placeholder_elevation_chart` or `placeholder_route_map` |
+| Chart colors are defaults | Add named sub-groups (`line`, `area`, `dot`, `glow`) inside the chart layer with your colors |
+| Charts/map don't appear | Check layer name is `elevation_chart` or `route_map` (also accepts `placeholder_` prefix) |
 | Colors look different in app | The app applies accent color to `label_*` text and to chart lines (when no stroke color is defined in the placeholder) |
 | Layout is clipped at certain ratios | Auto-scaling works best when elements are positioned relative to the center. Elements at extreme edges may clip. |

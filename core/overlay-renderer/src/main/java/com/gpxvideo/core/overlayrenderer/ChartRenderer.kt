@@ -102,8 +102,9 @@ object ChartRenderer {
             // Progress dot
             val dotElev = sampled[progressIndex]
             val dotY = bottom - ((dotElev - minElev) / range).toFloat() * chartH * 0.85f
-            canvas.drawCircle(lastX, dotY, style.dotRadius * dp, Paint().apply { color = visitedLineColor; isAntiAlias = true })
-            canvas.drawCircle(lastX, dotY, style.glowRadius * dp, Paint().apply { color = withAlpha(visitedLineColor, 60); isAntiAlias = true })
+            val dotFill = if (style.dotColor != Color.WHITE) style.dotColor else visitedLineColor
+            canvas.drawCircle(lastX, dotY, style.dotRadius * dp, Paint().apply { color = dotFill; isAntiAlias = true })
+            canvas.drawCircle(lastX, dotY, style.glowRadius * dp, Paint().apply { color = style.glowColor; isAntiAlias = true })
         }
     }
 

@@ -96,10 +96,10 @@ object RouteMapRenderer {
             val cx = projectX(pt.longitude)
             val cy = projectY(pt.latitude)
             canvas.drawCircle(cx, cy, style.glowRadius * dp, Paint().apply {
-                color = Color.argb(60, 255, 255, 255); isAntiAlias = true
+                color = style.glowColor; isAntiAlias = true
             })
             canvas.drawCircle(cx, cy, style.dotRadius * 1.25f * dp, Paint().apply {
-                color = Color.WHITE; isAntiAlias = true
+                color = style.dotColor; isAntiAlias = true
             })
             canvas.drawCircle(cx, cy, style.dotRadius * 0.875f * dp, Paint().apply {
                 color = progressLineColor; isAntiAlias = true

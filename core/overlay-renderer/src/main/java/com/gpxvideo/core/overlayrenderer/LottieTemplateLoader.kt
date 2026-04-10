@@ -218,7 +218,7 @@ class LottieTemplateLoader(private val context: Context) {
 
     private fun rescaleShape(shape: JSONObject, sx: Double, sy: Double) {
         when (shape.optString("ty")) {
-            "rc" -> {
+            "rc", "el" -> {
                 rescalePosition(shape.optJSONObject("s"), sx, sy)
                 rescalePosition(shape.optJSONObject("p"), sx, sy)
             }
@@ -289,7 +289,8 @@ class LottieTemplateLoader(private val context: Context) {
                 if (ty != 4) continue // only modify shape layers
                 val name = layer.optString("nm", "")
                 if (name.startsWith("stat_") || name.startsWith("label_") ||
-                    name.startsWith("title_") || name.startsWith("placeholder_")) {
+                    name.startsWith("title_") || name.startsWith("placeholder_") ||
+                    name == "elevation_chart" || name == "route_map") {
                     layer.put("hd", true)
                     modified = true
                 }

@@ -75,7 +75,7 @@ class LottieOverlayRenderer {
             canvas.drawText(text, info.x, info.y, textPaint)
         }
 
-        // 5. Resolve placeholders and draw charts/maps
+        // 5. Resolve chart/map layers and draw
         val placeholders = PlaceholderResolver.resolveFromJson(jsonString, width, height, accentColor)
         val dp = width / 360f
 

@@ -4,59 +4,87 @@ import android.graphics.Color
 import android.graphics.RectF
 import com.airbnb.lottie.LottieComposition
 import org.json.JSONObject
+import org.json.JSONArray
 
 /**
- * Style info extracted from a Lottie placeholder layer.
- * All visual properties for charts and maps come from the template design.
+ * Style info extracted from a Lottie chart/map layer's named sub-elements.
+ *
+ * In Lottie Studio the designer creates a visual mockup of each chart element
+ * (background, line, area fill, dots) inside named groups. This data class
+ * holds the style properties read from those design elements.
  */
 data class PlaceholderStyle(
     val accentColor: Int = Color.argb(204, 68, 138, 255),
+    // "background" group
     val backgroundColor: Int = Color.argb(40, 0, 0, 0),
     val borderColor: Int = Color.argb(30, 255, 255, 255),
     val borderWidth: Float = 1f,
     val cornerRadius: Float = 8f,
     val hasBackground: Boolean = true,
-    // Chart line styling (extracted from design or defaults)
+    // "line" / "route" group → visited path stroke
     val lineColor: Int = Color.WHITE,
     val lineWidth: Float = 2.5f,
+    // "full_path" / "full_route" group → unvisited portion stroke
     val fullPathColor: Int = Color.argb(60, 255, 255, 255),
     val fullPathWidth: Float = 1.5f,
+    // "area" group → gradient fill below elevation line
     val areaFillColor: Int = 0, // 0 = derive from lineColor
     val areaFillOpacity: Int = 80,
-    // Progress dot
+    // "dot" group → current position indicator
     val dotRadius: Float = 4f,
-    val glowRadius: Float = 7f
+    val dotColor: Int = Color.WHITE,
+    // "glow" group → outer glow around position dot
+    val glowRadius: Float = 7f,
+    val glowColor: Int = Color.argb(60, 255, 255, 255)
 )
 
-/**
- * Info about a resolved placeholder layer in a Lottie composition.
- */
 data class PlaceholderInfo(
     val name: String,
     val bounds: RectF,
     val style: PlaceholderStyle
 )
 
-/**
- * Info about a text layer parsed from Lottie JSON, used for native Canvas text rendering.
- */
 data class TextLayerInfo(
     val name: String,
     val x: Float,
     val y: Float,
     val fontSize: Float,
     val color: Int,
-    val justify: Int, // 0=left, 1=center, 2=right
+    val justify: Int,
     val fontBold: Boolean
 )
 
 /**
- * Resolves placeholder layers and text layers from a Lottie composition's raw JSON.
+ * Resolves chart/map layers and text layers from a Lottie composition's raw JSON.
+ *
+ * Chart/map layers are identified by name:
+ * - "elevation_chart" or "placeholder_elevation_chart" → elevation profile
+ * - "route_map" or "placeholder_route_map" → mini route map
+ *
+ * Inside these layers the designer creates named sub-groups to style each
+ * visual element of the chart (background, line, area, dot, glow, etc.).
+ * The app renders real GPS data using those exact styles.
  */
 object PlaceholderResolver {
 
-    const val ELEVATION_CHART = "placeholder_elevation_chart"
-    const val ROUTE_MAP = "placeholder_route_map"
+    const val ELEVATION_CHART = "elevation_chart"
+    const val ROUTE_MAP = "route_map"
+
+    private val CHART_LAYER_NAMES = setOf(
+        "elevation_chart", "placeholder_elevation_chart"
+    )
+    private val MAP_LAYER_NAMES = setOf(
+        "route_map", "placeholder_route_map"
+    )
+
+    private fun isChartOrMapLayer(name: String): Boolean =
+        name in CHART_LAYER_NAMES || name in MAP_LAYER_NAMES
+
+    private fun normalizeLayerName(name: String): String = when (name) {
+        "placeholder_elevation_chart" -> ELEVATION_CHART
+        "placeholder_route_map" -> ROUTE_MAP
+        else -> name
+    }
 
     fun resolveFromJson(
         jsonString: String,
@@ -65,7 +93,6 @@ object PlaceholderResolver {
         accentColor: Int = Color.argb(204, 68, 138, 255)
     ): Map<String, PlaceholderInfo> {
         val result = mutableMapOf<String, PlaceholderInfo>()
-
         try {
             val root = JSONObject(jsonString)
             val compW = root.optDouble("w", 1080.0).toFloat()
@@ -77,12 +104,13 @@ object PlaceholderResolver {
             val layers = root.optJSONArray("layers") ?: return result
             for (i in 0 until layers.length()) {
                 val layer = layers.getJSONObject(i)
-                val name = layer.optString("nm", "")
-                if (!name.startsWith("placeholder_")) continue
+                val rawName = layer.optString("nm", "")
+                if (!isChartOrMapLayer(rawName)) continue
 
+                val name = normalizeLayerName(rawName)
                 val ks = layer.optJSONObject("ks") ?: continue
 
-                // Try type-1 solid layer first (sw/sh fields)
+                // Legacy type-1 solid layers (sw/sh)
                 val layerW = layer.optDouble("sw", 0.0).toFloat()
                 val layerH = layer.optDouble("sh", 0.0).toFloat()
                 if (layerW > 0 && layerH > 0) {
@@ -94,49 +122,217 @@ object PlaceholderResolver {
                     val anchorY = anchorArray?.optDouble(1, 0.0)?.toFloat() ?: 0f
                     val left = (posX - anchorX) * scaleX
                     val top = (posY - anchorY) * scaleY
-                    val right = left + layerW * scaleX
-                    val bottom = top + layerH * scaleY
-                    result[name] = PlaceholderInfo(name, RectF(left, top, right, bottom), styleForPlaceholder(name, accentColor, dp))
+                    result[name] = PlaceholderInfo(name, RectF(left, top,
+                        left + layerW * scaleX, top + layerH * scaleY),
+                        defaultStyleFor(name, accentColor, dp))
                     continue
                 }
 
-                // Fallback: type-4 shape layer with rectangle shape (from Lottie Studio etc.)
-                val shapeResult = resolveShapeLayerWithStyle(layer, ks, scaleX, scaleY)
-                if (shapeResult != null) {
-                    val (bounds, extractedStyle) = shapeResult
-                    val baseStyle = styleForPlaceholder(name, accentColor, dp)
-                    // Merge: extracted style overrides defaults where present
-                    result[name] = PlaceholderInfo(name, bounds, mergeStyles(baseStyle, extractedStyle))
-                }
+                // Shape layer: resolve from named sub-groups or flat shapes
+                resolveShapeLayer(layer, ks, scaleX, scaleY, name, accentColor, dp)
+                    ?.let { result[name] = it }
             }
-        } catch (_: Exception) {
-        }
-
+        } catch (_: Exception) {}
         return result
     }
 
-    /**
-     * Extract bounds AND visual style from a type-4 shape layer.
-     * Reads fill colors, stroke colors/widths, corner radius from the Lottie shapes.
-     * Returns (bounds, partial style) or null if no rectangle found.
-     */
-    private fun resolveShapeLayerWithStyle(
-        layer: org.json.JSONObject,
-        ks: org.json.JSONObject,
-        scaleX: Float,
-        scaleY: Float
-    ): Pair<RectF, PlaceholderStyle>? {
+    // ── Shape layer resolution ─────────────────────────────────────────
+
+    private fun resolveShapeLayer(
+        layer: JSONObject, ks: JSONObject,
+        scaleX: Float, scaleY: Float,
+        name: String, accentColor: Int, dp: Float
+    ): PlaceholderInfo? {
         val posObj = ks.optJSONObject("p") ?: return null
-        val posX: Float
-        val posY: Float
         val posK = posObj.opt("k")
-        if (posK is org.json.JSONArray && posK.length() >= 2 && posK.opt(0) is Number) {
-            posX = posK.optDouble(0, 0.0).toFloat()
-            posY = posK.optDouble(1, 0.0).toFloat()
-        } else return null
+        if (posK !is JSONArray || posK.length() < 2 || posK.opt(0) !is Number) return null
+        val posX = posK.optDouble(0, 0.0).toFloat()
+        val posY = posK.optDouble(1, 0.0).toFloat()
+
+        val scaleObj = ks.optJSONObject("s")
+        val lsX = scaleObj?.let { s ->
+            val sk = s.opt("k")
+            if (sk is JSONArray && sk.length() >= 2) sk.optDouble(0, 100.0).toFloat() / 100f else 1f
+        } ?: 1f
+        val lsY = scaleObj?.let { s ->
+            val sk = s.opt("k")
+            if (sk is JSONArray && sk.length() >= 2) sk.optDouble(1, 100.0).toFloat() / 100f else 1f
+        } ?: 1f
 
         val shapes = layer.optJSONArray("shapes") ?: return null
+        val scale = minOf(scaleX, scaleY)
 
+        // Try named sub-groups first (design-driven)
+        val named = findNamedGroups(shapes)
+        if (named.isNotEmpty()) {
+            return resolveFromNamedGroups(named, posX, posY, lsX, lsY, scaleX, scaleY, scale, name, accentColor, dp)
+        }
+
+        // Fallback: flat shapes (legacy)
+        return resolveFromFlatShapes(shapes, posX, posY, lsX, lsY, scaleX, scaleY, scale, name, accentColor, dp)
+    }
+
+    // ── Named sub-groups ───────────────────────────────────────────────
+
+    private val MEANINGFUL_NAMES = setOf(
+        "background", "line", "route", "area",
+        "full_path", "full_route", "dot", "glow"
+    )
+
+    private fun findNamedGroups(shapes: JSONArray): Map<String, JSONObject> {
+        val result = mutableMapOf<String, JSONObject>()
+        for (i in 0 until shapes.length()) {
+            val shape = shapes.getJSONObject(i)
+            if (shape.optString("ty") != "gr") continue
+            val nm = shape.optString("nm", "").lowercase().trim()
+            if (nm in MEANINGFUL_NAMES) result[nm] = shape
+        }
+        return result
+    }
+
+    private fun resolveFromNamedGroups(
+        groups: Map<String, JSONObject>,
+        posX: Float, posY: Float,
+        lsX: Float, lsY: Float,
+        scaleX: Float, scaleY: Float, scale: Float,
+        name: String, accentColor: Int, dp: Float
+    ): PlaceholderInfo? {
+        val base = defaultStyleFor(name, accentColor, dp)
+
+        // ── Background → bounds + bg style ──
+        val bgGroup = groups["background"]
+        val bounds: RectF
+        var bgColor = base.backgroundColor
+        var hasBackground = base.hasBackground
+        var cornerRadius = base.cornerRadius
+        var borderColor = base.borderColor
+        var borderWidth = base.borderWidth
+
+        if (bgGroup != null) {
+            val items = bgGroup.optJSONArray("it")
+            val rect = findInGroup(items, "rc") ?: return null
+            val sizeK = rect.optJSONObject("s")?.optJSONArray("k") ?: return null
+            val w = sizeK.optDouble(0, 0.0).toFloat() * lsX
+            val h = sizeK.optDouble(1, 0.0).toFloat() * lsY
+            if (w <= 0 || h <= 0) return null
+            val left = (posX - w / 2f) * scaleX
+            val top = (posY - h / 2f) * scaleY
+            bounds = RectF(left, top, left + w * scaleX, top + h * scaleY)
+            cornerRadius = (rect.optJSONObject("r")?.optDouble("k", 0.0)?.toFloat() ?: 0f) * scale
+
+            findInGroup(items, "fl")?.let { fl ->
+                val c = colorFrom(fl)
+                val o = fl.optJSONObject("o")?.optDouble("k", 100.0)?.toInt() ?: 100
+                if (c != null && o > 0) {
+                    bgColor = Color.argb((o * 255 / 100).coerceIn(0, 255),
+                        Color.red(c), Color.green(c), Color.blue(c))
+                    hasBackground = true
+                }
+            }
+            findInGroup(items, "st")?.let { st ->
+                borderColor = colorFrom(st) ?: borderColor
+                borderWidth = st.optJSONObject("w")?.optDouble("k", 1.0)?.toFloat() ?: borderWidth
+            }
+        } else {
+            // No background group → look for a bare rc for bounds
+            val rect = findBareRect(groups, posX, posY, lsX, lsY, scaleX, scaleY)
+            bounds = rect ?: return null
+        }
+
+        // ── Line / Route → visited stroke ──
+        var lineColor = base.lineColor
+        var lineWidth = base.lineWidth
+        (groups["line"] ?: groups["route"])?.let { g ->
+            val items = g.optJSONArray("it")
+            findInGroup(items, "st")?.let { st ->
+                lineColor = colorFrom(st) ?: lineColor
+                st.optJSONObject("w")?.optDouble("k", 0.0)?.toFloat()?.let {
+                    if (it > 0) lineWidth = it * scale
+                }
+            }
+            if (findInGroup(items, "st") == null) {
+                findInGroup(items, "fl")?.let { fl -> lineColor = colorFrom(fl) ?: lineColor }
+            }
+        }
+
+        // ── Full path / Full route → unvisited stroke ──
+        var fullPathColor = base.fullPathColor
+        var fullPathWidth = base.fullPathWidth
+        (groups["full_path"] ?: groups["full_route"])?.let { g ->
+            val items = g.optJSONArray("it")
+            findInGroup(items, "st")?.let { st ->
+                val c = colorFrom(st)
+                val o = st.optJSONObject("o")?.optDouble("k", 100.0)?.toInt() ?: 100
+                if (c != null) fullPathColor = Color.argb(
+                    (o * 255 / 100).coerceIn(0, 255), Color.red(c), Color.green(c), Color.blue(c))
+                st.optJSONObject("w")?.optDouble("k", 0.0)?.toFloat()?.let {
+                    if (it > 0) fullPathWidth = it * scale
+                }
+            }
+        }
+
+        // ── Area → gradient fill ──
+        var areaFillColor = base.areaFillColor
+        var areaFillOpacity = base.areaFillOpacity
+        groups["area"]?.let { g ->
+            val items = g.optJSONArray("it")
+            findInGroup(items, "fl")?.let { fl ->
+                areaFillColor = colorFrom(fl) ?: areaFillColor
+                areaFillOpacity = fl.optJSONObject("o")?.optDouble("k", 100.0)?.toInt() ?: areaFillOpacity
+            }
+        }
+
+        // ── Dot → position indicator ──
+        var dotRadius = base.dotRadius
+        var dotColor = base.dotColor
+        groups["dot"]?.let { g ->
+            val items = g.optJSONArray("it")
+            findInGroup(items, "el")?.let { el ->
+                val sz = el.optJSONObject("s")?.optJSONArray("k")
+                val ew = sz?.optDouble(0, 0.0)?.toFloat() ?: 0f
+                if (ew > 0) dotRadius = (ew / 2f) * scale
+            }
+            findInGroup(items, "fl")?.let { fl -> dotColor = colorFrom(fl) ?: dotColor }
+        }
+
+        // ── Glow → outer glow ──
+        var glowRadius = base.glowRadius
+        var glowColor = base.glowColor
+        groups["glow"]?.let { g ->
+            val items = g.optJSONArray("it")
+            findInGroup(items, "el")?.let { el ->
+                val sz = el.optJSONObject("s")?.optJSONArray("k")
+                val ew = sz?.optDouble(0, 0.0)?.toFloat() ?: 0f
+                if (ew > 0) glowRadius = (ew / 2f) * scale
+            }
+            findInGroup(items, "fl")?.let { fl ->
+                val c = colorFrom(fl)
+                val o = fl.optJSONObject("o")?.optDouble("k", 100.0)?.toInt() ?: 100
+                if (c != null) glowColor = Color.argb(
+                    (o * 255 / 100).coerceIn(0, 255), Color.red(c), Color.green(c), Color.blue(c))
+            }
+        }
+
+        return PlaceholderInfo(name, bounds, base.copy(
+            backgroundColor = bgColor, hasBackground = hasBackground,
+            cornerRadius = cornerRadius, borderColor = borderColor, borderWidth = borderWidth,
+            lineColor = lineColor, lineWidth = lineWidth,
+            fullPathColor = fullPathColor, fullPathWidth = fullPathWidth,
+            areaFillColor = areaFillColor, areaFillOpacity = areaFillOpacity,
+            dotRadius = dotRadius, dotColor = dotColor,
+            glowRadius = glowRadius, glowColor = glowColor
+        ))
+    }
+
+    // ── Flat shapes fallback ───────────────────────────────────────────
+
+    private fun resolveFromFlatShapes(
+        shapes: JSONArray,
+        posX: Float, posY: Float,
+        lsX: Float, lsY: Float,
+        scaleX: Float, scaleY: Float, scale: Float,
+        name: String, accentColor: Int, dp: Float
+    ): PlaceholderInfo? {
         var bounds: RectF? = null
         var cornerRadius = 0f
         var fillColor: Int? = null
@@ -149,8 +345,8 @@ object PlaceholderResolver {
             when (shape.optString("ty")) {
                 "rc" -> {
                     val sizeK = shape.optJSONObject("s")?.optJSONArray("k") ?: continue
-                    val w = sizeK.optDouble(0, 0.0).toFloat()
-                    val h = sizeK.optDouble(1, 0.0).toFloat()
+                    val w = sizeK.optDouble(0, 0.0).toFloat() * lsX
+                    val h = sizeK.optDouble(1, 0.0).toFloat() * lsY
                     if (w <= 0 || h <= 0) continue
                     val left = (posX - w / 2f) * scaleX
                     val top = (posY - h / 2f) * scaleY
@@ -158,76 +354,68 @@ object PlaceholderResolver {
                     cornerRadius = shape.optJSONObject("r")?.optDouble("k", 0.0)?.toFloat() ?: 0f
                 }
                 "fl" -> {
-                    val c = shape.optJSONObject("c")?.optJSONArray("k")
-                    if (c != null && c.length() >= 3) {
-                        val r = (c.optDouble(0) * 255).toInt().coerceIn(0, 255)
-                        val g = (c.optDouble(1) * 255).toInt().coerceIn(0, 255)
-                        val b = (c.optDouble(2) * 255).toInt().coerceIn(0, 255)
-                        fillColor = Color.rgb(r, g, b)
-                    }
+                    fillColor = colorFrom(shape)
                     fillOpacity = shape.optJSONObject("o")?.optDouble("k", 100.0)?.toInt() ?: 100
                 }
                 "st" -> {
-                    val c = shape.optJSONObject("c")?.optJSONArray("k")
-                    if (c != null && c.length() >= 3) {
-                        val r = (c.optDouble(0) * 255).toInt().coerceIn(0, 255)
-                        val g = (c.optDouble(1) * 255).toInt().coerceIn(0, 255)
-                        val b = (c.optDouble(2) * 255).toInt().coerceIn(0, 255)
-                        strokeColor = Color.rgb(r, g, b)
-                    }
+                    strokeColor = colorFrom(shape)
                     strokeWidth = shape.optJSONObject("w")?.optDouble("k", 0.0)?.toFloat() ?: 0f
                 }
             }
         }
-
         if (bounds == null) return null
 
-        val scale = minOf(scaleX, scaleY)
-        val style = PlaceholderStyle(
+        val base = defaultStyleFor(name, accentColor, dp)
+        return PlaceholderInfo(name, bounds, base.copy(
             backgroundColor = if (fillColor != null && fillOpacity > 0)
                 Color.argb((fillOpacity * 255 / 100).coerceIn(0, 255),
                     Color.red(fillColor!!), Color.green(fillColor!!), Color.blue(fillColor!!))
             else Color.TRANSPARENT,
             hasBackground = fillColor != null && fillOpacity > 0,
-            cornerRadius = cornerRadius * scale,
-            lineColor = strokeColor ?: 0,
-            lineWidth = if (strokeWidth > 0) strokeWidth * scale else 0f,
-            areaFillColor = strokeColor ?: 0
-        )
-        return bounds to style
+            cornerRadius = if (cornerRadius > 0) cornerRadius * scale else base.cornerRadius,
+            lineColor = strokeColor ?: base.lineColor,
+            lineWidth = if (strokeWidth > 0) strokeWidth * scale else base.lineWidth,
+            areaFillColor = strokeColor ?: base.areaFillColor
+        ))
     }
 
-    /**
-     * Merge an extracted style into a base style. Extracted values override defaults
-     * only when they are explicitly set (non-zero colors, positive widths).
-     */
-    private fun mergeStyles(base: PlaceholderStyle, extracted: PlaceholderStyle): PlaceholderStyle {
-        return base.copy(
-            backgroundColor = if (extracted.hasBackground) extracted.backgroundColor else base.backgroundColor,
-            hasBackground = if (extracted.hasBackground) true else base.hasBackground,
-            cornerRadius = if (extracted.cornerRadius > 0) extracted.cornerRadius else base.cornerRadius,
-            lineColor = if (extracted.lineColor != 0) extracted.lineColor else base.lineColor,
-            lineWidth = if (extracted.lineWidth > 0) extracted.lineWidth else base.lineWidth,
-            areaFillColor = if (extracted.areaFillColor != 0) extracted.areaFillColor else base.areaFillColor
-        )
+    private fun findBareRect(
+        groups: Map<String, JSONObject>,
+        posX: Float, posY: Float,
+        lsX: Float, lsY: Float,
+        scaleX: Float, scaleY: Float
+    ): RectF? = null // named groups should always have a background
+
+    // ── Helpers ────────────────────────────────────────────────────────
+
+    private fun findInGroup(items: JSONArray?, type: String): JSONObject? {
+        items ?: return null
+        for (i in 0 until items.length()) {
+            val item = items.getJSONObject(i)
+            if (item.optString("ty") == type) return item
+        }
+        return null
     }
 
-    /**
-     * Parse text layers from Lottie JSON for native Canvas rendering.
-     * Supports both:
-     * - Type 5 (proper Lottie text layers) — from converter script or hand-authored JSON
-     * - Type 4 (shape layers with vectorized text) — from Lottie Studio, Figma exports, etc.
-     *   Recognized by name prefix: stat_*, label_*, title_*
-     *
-     * Returns map of layer name → TextLayerInfo with scaled positions/sizes.
-     */
+    private fun colorFrom(shape: JSONObject): Int? {
+        val c = shape.optJSONObject("c")?.optJSONArray("k")
+        if (c != null && c.length() >= 3) {
+            val r = (c.optDouble(0) * 255).toInt().coerceIn(0, 255)
+            val g = (c.optDouble(1) * 255).toInt().coerceIn(0, 255)
+            val b = (c.optDouble(2) * 255).toInt().coerceIn(0, 255)
+            return Color.rgb(r, g, b)
+        }
+        return null
+    }
+
+    // ── Text layer resolution ──────────────────────────────────────────
+
     fun resolveTextLayers(
         jsonString: String,
         canvasWidth: Int,
         canvasHeight: Int
     ): Map<String, TextLayerInfo> {
         val result = mutableMapOf<String, TextLayerInfo>()
-
         try {
             val root = JSONObject(jsonString)
             val compW = root.optDouble("w", 1080.0).toFloat()
@@ -242,231 +430,139 @@ object PlaceholderResolver {
                 val ty = layer.optInt("ty", -1)
                 val name = layer.optString("nm", "")
                 if (name.isEmpty()) continue
-
                 val ks = layer.optJSONObject("ks") ?: continue
 
                 if (ty == 5) {
-                    // Standard Lottie text layer
-                    resolveType5TextLayer(layer, name, ks, scaleX, scaleY, scale)?.let {
-                        result[name] = it
-                    }
+                    resolveType5TextLayer(layer, name, ks, scaleX, scaleY, scale)
+                        ?.let { result[name] = it }
                 } else if (ty == 4 && isTextLayerName(name)) {
-                    // Shape layer with vectorized text — compute from bounding box
-                    resolveType4TextLayer(layer, name, ks, scaleX, scaleY)?.let {
-                        result[name] = it
-                    }
+                    resolveType4TextLayer(layer, name, ks, scaleX, scaleY)
+                        ?.let { result[name] = it }
                 }
             }
-        } catch (_: Exception) {
-        }
-
+        } catch (_: Exception) {}
         return result
     }
 
     private val TEXT_NAME_PREFIXES = arrayOf("stat_", "label_", "title_")
-
-    private fun isTextLayerName(name: String): Boolean {
-        return TEXT_NAME_PREFIXES.any { name.startsWith(it) }
-    }
+    private fun isTextLayerName(name: String) = TEXT_NAME_PREFIXES.any { name.startsWith(it) }
 
     private fun resolveType5TextLayer(
-        layer: org.json.JSONObject,
-        name: String,
-        ks: org.json.JSONObject,
-        scaleX: Float,
-        scaleY: Float,
-        scale: Float
+        layer: JSONObject, name: String, ks: JSONObject,
+        scaleX: Float, scaleY: Float, scale: Float
     ): TextLayerInfo? {
         val posArray = ks.optJSONObject("p")?.optJSONArray("k")
         val posX = (posArray?.optDouble(0, 0.0)?.toFloat() ?: 0f) * scaleX
         val posY = (posArray?.optDouble(1, 0.0)?.toFloat() ?: 0f) * scaleY
-
-        val textDoc = layer.optJSONObject("t")
-            ?.optJSONObject("d")
-            ?.optJSONArray("k")
-            ?.optJSONObject(0)
-            ?.optJSONObject("s") ?: return null
-
+        val textDoc = layer.optJSONObject("t")?.optJSONObject("d")
+            ?.optJSONArray("k")?.optJSONObject(0)?.optJSONObject("s") ?: return null
         val fontSize = textDoc.optDouble("s", 24.0).toFloat() * scale
         val fontName = textDoc.optString("f", "")
         val justify = textDoc.optInt("j", 0)
         val isBold = fontName.contains("Bold", ignoreCase = true)
-
         val fcArray = textDoc.optJSONArray("fc")
         val color = if (fcArray != null && fcArray.length() >= 3) {
-            val r = (fcArray.optDouble(0, 1.0) * 255).toInt()
-            val g = (fcArray.optDouble(1, 1.0) * 255).toInt()
-            val b = (fcArray.optDouble(2, 1.0) * 255).toInt()
-            Color.rgb(r, g, b)
-        } else {
-            Color.WHITE
-        }
-
+            Color.rgb((fcArray.optDouble(0, 1.0) * 255).toInt(),
+                (fcArray.optDouble(1, 1.0) * 255).toInt(),
+                (fcArray.optDouble(2, 1.0) * 255).toInt())
+        } else Color.WHITE
         return TextLayerInfo(name, posX, posY, fontSize, color, justify, isBold)
     }
 
-    /**
-     * Resolve text info from a type-4 shape layer with vectorized text.
-     * Computes bounding box from all path vertices to determine position and font size.
-     * The layer position offset (ks.p) is added to each vertex coordinate.
-     */
     private fun resolveType4TextLayer(
-        layer: org.json.JSONObject,
-        name: String,
-        ks: org.json.JSONObject,
-        scaleX: Float,
-        scaleY: Float
+        layer: JSONObject, name: String, ks: JSONObject,
+        scaleX: Float, scaleY: Float
     ): TextLayerInfo? {
-        // Get layer position offset
         val posObj = ks.optJSONObject("p")
         val offsetX: Float
         val offsetY: Float
         if (posObj != null) {
             val pk = posObj.opt("k")
-            if (pk is org.json.JSONArray && pk.length() >= 2 && pk.opt(0) is Number) {
+            if (pk is JSONArray && pk.length() >= 2 && pk.opt(0) is Number) {
                 offsetX = pk.optDouble(0, 0.0).toFloat()
                 offsetY = pk.optDouble(1, 0.0).toFloat()
-            } else {
-                offsetX = 0f
-                offsetY = 0f
-            }
-        } else {
-            offsetX = 0f
-            offsetY = 0f
-        }
+            } else { offsetX = 0f; offsetY = 0f }
+        } else { offsetX = 0f; offsetY = 0f }
 
-        // Collect all vertices from shape paths
-        var minX = Float.MAX_VALUE
-        var minY = Float.MAX_VALUE
-        var maxX = Float.MIN_VALUE
-        var maxY = Float.MIN_VALUE
+        var minX = Float.MAX_VALUE; var minY = Float.MAX_VALUE
+        var maxX = Float.MIN_VALUE; var maxY = Float.MIN_VALUE
         var vertexCount = 0
-
         val shapes = layer.optJSONArray("shapes") ?: return null
         for (s in 0 until shapes.length()) {
-            val shape = shapes.getJSONObject(s)
-            collectVerticesFromShape(shape, offsetX, offsetY) { x, y ->
-                if (x < minX) minX = x
-                if (y < minY) minY = y
-                if (x > maxX) maxX = x
-                if (y > maxY) maxY = y
+            collectVerticesFromShape(shapes.getJSONObject(s), offsetX, offsetY) { x, y ->
+                if (x < minX) minX = x; if (y < minY) minY = y
+                if (x > maxX) maxX = x; if (y > maxY) maxY = y
                 vertexCount++
             }
         }
-
         if (vertexCount == 0) return null
 
-        val bboxH = maxY - minY
-        // Font size ~ bboxHeight / 0.72 (cap height ratio)
-        val fontSize = (bboxH / 0.72f) * minOf(scaleX, scaleY)
-
-        // Extract fill color from shapes
+        val fontSize = ((maxY - minY) / 0.72f) * minOf(scaleX, scaleY)
         val color = extractFillColor(shapes) ?: Color.WHITE
-
-        // Determine defaults based on name
         val isBold = name.startsWith("stat_") || name.startsWith("title_")
-        val isLabel = name.startsWith("label_")
         val isTitle = name.startsWith("title_")
-
-        // Position and alignment: right-align for right-side stats, left for title
-        val justify: Int
-        val drawX: Float
-        val drawY: Float
-
-        if (isTitle) {
-            // Left-aligned, draw at left edge of bbox
-            justify = 0
-            drawX = minX * scaleX
-            drawY = maxY * scaleY
-        } else {
-            // Right-aligned for stats/labels (typical overlay layout: right-side cards)
-            justify = 2
-            drawX = maxX * scaleX
-            drawY = maxY * scaleY
-        }
-
-        return TextLayerInfo(name, drawX, drawY, fontSize, color, justify, isBold)
+        return if (isTitle) TextLayerInfo(name, minX * scaleX, maxY * scaleY, fontSize, color, 0, isBold)
+        else TextLayerInfo(name, maxX * scaleX, maxY * scaleY, fontSize, color, 2, isBold)
     }
 
-    /**
-     * Recursively collect all path vertices from a shape or group.
-     */
     private fun collectVerticesFromShape(
-        shape: org.json.JSONObject,
-        offsetX: Float,
-        offsetY: Float,
+        shape: JSONObject, offsetX: Float, offsetY: Float,
         consumer: (Float, Float) -> Unit
     ) {
-        val ty = shape.optString("ty", "")
-        when (ty) {
+        when (shape.optString("ty", "")) {
             "gr" -> {
                 val items = shape.optJSONArray("it") ?: return
-                for (j in 0 until items.length()) {
+                for (j in 0 until items.length())
                     collectVerticesFromShape(items.getJSONObject(j), offsetX, offsetY, consumer)
-                }
             }
             "sh" -> {
-                val ksObj = shape.optJSONObject("ks") ?: return
-                val k = ksObj.opt("k")
-                if (k is org.json.JSONObject) {
+                val k = shape.optJSONObject("ks")?.opt("k")
+                if (k is JSONObject) {
                     val verts = k.optJSONArray("v") ?: return
                     for (v in 0 until verts.length()) {
                         val pt = verts.optJSONArray(v) ?: continue
                         consumer(pt.optDouble(0, 0.0).toFloat() + offsetX,
-                                 pt.optDouble(1, 0.0).toFloat() + offsetY)
+                            pt.optDouble(1, 0.0).toFloat() + offsetY)
                     }
                 }
             }
         }
     }
 
-    /**
-     * Extract fill color from a shapes array (searches groups and top-level fills).
-     */
-    private fun extractFillColor(shapes: org.json.JSONArray): Int? {
+    private fun extractFillColor(shapes: JSONArray): Int? {
         for (i in 0 until shapes.length()) {
             val shape = shapes.getJSONObject(i)
             val ty = shape.optString("ty", "")
-            if (ty == "fl") {
-                return parseFillColor(shape)
-            } else if (ty == "gr") {
+            if (ty == "fl") return colorFromLegacy(shape)
+            if (ty == "gr") {
                 val items = shape.optJSONArray("it") ?: continue
                 for (j in 0 until items.length()) {
                     val item = items.getJSONObject(j)
-                    if (item.optString("ty") == "fl") {
-                        return parseFillColor(item)
-                    }
+                    if (item.optString("ty") == "fl") return colorFromLegacy(item)
                 }
             }
         }
         return null
     }
 
-    private fun parseFillColor(fill: org.json.JSONObject): Int {
-        val cObj = fill.optJSONObject("c")
-        val cArr = cObj?.optJSONArray("k")
-        return if (cArr != null && cArr.length() >= 3) {
-            val r = (cArr.optDouble(0, 1.0) * 255).toInt().coerceIn(0, 255)
-            val g = (cArr.optDouble(1, 1.0) * 255).toInt().coerceIn(0, 255)
-            val b = (cArr.optDouble(2, 1.0) * 255).toInt().coerceIn(0, 255)
-            Color.rgb(r, g, b)
-        } else {
-            Color.WHITE
-        }
+    private fun colorFromLegacy(fill: JSONObject): Int {
+        val cArr = fill.optJSONObject("c")?.optJSONArray("k")
+        return if (cArr != null && cArr.length() >= 3) Color.rgb(
+            (cArr.optDouble(0, 1.0) * 255).toInt().coerceIn(0, 255),
+            (cArr.optDouble(1, 1.0) * 255).toInt().coerceIn(0, 255),
+            (cArr.optDouble(2, 1.0) * 255).toInt().coerceIn(0, 255))
+        else Color.WHITE
     }
 
     fun resolve(
-        composition: LottieComposition,
-        jsonString: String,
-        canvasWidth: Int,
-        canvasHeight: Int,
+        composition: LottieComposition, jsonString: String,
+        canvasWidth: Int, canvasHeight: Int,
         accentColor: Int = Color.argb(204, 68, 138, 255)
-    ): Map<String, PlaceholderInfo> {
-        return resolveFromJson(jsonString, canvasWidth, canvasHeight, accentColor)
-    }
+    ): Map<String, PlaceholderInfo> =
+        resolveFromJson(jsonString, canvasWidth, canvasHeight, accentColor)
 
-    private fun styleForPlaceholder(name: String, accentColor: Int, dp: Float): PlaceholderStyle {
-        return when {
+    private fun defaultStyleFor(name: String, accentColor: Int, dp: Float): PlaceholderStyle =
+        when {
             name.contains("elevation_chart") -> PlaceholderStyle(
                 accentColor = accentColor,
                 backgroundColor = Color.TRANSPARENT,
@@ -482,5 +578,4 @@ object PlaceholderResolver {
             )
             else -> PlaceholderStyle(accentColor = accentColor)
         }
-    }
 }
