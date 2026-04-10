@@ -313,8 +313,10 @@ object PlaceholderResolver {
             }
         }
 
+        // Lottie renders the background group — ChartRenderer/RouteMapRenderer
+        // should not draw their own background.
         return PlaceholderInfo(name, bounds, base.copy(
-            backgroundColor = bgColor, hasBackground = hasBackground,
+            backgroundColor = bgColor, hasBackground = false,
             cornerRadius = cornerRadius, borderColor = borderColor, borderWidth = borderWidth,
             lineColor = lineColor, lineWidth = lineWidth,
             fullPathColor = fullPathColor, fullPathWidth = fullPathWidth,
@@ -366,12 +368,13 @@ object PlaceholderResolver {
         if (bounds == null) return null
 
         val base = defaultStyleFor(name, accentColor, dp)
+        // Lottie renders the flat shapes (background rect) — don't draw it natively
         return PlaceholderInfo(name, bounds, base.copy(
             backgroundColor = if (fillColor != null && fillOpacity > 0)
                 Color.argb((fillOpacity * 255 / 100).coerceIn(0, 255),
                     Color.red(fillColor!!), Color.green(fillColor!!), Color.blue(fillColor!!))
             else Color.TRANSPARENT,
-            hasBackground = fillColor != null && fillOpacity > 0,
+            hasBackground = false,
             cornerRadius = if (cornerRadius > 0) cornerRadius * scale else base.cornerRadius,
             lineColor = strokeColor ?: base.lineColor,
             lineWidth = if (strokeWidth > 0) strokeWidth * scale else base.lineWidth,
@@ -478,7 +481,8 @@ object PlaceholderResolver {
         return result
     }
 
-    private val TEXT_NAME_PREFIXES = arrayOf("stat_", "label_", "title_")
+    // Only stat_* and title_* need native text (labels are rendered by Lottie as designed)
+    private val TEXT_NAME_PREFIXES = arrayOf("stat_", "title_")
     private fun isTextLayerName(name: String) = TEXT_NAME_PREFIXES.any { name.startsWith(it) }
 
     private fun resolveType5TextLayer(

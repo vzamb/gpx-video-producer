@@ -32,23 +32,19 @@ object RouteMapRenderer {
         val h = bottom - top
         val pad = 8f * dp
 
-        // Background with rounded corners
+        // Background: only draw if not handled by Lottie
         val bgRect = RectF(left, top, right, bottom)
         val cornerR = style.cornerRadius
         if (style.hasBackground) {
             canvas.drawRoundRect(bgRect, cornerR, cornerR, Paint().apply {
                 color = style.backgroundColor; isAntiAlias = true
             })
-        } else {
-            canvas.drawRoundRect(bgRect, cornerR, cornerR, Paint().apply {
-                color = Color.argb(100, 0, 0, 0); isAntiAlias = true
-            })
-        }
-        if (style.borderColor != Color.TRANSPARENT) {
-            canvas.drawRoundRect(bgRect, cornerR, cornerR, Paint().apply {
-                color = style.borderColor; setStyle(Paint.Style.STROKE)
-                strokeWidth = style.borderWidth * dp; isAntiAlias = true
-            })
+            if (style.borderColor != Color.TRANSPARENT) {
+                canvas.drawRoundRect(bgRect, cornerR, cornerR, Paint().apply {
+                    color = style.borderColor; setStyle(Paint.Style.STROKE)
+                    strokeWidth = style.borderWidth * dp; isAntiAlias = true
+                })
+            }
         }
 
         // Sample points

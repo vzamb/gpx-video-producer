@@ -42,7 +42,7 @@ class LottieOverlayRenderer {
     ): Bitmap {
         val drw = getOrCreateDrawable(composition)
         drw.setBounds(0, 0, width, height)
-        drw.progress = 0f
+        drw.progress = 1f
 
         val bitmap = getOrCreateBitmap(width, height)
         val canvas = Canvas(bitmap)
@@ -99,27 +99,17 @@ class LottieOverlayRenderer {
     }
 
     private fun buildTextValues(frameData: OverlayFrameData, activityTitle: String): Map<String, String> {
+        // Only stat_* and title_* are drawn natively (their Lottie layers are hidden).
+        // Labels (label_*) and cards (card_*) are rendered by Lottie as designed.
         return mapOf(
             "stat_distance" to frameData.distanceKm,
-            "stat_distance_unit" to "km",
             "stat_elevation" to frameData.elevationStr,
-            "stat_elevation_unit" to "m",
             "stat_pace" to frameData.pace,
-            "stat_pace_unit" to "/km",
             "stat_hr" to frameData.heartRateStr,
-            "stat_hr_unit" to "bpm",
             "stat_time" to frameData.elapsedTimeStr,
             "stat_grade" to frameData.gradeStr,
             "stat_speed" to "%.1f".format(frameData.speed * 3.6),
-            "stat_speed_unit" to "km/h",
-            "title_text" to activityTitle,
-            "label_distance" to "DISTANCE",
-            "label_elevation" to "ELEVATION",
-            "label_pace" to "PACE",
-            "label_hr" to "HEART RATE",
-            "label_time" to "TIME",
-            "label_grade" to "GRADE",
-            "label_speed" to "SPEED"
+            "title_text" to activityTitle
         )
     }
 

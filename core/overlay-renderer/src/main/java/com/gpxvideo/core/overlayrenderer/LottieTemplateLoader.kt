@@ -272,33 +272,135 @@ class LottieTemplateLoader(private val context: Context) {
     }
 
     /**
-     * Hide text and placeholder shape layers in JSON so Lottie doesn't render them.
-     * Text (stat_*, label_*, title_*) and placeholder (placeholder_*) layers
-     * are drawn natively by the renderer, so they must be hidden from Lottie.
-     * Only affects type-4 shape layers; type-5 text and type-1 solid layers
-     * are already handled correctly by Lottie (text is overridden, solids are transparent).
+     * Prepare template JSON for rendering:
+     * 1. Strip slide-in animations from group transforms (freeze at final position)
+     * 2. Hide stat_* and title_* layers (replaced with native dynamic text)
+     * 3. Keep label_* and card_* layers visible (Lottie renders them as designed)
+     * 4. For chart/map layers: hide data mockup sub-groups but keep background visible
      */
     private fun hideOverlayLayers(jsonString: String): String {
         return try {
             val root = JSONObject(jsonString)
             val layers = root.optJSONArray("layers") ?: return jsonString
             var modified = false
+
             for (i in 0 until layers.length()) {
                 val layer = layers.getJSONObject(i)
                 val ty = layer.optInt("ty", -1)
-                if (ty != 4) continue // only modify shape layers
+                if (ty != 4) continue
                 val name = layer.optString("nm", "")
-                if (name.startsWith("stat_") || name.startsWith("label_") ||
-                    name.startsWith("title_") || name.startsWith("placeholder_") ||
-                    name == "elevation_chart" || name == "route_map") {
+                val shapes = layer.optJSONArray("shapes")
+
+                // Strip all group transform animations to freeze at final position
+                if (shapes != null && stripGroupAnimations(shapes)) {
+                    modified = true
+                }
+
+                // Hide stat_* and title_* layers (native dynamic text replaces them)
+                if (name.startsWith("stat_") || name.startsWith("title_")) {
                     layer.put("hd", true)
                     modified = true
+                    continue
+                }
+
+                // Chart/map layers: hide data mockup groups, keep background for Lottie
+                if (name == "elevation_chart" || name.startsWith("placeholder_elevation_chart") ||
+                    name == "route_map" || name.startsWith("placeholder_route_map")) {
+                    if (shapes != null && hideDataSubGroups(shapes)) {
+                        modified = true
+                    }
                 }
             }
             if (modified) root.toString() else jsonString
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            android.util.Log.e("LottieLoader", "hideOverlayLayers failed", e)
             jsonString
         }
+    }
+
+    /**
+     * Strip slide-in animations from group transforms.
+     * Templates often have staggered intro animations that move elements off-screen.
+     * We freeze every animated group transform at its final position ([0,0]).
+     */
+    private fun stripGroupAnimations(shapes: org.json.JSONArray): Boolean {
+        var modified = false
+        for (i in 0 until shapes.length()) {
+            val shape = shapes.getJSONObject(i)
+            if (shape.optString("ty") == "gr") {
+                val items = shape.optJSONArray("it") ?: continue
+                for (j in 0 until items.length()) {
+                    val item = items.getJSONObject(j)
+                    if (item.optString("ty") == "tr") {
+                        if (flattenAnimatedTransform(item)) modified = true
+                    }
+                }
+                // Recurse into nested groups
+                if (stripGroupAnimations(items)) modified = true
+            }
+        }
+        return modified
+    }
+
+    /**
+     * Strip ALL animated properties in a group transform (position, scale, opacity)
+     * so the element is frozen at its designed final state regardless of progress.
+     */
+    private fun flattenAnimatedTransform(transform: JSONObject): Boolean {
+        var modified = false
+        // Position: animated [offset] → [0,0]
+        modified = flattenAnimatedProp(transform, "p", org.json.JSONArray("[0,0]")) || modified
+        // Scale: animated [0,0] → [100,100]
+        modified = flattenAnimatedProp(transform, "s", org.json.JSONArray("[100,100]")) || modified
+        // Opacity: animated [0] → [100]
+        modified = flattenAnimatedProp(transform, "o", org.json.JSONArray("[100]")) || modified
+        return modified
+    }
+
+    private fun flattenAnimatedProp(
+        transform: JSONObject, prop: String, fallback: org.json.JSONArray
+    ): Boolean {
+        val obj = transform.optJSONObject(prop) ?: return false
+        val k = obj.opt("k")
+        if (k is org.json.JSONArray && k.length() > 0 && k.opt(0) is JSONObject) {
+            val lastKf = k.getJSONObject(k.length() - 1)
+            val finalVal = lastKf.optJSONArray("s") ?: fallback
+            obj.put("a", 0)
+            // For scalar props (opacity), Lottie expects a number not an array
+            if (prop == "o" && finalVal.length() == 1) {
+                obj.put("k", finalVal.getDouble(0))
+            } else {
+                obj.put("k", finalVal)
+            }
+            return true
+        }
+        return false
+    }
+
+    /**
+     * In chart/map layers, hide the data mockup sub-groups (line, area, dot, etc.)
+     * but keep the "background" group visible so Lottie renders the styled background.
+     * Also hides loose fills that aren't part of the background group.
+     */
+    private fun hideDataSubGroups(shapes: org.json.JSONArray): Boolean {
+        val dataGroupNames = setOf("line", "route", "area", "full_path", "full_route", "dot", "glow")
+        var modified = false
+        for (i in 0 until shapes.length()) {
+            val shape = shapes.getJSONObject(i)
+            val ty = shape.optString("ty")
+            if (ty == "gr") {
+                val nm = shape.optString("nm", "").lowercase().trim()
+                if (nm in dataGroupNames) {
+                    shape.put("hd", true)
+                    modified = true
+                }
+            } else if (ty == "fl" || ty == "gf") {
+                // Hide loose fills not part of a named group
+                shape.put("hd", true)
+                modified = true
+            }
+        }
+        return modified
     }
 
     fun clearCache() {
