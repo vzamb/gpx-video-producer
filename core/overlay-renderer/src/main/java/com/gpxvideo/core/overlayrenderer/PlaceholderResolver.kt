@@ -220,7 +220,7 @@ object PlaceholderResolver {
             bounds = RectF(left, top, left + w * scaleX, top + h * scaleY)
             cornerRadius = (rect.optJSONObject("r")?.optDouble("k", 0.0)?.toFloat() ?: 0f) * scale
 
-            findInGroup(items, "fl")?.let { fl ->
+            findFillInGroup(items)?.let { fl ->
                 val c = colorFrom(fl)
                 val o = fl.optJSONObject("o")?.optDouble("k", 100.0)?.toInt() ?: 100
                 if (c != null && o > 0) {
@@ -251,7 +251,7 @@ object PlaceholderResolver {
                 }
             }
             if (findInGroup(items, "st") == null) {
-                findInGroup(items, "fl")?.let { fl -> lineColor = colorFrom(fl) ?: lineColor }
+                findFillInGroup(items)?.let { fl -> lineColor = colorFrom(fl) ?: lineColor }
             }
         }
 
@@ -276,7 +276,7 @@ object PlaceholderResolver {
         var areaFillOpacity = base.areaFillOpacity
         groups["area"]?.let { g ->
             val items = g.optJSONArray("it")
-            findInGroup(items, "fl")?.let { fl ->
+            findFillInGroup(items)?.let { fl ->
                 areaFillColor = colorFrom(fl) ?: areaFillColor
                 areaFillOpacity = fl.optJSONObject("o")?.optDouble("k", 100.0)?.toInt() ?: areaFillOpacity
             }
@@ -292,7 +292,7 @@ object PlaceholderResolver {
                 val ew = sz?.optDouble(0, 0.0)?.toFloat() ?: 0f
                 if (ew > 0) dotRadius = (ew / 2f) * scale
             }
-            findInGroup(items, "fl")?.let { fl -> dotColor = colorFrom(fl) ?: dotColor }
+            findFillInGroup(items)?.let { fl -> dotColor = colorFrom(fl) ?: dotColor }
         }
 
         // ── Glow → outer glow ──
@@ -305,7 +305,7 @@ object PlaceholderResolver {
                 val ew = sz?.optDouble(0, 0.0)?.toFloat() ?: 0f
                 if (ew > 0) glowRadius = (ew / 2f) * scale
             }
-            findInGroup(items, "fl")?.let { fl ->
+            findFillInGroup(items)?.let { fl ->
                 val c = colorFrom(fl)
                 val o = fl.optJSONObject("o")?.optDouble("k", 100.0)?.toInt() ?: 100
                 if (c != null) glowColor = Color.argb(
@@ -353,7 +353,7 @@ object PlaceholderResolver {
                     bounds = RectF(left, top, left + w * scaleX, top + h * scaleY)
                     cornerRadius = shape.optJSONObject("r")?.optDouble("k", 0.0)?.toFloat() ?: 0f
                 }
-                "fl" -> {
+                "fl", "gf" -> {
                     fillColor = colorFrom(shape)
                     fillOpacity = shape.optJSONObject("o")?.optDouble("k", 100.0)?.toInt() ?: 100
                 }
@@ -388,6 +388,14 @@ object PlaceholderResolver {
 
     // ── Helpers ────────────────────────────────────────────────────────
 
+    /**
+     * Find the first fill-like shape in a group: flat fill ("fl") or gradient fill ("gf").
+     * Prefers "fl" when both exist.
+     */
+    private fun findFillInGroup(items: JSONArray?): JSONObject? {
+        return findInGroup(items, "fl") ?: findInGroup(items, "gf")
+    }
+
     private fun findInGroup(items: JSONArray?, type: String): JSONObject? {
         items ?: return null
         for (i in 0 until items.length()) {
@@ -397,12 +405,38 @@ object PlaceholderResolver {
         return null
     }
 
+    /**
+     * Extract a color from a fill shape.
+     * Supports flat fills ("fl") with a simple c.k array,
+     * and gradient fills ("gf") — reads the first color stop from g.k.k.
+     */
     private fun colorFrom(shape: JSONObject): Int? {
-        val c = shape.optJSONObject("c")?.optJSONArray("k")
-        if (c != null && c.length() >= 3) {
-            val r = (c.optDouble(0) * 255).toInt().coerceIn(0, 255)
-            val g = (c.optDouble(1) * 255).toInt().coerceIn(0, 255)
-            val b = (c.optDouble(2) * 255).toInt().coerceIn(0, 255)
+        val ty = shape.optString("ty")
+
+        // Flat fill → c.k = [r, g, b]
+        if (ty != "gf") {
+            val c = shape.optJSONObject("c")?.optJSONArray("k")
+            if (c != null && c.length() >= 3) {
+                val r = (c.optDouble(0) * 255).toInt().coerceIn(0, 255)
+                val g = (c.optDouble(1) * 255).toInt().coerceIn(0, 255)
+                val b = (c.optDouble(2) * 255).toInt().coerceIn(0, 255)
+                return Color.rgb(r, g, b)
+            }
+            return null
+        }
+
+        // Gradient fill → g.k.k = [stop0, r0, g0, b0, stop1, r1, g1, b1, ...]
+        // Extract the first color stop
+        val gObj = shape.optJSONObject("g") ?: return null
+        val kObj = gObj.optJSONObject("k") ?: return null
+        val stops = kObj.optJSONArray("k") ?: return null
+        val numColors = gObj.optInt("p", 0)
+        // Color data occupies the first numColors*4 entries (stop, r, g, b per stop)
+        // After that come opacity stops. Read first color stop (index 1,2,3).
+        if (stops.length() >= 4) {
+            val r = (stops.optDouble(1) * 255).toInt().coerceIn(0, 255)
+            val g = (stops.optDouble(2) * 255).toInt().coerceIn(0, 255)
+            val b = (stops.optDouble(3) * 255).toInt().coerceIn(0, 255)
             return Color.rgb(r, g, b)
         }
         return null
