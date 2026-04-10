@@ -58,7 +58,7 @@ object ChartRenderer {
         val chartH = bottom - top
         val progressIndex = (progress * (sampled.size - 1)).toInt().coerceIn(0, sampled.size - 1)
 
-        // Full path (faint)
+        // Full path (using design style or faint default)
         val fullPath = Path()
         sampled.forEachIndexed { i, elev ->
             val x = left + (i.toFloat() / (sampled.size - 1)) * chartW
@@ -66,12 +66,13 @@ object ChartRenderer {
             if (i == 0) fullPath.moveTo(x, y) else fullPath.lineTo(x, y)
         }
         canvas.drawPath(fullPath, Paint().apply {
-            color = Color.argb(60, 255, 255, 255); this.style = Paint.Style.STROKE
-            strokeWidth = 1.5f * dp; isAntiAlias = true
+            color = style.fullPathColor; this.style = Paint.Style.STROKE
+            strokeWidth = style.fullPathWidth * dp; isAntiAlias = true
         })
 
         // Visited portion
         if (progress > 0.01f && progressIndex > 0) {
+            val visitedLineColor = if (style.lineColor != Color.WHITE) style.lineColor else accentColor
             val vPath = Path()
             val fPath = Path()
             sampled.take(progressIndex + 1).forEachIndexed { i, elev ->
@@ -81,16 +82,18 @@ object ChartRenderer {
                 else { vPath.lineTo(x, y); fPath.lineTo(x, y) }
             }
             canvas.drawPath(vPath, Paint().apply {
-                color = accentColor; this.style = Paint.Style.STROKE
-                strokeWidth = 2.5f * dp; isAntiAlias = true
+                color = visitedLineColor; this.style = Paint.Style.STROKE
+                strokeWidth = style.lineWidth * dp; isAntiAlias = true
             })
 
             val lastX = left + (progressIndex.toFloat() / (sampled.size - 1)) * chartW
             fPath.lineTo(lastX, bottom); fPath.lineTo(left, bottom); fPath.close()
+            val areaColor = if (style.areaFillColor != 0) style.areaFillColor else visitedLineColor
             canvas.drawPath(fPath, Paint().apply {
                 shader = LinearGradient(
                     0f, top, 0f, bottom,
-                    withAlpha(accentColor, 80), withAlpha(accentColor, 10),
+                    withAlpha(areaColor, style.areaFillOpacity),
+                    withAlpha(areaColor, 10),
                     Shader.TileMode.CLAMP
                 )
                 isAntiAlias = true
@@ -99,8 +102,8 @@ object ChartRenderer {
             // Progress dot
             val dotElev = sampled[progressIndex]
             val dotY = bottom - ((dotElev - minElev) / range).toFloat() * chartH * 0.85f
-            canvas.drawCircle(lastX, dotY, 4f * dp, Paint().apply { color = accentColor; isAntiAlias = true })
-            canvas.drawCircle(lastX, dotY, 7f * dp, Paint().apply { color = withAlpha(accentColor, 60); isAntiAlias = true })
+            canvas.drawCircle(lastX, dotY, style.dotRadius * dp, Paint().apply { color = visitedLineColor; isAntiAlias = true })
+            canvas.drawCircle(lastX, dotY, style.glowRadius * dp, Paint().apply { color = withAlpha(visitedLineColor, 60); isAntiAlias = true })
         }
     }
 

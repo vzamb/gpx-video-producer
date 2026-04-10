@@ -4,7 +4,7 @@ This guide explains how to create new overlay templates for the GPX Video Produc
 
 ## Overview
 
-Templates are [Lottie](https://airbnb.io/lottie/) JSON files placed in `app/src/main/assets/templates/`. The app **automatically discovers** all templates in this directory at runtime — no code changes needed. Each template needs **4 JSON files**, one per supported aspect ratio.
+Templates are [Lottie](https://airbnb.io/lottie/) JSON files placed in `app/src/main/assets/templates/`. The app **automatically discovers** all templates in this directory at runtime — no code changes needed. Each template needs **at least 1 JSON file** — the app auto-scales it to all supported aspect ratios (9:16, 16:9, 1:1, 4:5). You can optionally provide ratio-specific files for pixel-perfect control.
 
 ## File Naming Convention
 
@@ -18,12 +18,9 @@ templates/{template_id}_{ratio}.json
 **Example for a new "trail" template:**
 ```
 templates/trail_9x16.json     (1080×1920)
-templates/trail_16x9.json     (1920×1080)
-templates/trail_1x1.json      (1080×1080)
-templates/trail_4x5.json      (1080×1350)
 ```
 
-> All 4 files are required. The app groups files by template id and reads metadata from any variant.
+> **Single-file approach:** You only need to create **one ratio file** (typically 9:16). The app automatically scales and adapts it to all other aspect ratios at runtime. If you want pixel-perfect control for a specific ratio, you can provide additional ratio files — the app will prefer an exact match over auto-scaling.
 
 ## Canvas Dimensions
 
@@ -66,9 +63,11 @@ Templates use standard Lottie layer types:
 
 | Type (`ty`) | Name | Purpose |
 |-------------|------|---------|
-| 4 (shape)   | Cards, backgrounds | Rounded rectangles, gradients, scrims |
-| 5 (text)    | Stats, labels, title | Dynamic text bound at runtime |
-| 1 (solid)   | Placeholders | Invisible regions for chart/map rendering |
+| 4 (shape)   | Cards, backgrounds, text, placeholders | All visual elements — rectangles, text (vectorized as paths), chart/map regions |
+| 5 (text)    | Stats, labels, title | Dynamic text bound at runtime (hand-written JSON or After Effects export) |
+| 1 (solid)   | Placeholders (legacy) | Invisible regions for chart/map rendering |
+
+> **Lottie Studio note:** When exporting from Lottie Studio, all layers are type 4 (shape) — including text and placeholders. The app handles this correctly: text layers named `stat_*`, `label_*`, or `title_*` are hidden from Lottie rendering and replaced with native text; placeholder layers are hidden and replaced with chart/map renderers.
 
 ## Dynamic Text Layers
 
@@ -162,21 +161,72 @@ Key fields in `t.d.k[0].s`:
 
 ## Placeholder Layers (Charts & Maps)
 
-The renderer draws data-driven visualizations in special placeholder regions. These are **solid layers** (`ty: 1`) with specific names:
+The renderer draws data-driven visualizations in special placeholder regions. These can be **solid layers** (`ty: 1`) or **shape layers** (`ty: 4`) with specific names:
 
 | Layer Name | Rendering |
 |------------|-----------|
 | `placeholder_elevation_chart` | Elevation profile with progress indicator |
 | `placeholder_route_map` | Route map with current position dot |
 
-### Placeholder layer structure:
+### Shape-layer placeholders (recommended — Lottie Studio)
+
+When using Lottie Studio, placeholders are shape layers containing a rectangle that defines the rendering region. You can add **fill** and **stroke** shapes to control the visual style of the chart/map:
 
 ```json
 {
-  "ddd": 0,
+  "ty": 4,
+  "nm": "placeholder_elevation_chart",
   "ind": 16,
+  "ks": {
+    "o": { "a": 0, "k": 100 },
+    "p": { "a": 0, "k": [540, 1820, 0] }
+  },
+  "shapes": [{
+    "ty": "gr",
+    "it": [
+      {
+        "ty": "rc",
+        "p": { "a": 0, "k": [0, 0] },
+        "s": { "a": 0, "k": [1000, 200] },
+        "r": { "a": 0, "k": 8 }
+      },
+      {
+        "ty": "fl",
+        "c": { "a": 0, "k": [0.267, 0.867, 0.467, 1] },
+        "o": { "a": 0, "k": 30 }
+      },
+      {
+        "ty": "st",
+        "c": { "a": 0, "k": [0.267, 0.867, 0.467, 1] },
+        "o": { "a": 0, "k": 100 },
+        "w": { "a": 0, "k": 3 }
+      },
+      { "ty": "tr", "p": { "a": 0, "k": [0, 0] } }
+    ]
+  }]
+}
+```
+
+**Chart/map style properties extracted from the shape:**
+
+| Shape | Property | Effect |
+|-------|----------|--------|
+| `fl` (fill) | `c.k` | Area fill color (elevation chart gradient, map background) |
+| `fl` (fill) | `o.k` | Fill opacity (0–100) |
+| `st` (stroke) | `c.k` | Line color for the visited path / elevation trace |
+| `st` (stroke) | `w.k` | Line width in dp |
+| `rc` (rect) | `r.k` | Corner radius for the background |
+| `rc` (rect) | `s.k` | Size `[width, height]` — the rendering region |
+
+> **Design tip:** Set the stroke color to your desired accent for the chart line and route path. Set the fill to a complementary color at low opacity for the background/area gradient. The app uses these as the primary visual style rather than hardcoded defaults.
+
+### Solid-layer placeholders (legacy — After Effects / hand-written)
+
+```json
+{
   "ty": 1,
   "nm": "placeholder_elevation_chart",
+  "ind": 16,
   "ks": {
     "o": { "a": 0, "k": 0 },
     "p": { "a": 0, "k": [540, 1700, 0] },
@@ -184,10 +234,7 @@ The renderer draws data-driven visualizations in special placeholder regions. Th
   },
   "sw": 960,
   "sh": 240,
-  "sc": "#000000",
-  "ip": 0,
-  "op": 30,
-  "st": 0
+  "sc": "#000000"
 }
 ```
 
@@ -204,6 +251,8 @@ top   = p.y - a.y
 right = left + sw
 bottom = top + sh
 ```
+
+> Legacy solid-layer placeholders use default chart colors (white lines, derived gradients). To control chart colors, use shape-layer placeholders with fill/stroke definitions.
 
 ## Shape Layers (Cards & Backgrounds)
 
@@ -351,17 +400,14 @@ Layers render **back to front** in the order listed. Typical order:
 
 ## Step-by-Step: Adding a New Template
 
-1. **Create 4 JSON files** in `app/src/main/assets/templates/`:
+1. **Create 1 JSON file** in `app/src/main/assets/templates/`:
    ```
    my_template_9x16.json
-   my_template_16x9.json
-   my_template_1x1.json
-   my_template_4x5.json
    ```
 
-2. **Design the layout** for each ratio using the canvas dimensions above. Tip: start with 9:16 as the reference, then adapt.
+2. **Design the layout** for 9:16 (1080×1920) — the app auto-scales to other ratios. Optionally create additional ratio files for pixel-perfect control.
 
-3. **Add `templateMeta`** to each file with `displayName` and `description`.
+3. **Add `templateMeta`** to the file with `displayName` and `description`.
 
 4. **Use recognized layer names** for text (`stat_*`, `label_*`, `title_text`) and placeholders (`placeholder_elevation_chart`, `placeholder_route_map`).
 
@@ -374,8 +420,148 @@ Layers render **back to front** in the order listed. Typical order:
 | `cinematic` | Cinematic | Minimalist data cards nestled in the corner |
 | `hero` | Hero | Massive distance tracking, centered and bold |
 | `pro_dashboard` | Pro Dashboard | Full metrics panel with route map |
+| `lottie_custom` | Lottie template | Custom design created in Lottie Studio |
 
 You can study these existing JSON files as reference when creating new templates.
+
+## Creating Templates with Lottie Studio (Recommended)
+
+[Lottie Studio](https://www.lottielab.com/) is a web-based motion design tool that exports native Lottie JSON. It gives you full visual control over every element — colors, gradients, typography, shapes — and the exported file works directly in the app with no conversion needed.
+
+### Why Lottie Studio?
+
+- **Direct export** — no conversion scripts or post-processing
+- **Full style control** — design exactly what you see
+- **Chart styling** — define chart/map colors through fill and stroke on placeholder shapes
+- **Single-file workflow** — create one ratio, the app scales the rest
+
+### Prerequisites
+
+- A [Lottie Studio](https://www.lottielab.com/) account (free tier available)
+- Basic understanding of the layer naming conventions (above)
+
+### Step 1: Create a New Composition
+
+1. Open Lottie Studio and create a new project
+2. Set the canvas size to **1080 × 1920** (9:16 vertical)
+3. Set duration to 1 second at 30fps (the app uses a single frame)
+
+### Step 2: Design the Background and Cards
+
+1. **Background scrim:** Draw a full-width rectangle at the bottom of the canvas. Apply a gradient fill (transparent → semi-transparent black) for readability over video.
+
+2. **Stat cards:** For each stat you want to display, draw a rectangle:
+   - Style freely: custom fills, gradients, rounded corners, opacity, borders
+   - Name each card with a `card_` prefix (e.g., `card_distance`, `card_hr`)
+
+3. **Decorative elements:** Add any lines, shapes, badges, or visual flourishes you want. Name them descriptively (e.g., `separator_line`, `badge_bg`).
+
+> **Important:** All non-text, non-placeholder layers render as pure Lottie visuals. The app preserves every fill, gradient, stroke, and opacity exactly as designed.
+
+### Step 3: Add Text Layers
+
+For each stat, add two text elements:
+
+1. **Label** (small, uppercase): e.g., "DISTANCE"
+   - Name exactly: `label_distance`
+   - Style: smaller font, any color (labels receive the user's accent color at runtime)
+
+2. **Value** (large, bold): e.g., "0.0"
+   - Name exactly: `stat_distance`
+   - Style: larger font, white recommended (replaced at runtime with live data)
+
+3. **Title** (optional): e.g., "MY RIDE"
+   - Name exactly: `title_text`
+   - Style: any size/color (user can customize title text and color)
+
+> **Layer names are critical.** The app identifies text layers by name to bind live data. Use the exact names from the [Dynamic Text Layers](#dynamic-text-layers) table. Layers with unrecognized names are rendered as static Lottie visuals.
+
+### Step 4: Add Chart and Map Placeholders
+
+Draw rectangles where you want the elevation chart and route map to appear:
+
+1. **Elevation chart:**
+   - Draw a wide rectangle (e.g., 1000×200) at the desired position
+   - Name exactly: `placeholder_elevation_chart`
+   - **Style the chart colors:**
+     - Set the **stroke** color to your desired chart line color (e.g., green `#44DD77`)
+     - Set the **stroke width** to control line thickness (e.g., 3px)
+     - Set the **fill** color to the area gradient color (same as stroke, or complementary)
+     - Set the **fill opacity** low (e.g., 30%) for the translucent gradient below the elevation line
+
+2. **Route map:**
+   - Draw a rectangle (e.g., 400×300) where you want the map
+   - Name exactly: `placeholder_route_map`
+   - **Style the map colors:**
+     - Set the **stroke** color to the route line color
+     - Set the **stroke width** for the route line thickness
+     - Set the **fill** color to the map background (e.g., dark `#0D0D14`)
+     - Set the **fill opacity** for the background (e.g., 80%)
+
+> The app hides these placeholder shapes from Lottie rendering and draws native charts/maps in their exact bounds, using the colors and line widths you defined.
+
+### Step 5: Layer Ordering
+
+In the Lottie Studio layers panel, arrange from **top to bottom** (top = frontmost):
+
+```
+title_text                       <-- text (frontmost)
+stat_hr                          <-- text
+label_hr                         <-- text
+stat_pace                        <-- text
+label_pace                       <-- text
+stat_distance                    <-- text
+label_distance                   <-- text
+placeholder_route_map            <-- placeholder (rendered natively)
+placeholder_elevation_chart      <-- placeholder (rendered natively)
+card_hr                          <-- shape (visual card)
+card_pace                        <-- shape
+card_distance                    <-- shape
+scrim_bottom                     <-- gradient scrim (bottommost)
+```
+
+### Step 6: Export
+
+1. **Export as Lottie JSON** from Lottie Studio (File → Export → Lottie JSON)
+2. Save the file in the project:
+   ```
+   app/src/main/assets/templates/my_template_9x16.json
+   ```
+
+3. **Add `templateMeta`** to the exported JSON at the root level:
+   ```json
+   {
+     "v": "5.7.4",
+     "fr": 30,
+     ...
+     "templateMeta": {
+       "displayName": "My Template",
+       "description": "Custom overlay design"
+     }
+   }
+   ```
+
+### Step 7: Build and Test
+
+Build the app — your template automatically appears in the template pager on the Overlays screen:
+
+```bash
+./gradlew assembleDebug
+```
+
+Verify:
+- All text layers show live data
+- Chart colors match your design
+- Map renders in the correct position with your colors
+- Layout works across all aspect ratios (try switching in the ratio selector)
+
+### Tips for Lottie Studio Templates
+
+- **One file is enough** — create the 9:16 version and the app auto-scales to 16:9, 1:1, and 4:5
+- **Test chart styling** — the stroke and fill on placeholder shapes directly control chart appearance
+- **Keep it single-frame** — the app doesn't use Lottie animations; all motion comes from live data updates
+- **Use system fonts** — the app replaces text with native rendering using Android system fonts (`sans-serif`, `sans-serif-condensed`, `monospace`, `serif`)
+- **Transparent background** — don't add a solid background fill to the root canvas; the overlay renders on top of video
 
 ## Creating Templates with After Effects
 
@@ -387,272 +573,17 @@ You can design templates in After Effects and export them as Lottie JSON using t
 4. For chart/map regions, use solid layers named `placeholder_elevation_chart` / `placeholder_route_map`
 5. Export via Bodymovin as JSON
 6. Add `templateMeta` to the exported JSON
-7. Repeat for each aspect ratio
+7. Repeat for each aspect ratio (or use just one and let auto-scaling handle the rest)
 
 > **Important:** Keep the design static (single frame). Animations in the Lottie JSON are not used — the app controls all dynamic behavior through text binding and chart rendering.
 
-
-## Creating Templates with Figma
-
-Figma is a free, browser-based design tool. Design your overlay visually with full creative control — custom card styles, gradients, scrims, colors — then use the converter script to produce a working template.
-
-> **How it works:** The LottieFiles Figma plugin exports your visual design (cards, gradients, shapes) perfectly, but converts text into vector outlines and strips layer names. The converter script fixes this by keeping all your visual elements intact while replacing vectorized text with proper dynamic text layers.
-
-### The Workflow
-
-```
-┌──────────────┐     ┌──────────────────┐     ┌──────────────────┐     ┌──────────────────┐
-│  Design in   │     │  Export via      │     │  Write a small   │     │  Run converter   │
-│  Figma       │ ──► │  LottieFiles     │ ──► │  config.json     │ ──► │  script          │
-│  (full style)│     │  plugin          │     │  (layer names)   │     │  (working JSON)  │
-└──────────────┘     └──────────────────┘     └──────────────────┘     └──────────────────┘
-```
-
-**What the converter preserves from your Figma design:**
-- Cards with custom fills, gradients, opacity, rounded corners
-- Background scrims and gradient overlays
-- Decorative shape elements (lines, circles, badges)
-
-**What the converter generates (replacing broken exports):**
-- Proper text layers (type 5) for dynamic data binding
-- Placeholder layers for charts and route map
-
-### Prerequisites
-
-- A free [Figma](https://www.figma.com/) account
-- The [LottieFiles](https://www.figma.com/community/plugin/809860933081065308) Figma plugin installed
-- Python 3 installed on your machine
-- The converter script at `tools/figma_to_template.py`
-
-### Step 1: Create a New Frame in Figma
-
-Start with 9:16 (vertical/Stories format):
-
-1. Open Figma, then create a **New Design File**
-2. Press **F** (Frame tool)
-3. Set the frame size to **1080 x 1920**
-4. Name the frame `overlay_9x16`
-
-> Use exact pixel dimensions from the [Canvas Dimensions](#canvas-dimensions) table. Don't use Figma's preset phone sizes.
-
-### Step 2: Set Up the Background
-
-The overlay renders on top of video, so the background should be transparent. During design, simulate a dark video frame:
-
-1. Select the frame
-2. Set fill to dark gray (`#1A1A1A`) at 100% opacity — for reference only
-3. **Before exporting:** set the frame fill opacity to **0%** (transparent)
-
-### Step 3: Design Your Visual Elements
-
-This is where you have full creative freedom. Design cards, scrims, decorative elements — everything that makes your template unique.
-
-**Stat Cards — create one for each stat you want:**
-1. Press **R** to draw a rectangle
-2. Style it however you like: fill, gradient, opacity, corner radius, shadows, borders
-3. **Name the layer** with a `card_` prefix: `card_distance`, `card_hr`, `card_pace`, etc.
-
-**Gradient Scrim (optional):**
-1. Draw a full-width rectangle at the bottom
-2. Apply a linear gradient: transparent at top, semi-transparent black at bottom
-3. Name it `scrim_bottom` or similar
-
-> Go wild with the visual design — gradients, glass-morphism, custom colors, rounded corners, multiple scrims. The converter preserves ALL shape styling from your Figma export.
-
-### Step 4: Add Text Layers
-
-For each stat card, add two text layers — a **label** and a **value**. The text content doesn't matter (it's replaced at runtime), but the position and approximate size do.
-
-**Label:**
-1. Press **T**, type `DISTANCE`
-2. Set font to any sans-serif, ~24px, white
-3. Position it inside/above the card
-4. **Name exactly:** `label_distance`
-
-**Value:**
-1. Press **T**, type `0.0`
-2. Set font to bold, ~72px, white
-3. Position it inside the card
-4. **Name exactly:** `stat_distance`
-
-**Recognized text layer names:**
-
-| What | Label name | Value name |
-|------|-----------|-----------|
-| Distance | `label_distance` | `stat_distance` |
-| Elevation | `label_elevation` | `stat_elevation` |
-| Pace | `label_pace` | `stat_pace` |
-| Heart Rate | `label_hr` | `stat_hr` |
-| Time | `label_time` | `stat_time` |
-| Speed | `label_speed` | `stat_speed` |
-| Grade | `label_grade` | `stat_grade` |
-| Title | — | `title_text` |
-
-### Step 5: Organize Layer Order
-
-In the Figma layers panel, arrange from **top to bottom** (top = frontmost):
-
-```
-title_text              <-- text (frontmost)
-stat_hr                 <-- text
-stat_time               <-- text
-stat_pace               <-- text
-label_hr                <-- text
-label_time              <-- text
-label_pace              <-- text
-card_hr                 <-- shape (visual card)
-card_time               <-- shape
-card_pace               <-- shape
-scrim_bottom            <-- shape (bottommost)
-```
-
-> **The layer order in Figma's panel is critical** — it determines the order in the exported JSON. The converter maps names by position in this list.
-
-### Step 6: Export with LottieFiles Plugin
-
-1. Set the frame's background fill to **0% opacity** (transparent)
-2. Select the frame
-3. Run the LottieFiles plugin: **Plugins > LottieFiles > Export to Lottie**
-4. Download the exported `.json` file
-5. Save it in the project root (e.g., `my_overlay_9x16.json`)
-
-### Step 7: Analyze the Export (Optional)
-
-Run the analyzer to verify the export and get a config template:
-
-```bash
-python3 tools/figma_to_template.py --analyze my_overlay_9x16.json
-```
-
-Output:
-```
-Canvas: 1080x1920
-Layers: 16
-
-Layer analysis (compare with your Figma layers panel, top to bottom):
-  Layer  0: TEXT      8 paths  bbox=(55,61)-(358,122)  ~84px
-  Layer  1: TEXT      5 paths  bbox=(886,47)-(1020,109)  ~85px
-  ...
-  Layer 11: SHAPE     1 path   bbox=(853,40)-(1053,150)  size=200x110
-  ...
-```
-
-The analyzer shows detected types (TEXT vs SHAPE) and bounding boxes. Compare with your Figma layers panel to verify the order matches.
-
-### Step 8: Create the Config File
-
-Create a JSON config file that maps layer names in Figma panel order:
-
-```json
-{
-  "name": "My Template",
-  "description": "My custom overlay design",
-  "layers": [
-    "title_text",
-    "stat_hr",
-    "stat_time",
-    "stat_pace",
-    "stat_elevation",
-    "stat_distance",
-    "label_hr",
-    "label_time",
-    "label_pace",
-    "label_elevation",
-    "label_distance",
-    "card_hr",
-    "card_time",
-    "card_pace",
-    "card_elevation",
-    "card_distance"
-  ],
-  "placeholders": {
-    "route_map": {"x": 40, "y": 60, "w": 800, "h": 800},
-    "elevation_chart": {"x": 24, "y": 1600, "w": 1032, "h": 120}
-  },
-  "text_overrides": {
-    "title_text": {"size": 56, "bold": true, "align": "left"}
-  }
-}
-```
-
-**Config fields:**
-
-| Field | Required | Description |
-|-------|----------|-------------|
-| `name` | Yes | Display name shown in the app |
-| `description` | No | Short description |
-| `layers` | Yes | Layer names in Figma panel order (top to bottom). Text layers (`stat_*`, `label_*`, `title_*`) are replaced; shape layers (`card_*`, `scrim*`) are kept with styling intact |
-| `placeholders` | No | Chart and map regions (x, y, w, h) — these are added as new layers since they're not in the Figma design |
-| `text_overrides` | No | Override auto-detected font size, boldness, or alignment for specific text layers |
-
-**Text override options:**
-
-| Key | Default | Description |
-|-----|---------|-------------|
-| `size` | Auto-detected from vectorized text height | Font size in pixels |
-| `bold` | `true` for `stat_*` and `title_*`, `false` for `label_*` | Whether to use bold font |
-| `align` | `"left"` for title, `"center"` for stats/labels | `"left"`, `"center"`, or `"right"` |
-| `text` | Standard placeholder text | Default text shown when no data |
-
-> See `tools/example_config.json` for a complete example.
-
-### Step 9: Run the Converter
-
-```bash
-python3 tools/figma_to_template.py my_overlay_9x16.json my_config.json output.json
-```
-
-Output:
-```
-Converting Figma export: my_overlay_9x16.json
-   Config: my_config.json
-   Output: output.json
-
-  title_text: text layer at (207, 122), size=84px
-  stat_hr: text layer at (953, 109), size=85px
-  ...
-  card_hr: shape kept, bbox (853,40)-(1053,150)
-  ...
-  placeholder_route_map: solid at (40,60) size 800x800
-  placeholder_elevation_chart: solid at (24,1600) size 1032x120
-
-Template written to output.json (42.2 KB)
-   Text layers replaced: 11
-   Shape layers kept: 5
-   Placeholders added: 2
-```
-
-### Step 10: Install and Test
-
-Copy the output to the templates directory with the correct naming convention:
-
-```bash
-cp output.json app/src/main/assets/templates/my_template_9x16.json
-```
-
-Build and run — your template appears in the template selector on the Overlays screen.
-
-### Step 11: Create All 4 Aspect Ratios
-
-Go back to Figma and create frames for the remaining ratios:
-
-| Ratio | Frame Size | File Name |
-|-------|-----------|-----------|
-| 16:9 | 1920 x 1080 | `my_template_16x9.json` |
-| 1:1 | 1080 x 1080 | `my_template_1x1.json` |
-| 4:5 | 1080 x 1350 | `my_template_4x5.json` |
-
-For each: duplicate the 9:16 frame, resize, rearrange elements, export, and convert with a matching config.
-
-> You don't need every stat in every ratio. Landscape (16:9) might use fewer cards. All 4 ratio files must exist for the template to appear in the app.
-
-### Troubleshooting
+## Troubleshooting
 
 | Problem | Solution |
 |---------|----------|
-| Template doesn't appear in the app | Check file names follow `{id}_{ratio}.json` pattern and all 4 ratios exist |
-| Converter warns about layer count mismatch | Your Figma layer count doesn't match the config. Check for hidden layers or grouped elements |
-| Text is too large/small | Add a `text_overrides` entry for the layer with an explicit `size` value |
-| Cards not visible | Ensure cards are at the bottom of the Figma layer list (behind text) and have non-zero opacity fills |
-| Charts/map don't appear | Check `placeholders` coordinates are within the canvas bounds |
-| Colors look different in app | The app applies accent color to `title_text` and charts at runtime. Design other text in white |
+| Template doesn't appear in the app | Check file name follows `{id}_{ratio}.json` pattern. At least one ratio file must exist. |
+| Text layers don't show live data | Verify layer names match exactly (`stat_distance`, not `distance` or `stat_Distance`) |
+| Chart colors are default white | Add `fl` (fill) and `st` (stroke) shapes inside the placeholder layer's shape group |
+| Charts/map don't appear | Check placeholder layer name is exactly `placeholder_elevation_chart` or `placeholder_route_map` |
+| Colors look different in app | The app applies accent color to `label_*` text and to chart lines (when no stroke color is defined in the placeholder) |
+| Layout is clipped at certain ratios | Auto-scaling works best when elements are positioned relative to the center. Elements at extreme edges may clip. |

@@ -7,6 +7,7 @@ import org.json.JSONObject
 
 /**
  * Style info extracted from a Lottie placeholder layer.
+ * All visual properties for charts and maps come from the template design.
  */
 data class PlaceholderStyle(
     val accentColor: Int = Color.argb(204, 68, 138, 255),
@@ -14,7 +15,17 @@ data class PlaceholderStyle(
     val borderColor: Int = Color.argb(30, 255, 255, 255),
     val borderWidth: Float = 1f,
     val cornerRadius: Float = 8f,
-    val hasBackground: Boolean = true
+    val hasBackground: Boolean = true,
+    // Chart line styling (extracted from design or defaults)
+    val lineColor: Int = Color.WHITE,
+    val lineWidth: Float = 2.5f,
+    val fullPathColor: Int = Color.argb(60, 255, 255, 255),
+    val fullPathWidth: Float = 1.5f,
+    val areaFillColor: Int = 0, // 0 = derive from lineColor
+    val areaFillOpacity: Int = 80,
+    // Progress dot
+    val dotRadius: Float = 4f,
+    val glowRadius: Float = 7f
 )
 
 /**
@@ -90,9 +101,12 @@ object PlaceholderResolver {
                 }
 
                 // Fallback: type-4 shape layer with rectangle shape (from Lottie Studio etc.)
-                val bounds = resolveShapeLayerBounds(layer, ks, scaleX, scaleY)
-                if (bounds != null) {
-                    result[name] = PlaceholderInfo(name, bounds, styleForPlaceholder(name, accentColor, dp))
+                val shapeResult = resolveShapeLayerWithStyle(layer, ks, scaleX, scaleY)
+                if (shapeResult != null) {
+                    val (bounds, extractedStyle) = shapeResult
+                    val baseStyle = styleForPlaceholder(name, accentColor, dp)
+                    // Merge: extracted style overrides defaults where present
+                    result[name] = PlaceholderInfo(name, bounds, mergeStyles(baseStyle, extractedStyle))
                 }
             }
         } catch (_: Exception) {
@@ -102,15 +116,16 @@ object PlaceholderResolver {
     }
 
     /**
-     * Extract bounds from a type-4 shape layer that contains a rectangle (ty:"rc").
-     * The rectangle center is at the layer position, size from the rect's "s" property.
+     * Extract bounds AND visual style from a type-4 shape layer.
+     * Reads fill colors, stroke colors/widths, corner radius from the Lottie shapes.
+     * Returns (bounds, partial style) or null if no rectangle found.
      */
-    private fun resolveShapeLayerBounds(
+    private fun resolveShapeLayerWithStyle(
         layer: org.json.JSONObject,
         ks: org.json.JSONObject,
         scaleX: Float,
         scaleY: Float
-    ): RectF? {
+    ): Pair<RectF, PlaceholderStyle>? {
         val posObj = ks.optJSONObject("p") ?: return null
         val posX: Float
         val posY: Float
@@ -121,19 +136,80 @@ object PlaceholderResolver {
         } else return null
 
         val shapes = layer.optJSONArray("shapes") ?: return null
+
+        var bounds: RectF? = null
+        var cornerRadius = 0f
+        var fillColor: Int? = null
+        var fillOpacity = 100
+        var strokeColor: Int? = null
+        var strokeWidth = 0f
+
         for (s in 0 until shapes.length()) {
             val shape = shapes.getJSONObject(s)
-            if (shape.optString("ty") == "rc") {
-                val sizeK = shape.optJSONObject("s")?.optJSONArray("k") ?: continue
-                val w = sizeK.optDouble(0, 0.0).toFloat()
-                val h = sizeK.optDouble(1, 0.0).toFloat()
-                if (w <= 0 || h <= 0) continue
-                val left = (posX - w / 2f) * scaleX
-                val top = (posY - h / 2f) * scaleY
-                return RectF(left, top, left + w * scaleX, top + h * scaleY)
+            when (shape.optString("ty")) {
+                "rc" -> {
+                    val sizeK = shape.optJSONObject("s")?.optJSONArray("k") ?: continue
+                    val w = sizeK.optDouble(0, 0.0).toFloat()
+                    val h = sizeK.optDouble(1, 0.0).toFloat()
+                    if (w <= 0 || h <= 0) continue
+                    val left = (posX - w / 2f) * scaleX
+                    val top = (posY - h / 2f) * scaleY
+                    bounds = RectF(left, top, left + w * scaleX, top + h * scaleY)
+                    cornerRadius = shape.optJSONObject("r")?.optDouble("k", 0.0)?.toFloat() ?: 0f
+                }
+                "fl" -> {
+                    val c = shape.optJSONObject("c")?.optJSONArray("k")
+                    if (c != null && c.length() >= 3) {
+                        val r = (c.optDouble(0) * 255).toInt().coerceIn(0, 255)
+                        val g = (c.optDouble(1) * 255).toInt().coerceIn(0, 255)
+                        val b = (c.optDouble(2) * 255).toInt().coerceIn(0, 255)
+                        fillColor = Color.rgb(r, g, b)
+                    }
+                    fillOpacity = shape.optJSONObject("o")?.optDouble("k", 100.0)?.toInt() ?: 100
+                }
+                "st" -> {
+                    val c = shape.optJSONObject("c")?.optJSONArray("k")
+                    if (c != null && c.length() >= 3) {
+                        val r = (c.optDouble(0) * 255).toInt().coerceIn(0, 255)
+                        val g = (c.optDouble(1) * 255).toInt().coerceIn(0, 255)
+                        val b = (c.optDouble(2) * 255).toInt().coerceIn(0, 255)
+                        strokeColor = Color.rgb(r, g, b)
+                    }
+                    strokeWidth = shape.optJSONObject("w")?.optDouble("k", 0.0)?.toFloat() ?: 0f
+                }
             }
         }
-        return null
+
+        if (bounds == null) return null
+
+        val scale = minOf(scaleX, scaleY)
+        val style = PlaceholderStyle(
+            backgroundColor = if (fillColor != null && fillOpacity > 0)
+                Color.argb((fillOpacity * 255 / 100).coerceIn(0, 255),
+                    Color.red(fillColor!!), Color.green(fillColor!!), Color.blue(fillColor!!))
+            else Color.TRANSPARENT,
+            hasBackground = fillColor != null && fillOpacity > 0,
+            cornerRadius = cornerRadius * scale,
+            lineColor = strokeColor ?: 0,
+            lineWidth = if (strokeWidth > 0) strokeWidth * scale else 0f,
+            areaFillColor = strokeColor ?: 0
+        )
+        return bounds to style
+    }
+
+    /**
+     * Merge an extracted style into a base style. Extracted values override defaults
+     * only when they are explicitly set (non-zero colors, positive widths).
+     */
+    private fun mergeStyles(base: PlaceholderStyle, extracted: PlaceholderStyle): PlaceholderStyle {
+        return base.copy(
+            backgroundColor = if (extracted.hasBackground) extracted.backgroundColor else base.backgroundColor,
+            hasBackground = if (extracted.hasBackground) true else base.hasBackground,
+            cornerRadius = if (extracted.cornerRadius > 0) extracted.cornerRadius else base.cornerRadius,
+            lineColor = if (extracted.lineColor != 0) extracted.lineColor else base.lineColor,
+            lineWidth = if (extracted.lineWidth > 0) extracted.lineWidth else base.lineWidth,
+            areaFillColor = if (extracted.areaFillColor != 0) extracted.areaFillColor else base.areaFillColor
+        )
     }
 
     /**

@@ -118,19 +118,137 @@ class LottieTemplateLoader(private val context: Context) {
 
     suspend fun load(template: String, width: Int, height: Int): LoadedTemplate? {
         val rKey = ratioKey(width, height)
-        val path = assetPath(template, rKey)
-        cache[path]?.let { return it }
+        val cacheKey = "${template}_${rKey}"
+        cache[cacheKey]?.let { return it }
 
         return withContext(Dispatchers.IO) {
-            loadFromAsset(path)
+            loadWithFallback(template, rKey, cacheKey)
         }
     }
 
     fun loadSync(template: String, width: Int, height: Int): LoadedTemplate? {
         val rKey = ratioKey(width, height)
-        val path = assetPath(template, rKey)
-        cache[path]?.let { return it }
-        return loadFromAsset(path)
+        val cacheKey = "${template}_${rKey}"
+        cache[cacheKey]?.let { return it }
+        return loadWithFallback(template, rKey, cacheKey)
+    }
+
+    /**
+     * Try the exact ratio file first; if missing, fall back to any available ratio.
+     * When falling back, the composition canvas is rescaled to match the requested ratio.
+     */
+    private fun loadWithFallback(template: String, rKey: String, cacheKey: String): LoadedTemplate? {
+        // Try exact match first
+        loadFromAsset(assetPath(template, rKey))?.let {
+            cache[cacheKey] = it
+            return it
+        }
+        // Fallback: try other ratios and rescale
+        for (fallbackRatio in RATIOS) {
+            if (fallbackRatio == rKey) continue
+            val fallbackPath = assetPath(template, fallbackRatio)
+            val loaded = loadFromAsset(fallbackPath) ?: continue
+            // Rescale the JSON canvas dimensions to target ratio
+            val rescaled = rescaleTemplate(loaded.jsonString, rKey)
+            val result = LottieCompositionFactory.fromJsonStringSync(
+                hideOverlayLayers(rescaled), "$cacheKey(fallback)"
+            )
+            result.value?.let { comp ->
+                val template = LoadedTemplate(comp, rescaled)
+                cache[cacheKey] = template
+                return template
+            }
+        }
+        return null
+    }
+
+    /**
+     * Rescale a template's JSON to fit a different aspect ratio.
+     * Scales all layer positions and shape coordinates proportionally.
+     */
+    private fun rescaleTemplate(jsonString: String, targetRatio: String): String {
+        return try {
+            val root = JSONObject(jsonString)
+            val srcW = root.optDouble("w", 1080.0)
+            val srcH = root.optDouble("h", 1920.0)
+            val (tgtW, tgtH) = when (targetRatio) {
+                "16x9" -> 1920.0 to 1080.0
+                "9x16" -> 1080.0 to 1920.0
+                "4x5" -> 1080.0 to 1350.0
+                "1x1" -> 1080.0 to 1080.0
+                else -> return jsonString
+            }
+            val sx = tgtW / srcW
+            val sy = tgtH / srcH
+            root.put("w", tgtW.toInt())
+            root.put("h", tgtH.toInt())
+            val layers = root.optJSONArray("layers") ?: return root.toString()
+            for (i in 0 until layers.length()) {
+                rescaleLayer(layers.getJSONObject(i), sx, sy)
+            }
+            root.toString()
+        } catch (_: Exception) {
+            jsonString
+        }
+    }
+
+    private fun rescaleLayer(layer: JSONObject, sx: Double, sy: Double) {
+        // Scale solid dimensions
+        if (layer.has("sw")) layer.put("sw", layer.optDouble("sw") * sx)
+        if (layer.has("sh")) layer.put("sh", layer.optDouble("sh") * sy)
+        // Scale transform position
+        val ks = layer.optJSONObject("ks") ?: return
+        rescalePosition(ks.optJSONObject("p"), sx, sy)
+        rescalePosition(ks.optJSONObject("a"), sx, sy)
+        // Scale shapes
+        val shapes = layer.optJSONArray("shapes") ?: return
+        for (s in 0 until shapes.length()) {
+            rescaleShape(shapes.getJSONObject(s), sx, sy)
+        }
+    }
+
+    private fun rescalePosition(posObj: JSONObject?, sx: Double, sy: Double) {
+        posObj ?: return
+        val k = posObj.opt("k")
+        if (k is org.json.JSONArray && k.length() >= 2 && k.opt(0) is Number) {
+            k.put(0, k.optDouble(0) * sx)
+            k.put(1, k.optDouble(1) * sy)
+        }
+    }
+
+    private fun rescaleShape(shape: JSONObject, sx: Double, sy: Double) {
+        when (shape.optString("ty")) {
+            "rc" -> {
+                rescalePosition(shape.optJSONObject("s"), sx, sy)
+                rescalePosition(shape.optJSONObject("p"), sx, sy)
+            }
+            "sh" -> {
+                val ksObj = shape.optJSONObject("ks") ?: return
+                val k = ksObj.opt("k")
+                if (k is JSONObject) {
+                    for (arr in listOf("v", "i", "o")) {
+                        val pts = k.optJSONArray(arr) ?: continue
+                        for (p in 0 until pts.length()) {
+                            val pt = pts.optJSONArray(p) ?: continue
+                            if (pt.length() >= 2) {
+                                pt.put(0, pt.optDouble(0) * sx)
+                                pt.put(1, pt.optDouble(1) * sy)
+                            }
+                        }
+                    }
+                }
+            }
+            "gr" -> {
+                val items = shape.optJSONArray("it") ?: return
+                for (j in 0 until items.length()) {
+                    rescaleShape(items.getJSONObject(j), sx, sy)
+                }
+            }
+            "tr" -> {
+                rescalePosition(shape.optJSONObject("p"), sx, sy)
+                rescalePosition(shape.optJSONObject("a"), sx, sy)
+            }
+        }
     }
 
     private fun loadFromAsset(path: String): LoadedTemplate? {
