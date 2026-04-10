@@ -136,7 +136,11 @@ class LottieTemplateLoader(private val context: Context) {
     private fun loadFromAsset(path: String): LoadedTemplate? {
         return try {
             val jsonString = context.assets.open(path).bufferedReader().use { it.readText() }
-            val result = LottieCompositionFactory.fromJsonStringSync(jsonString, path)
+            // Create a modified JSON that hides text/placeholder shape layers
+            // so Lottie only renders visual card/scrim shapes.
+            // The original JSON is kept for text & placeholder position resolution.
+            val renderJson = hideOverlayLayers(jsonString)
+            val result = LottieCompositionFactory.fromJsonStringSync(renderJson, path)
             if (result.value == null) {
                 android.util.Log.e("LottieLoader", "Failed to parse $path: ${result.exception?.message}")
             }
@@ -146,6 +150,35 @@ class LottieTemplateLoader(private val context: Context) {
         } catch (e: Exception) {
             android.util.Log.e("LottieLoader", "Error loading $path: ${e.message}", e)
             null
+        }
+    }
+
+    /**
+     * Hide text and placeholder shape layers in JSON so Lottie doesn't render them.
+     * Text (stat_*, label_*, title_*) and placeholder (placeholder_*) layers
+     * are drawn natively by the renderer, so they must be hidden from Lottie.
+     * Only affects type-4 shape layers; type-5 text and type-1 solid layers
+     * are already handled correctly by Lottie (text is overridden, solids are transparent).
+     */
+    private fun hideOverlayLayers(jsonString: String): String {
+        return try {
+            val root = JSONObject(jsonString)
+            val layers = root.optJSONArray("layers") ?: return jsonString
+            var modified = false
+            for (i in 0 until layers.length()) {
+                val layer = layers.getJSONObject(i)
+                val ty = layer.optInt("ty", -1)
+                if (ty != 4) continue // only modify shape layers
+                val name = layer.optString("nm", "")
+                if (name.startsWith("stat_") || name.startsWith("label_") ||
+                    name.startsWith("title_") || name.startsWith("placeholder_")) {
+                    layer.put("hd", true)
+                    modified = true
+                }
+            }
+            if (modified) root.toString() else jsonString
+        } catch (_: Exception) {
+            jsonString
         }
     }
 
