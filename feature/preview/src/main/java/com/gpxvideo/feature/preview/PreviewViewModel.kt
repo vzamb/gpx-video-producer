@@ -141,10 +141,12 @@ class PreviewViewModel @AssistedInject constructor(
 
     private fun TimelineClipEntity.toPreviewClip(mediaItem: MediaItemEntity): PreviewClip {
         val sourceAR = computeSourceAspectRatio(mediaItem)
+        val isImage = mediaItem.type == "IMAGE"
+        val effectiveDurationMs = (endTimeMs - startTimeMs).coerceAtLeast(1L)
         return PreviewClip(
             uri = pathToUri(mediaItem.localCopyPath),
-            startMs = trimStartMs,
-            endMs = resolvePreviewEndMs(
+            startMs = if (isImage) 0L else trimStartMs,
+            endMs = if (isImage) effectiveDurationMs else resolvePreviewEndMs(
                 startTimeMs = startTimeMs,
                 endTimeMs = endTimeMs,
                 trimStartMs = trimStartMs,
@@ -163,16 +165,19 @@ class PreviewViewModel @AssistedInject constructor(
                 contrast = contrast,
                 saturation = saturation,
                 sourceVideoAspectRatio = sourceAR
-            )
+            ),
+            isImage = isImage
         )
     }
 
     private fun TimelineClipState.toPreviewClip(mediaItem: MediaItemEntity): PreviewClip {
         val sourceAR = computeSourceAspectRatio(mediaItem)
+        val isImage = mediaItem.type == "IMAGE"
+        val effectiveDurationMs = (endTimeMs - startTimeMs).coerceAtLeast(1L)
         return PreviewClip(
             uri = pathToUri(mediaItem.localCopyPath),
-            startMs = trimStartMs,
-            endMs = resolvePreviewEndMs(
+            startMs = if (isImage) 0L else trimStartMs,
+            endMs = if (isImage) effectiveDurationMs else resolvePreviewEndMs(
                 startTimeMs = startTimeMs,
                 endTimeMs = endTimeMs,
                 trimStartMs = trimStartMs,
@@ -190,7 +195,8 @@ class PreviewViewModel @AssistedInject constructor(
                 contrast = contrast,
                 saturation = saturation,
                 sourceVideoAspectRatio = sourceAR
-            )
+            ),
+            isImage = isImage
         )
     }
 

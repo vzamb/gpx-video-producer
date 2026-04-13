@@ -238,11 +238,12 @@ fun VideoAssemblyScreen(
                     if (r == 90 || r == 270) media.height.toFloat() / media.width.toFloat()
                     else media.width.toFloat() / media.height.toFloat()
                 } else 0f
+                val isImage = media.type == "IMAGE"
                 val effectiveDurationMs = clip.endTimeMs - clip.startTimeMs
                 PreviewClip(
                     uri = uri,
-                    startMs = clip.trimStartMs,
-                    endMs = clip.trimStartMs + effectiveDurationMs,
+                    startMs = if (isImage) 0L else clip.trimStartMs,
+                    endMs = if (isImage) effectiveDurationMs else clip.trimStartMs + effectiveDurationMs,
                     speed = clip.speed,
                     volume = clip.volume,
                     displayTransform = PreviewDisplayTransform(
@@ -255,7 +256,8 @@ fun VideoAssemblyScreen(
                         contrast = clip.contrast,
                         saturation = clip.saturation,
                         sourceVideoAspectRatio = sourceAR
-                    )
+                    ),
+                    isImage = isImage
                 )
             }
         }
