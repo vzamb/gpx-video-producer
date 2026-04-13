@@ -7,6 +7,7 @@ import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 import android.view.View
 import android.view.TextureView
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,8 +19,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -36,6 +40,7 @@ fun VideoPreview(
     val lifecycleOwner = LocalLifecycleOwner.current
     val videoAspectRatio by previewEngine.videoAspectRatio.collectAsStateWithLifecycle()
     val displayTransform by previewEngine.activeDisplayTransform.collectAsStateWithLifecycle()
+    val imageBitmap by previewEngine.currentImageBitmap.collectAsStateWithLifecycle()
 
     // Keep a reference to the TextureView so we can apply transforms from LaunchedEffect
     var textureViewRef by remember { mutableStateOf<TextureView?>(null) }
@@ -133,6 +138,20 @@ fun VideoPreview(
             },
             modifier = Modifier.matchParentSize()
         )
+
+        // Show image bitmap overlay for image-type clips (ExoPlayer doesn't render
+        // images to the video TextureView — they come via setImageOutput callback)
+        imageBitmap?.let { bmp ->
+            Image(
+                bitmap = bmp.asImageBitmap(),
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                alignment = Alignment.Center,
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(Color.Black)
+            )
+        }
 
         overlayContent()
     }

@@ -1,6 +1,7 @@
 package com.gpxvideo.feature.preview
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.net.Uri
 import android.util.Log
 import android.view.TextureView
@@ -12,6 +13,7 @@ import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.image.ImageOutput
 import com.gpxvideo.feature.timeline.ClipContentMode
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -95,12 +97,29 @@ class PreviewEngine @Inject constructor(
     private val _activeDisplayTransform = MutableStateFlow(PreviewDisplayTransform())
     val activeDisplayTransform: StateFlow<PreviewDisplayTransform> = _activeDisplayTransform.asStateFlow()
 
+    /** Bitmap provided by ExoPlayer's ImageRenderer for image-type clips. */
+    private val _currentImageBitmap = MutableStateFlow<Bitmap?>(null)
+    val currentImageBitmap: StateFlow<Bitmap?> = _currentImageBitmap.asStateFlow()
+
     private var positionPollingJob: Job? = null
 
+    @OptIn(UnstableApi::class)
     fun initialize() {
         if (exoPlayer != null) return
         exoPlayer = ExoPlayer.Builder(context).build().also { player ->
             player.playWhenReady = false // Prevent auto-play on prepare()
+            player.setImageOutput(object : ImageOutput {
+                override fun onImageAvailable(presentationTimeUs: Long, bitmap: Bitmap) {
+                    _currentImageBitmap.value = bitmap
+                    if (bitmap.width > 0 && bitmap.height > 0) {
+                        _videoAspectRatio.value = bitmap.width.toFloat() / bitmap.height.toFloat()
+                    }
+                }
+
+                override fun onDisabled() {
+                    _currentImageBitmap.value = null
+                }
+            })
             player.addListener(object : Player.Listener {
                 override fun onIsPlayingChanged(playing: Boolean) {
                     _isPlaying.value = playing
@@ -128,6 +147,10 @@ class PreviewEngine @Inject constructor(
 
                 override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                     updateActiveDisplayTransform(player.currentMediaItemIndex)
+                    // Clear image bitmap when switching away from an image clip
+                    if (player.currentMediaItemIndex !in imageClipIndices) {
+                        _currentImageBitmap.value = null
+                    }
                 }
 
                 override fun onPlayerError(error: PlaybackException) {
@@ -160,6 +183,7 @@ class PreviewEngine @Inject constructor(
         _isPlaying.value = false
         _duration.value = 0
         _videoAspectRatio.value = null
+        _currentImageBitmap.value = null
         _activeDisplayTransform.value = PreviewDisplayTransform()
     }
 
@@ -353,6 +377,8 @@ class PreviewEngine @Inject constructor(
     }
 
     fun captureFrame(): android.graphics.Bitmap? {
+        // For image clips, return the decoded image bitmap instead of the TextureView
+        _currentImageBitmap.value?.let { return it }
         return try { boundTextureView?.bitmap } catch (_: Exception) { null }
     }
 

@@ -26,63 +26,88 @@ data class MediaInfo(
 object MediaProber {
 
     suspend fun probeMedia(context: Context, uri: Uri): MediaInfo = withContext(Dispatchers.IO) {
-        val retriever = MediaMetadataRetriever()
-        try {
-            retriever.setSafeDataSource(context, uri)
+        val fileSize = when (uri.scheme) {
+            null, ContentResolver.SCHEME_FILE -> uri.path?.let(::File)?.takeIf(File::exists)?.length()
+            else -> context.contentResolver.openFileDescriptor(uri, "r")?.use { it.statSize }
+        } ?: 0L
 
-            val durationMs = retriever.extractMetadata(
-                MediaMetadataRetriever.METADATA_KEY_DURATION
-            )?.toLongOrNull()?.takeIf { it > 0L }
-            val videoWidth = retriever.extractMetadata(
-                MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH
-            )?.toIntOrNull() ?: 0
-            val videoHeight = retriever.extractMetadata(
-                MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT
-            )?.toIntOrNull() ?: 0
-            val rotation = retriever.extractMetadata(
-                MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION
-            )?.toIntOrNull() ?: 0
-            val codec = retriever.extractMetadata(
-                MediaMetadataRetriever.METADATA_KEY_MIMETYPE
-            )
-            val hasAudio = retriever.extractMetadata(
-                MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO
-            ) == "yes"
+        // Try MediaMetadataRetriever first (works for video/audio; may fail for images)
+        val retrieverInfo = try {
+            val retriever = MediaMetadataRetriever()
+            try {
+                retriever.setSafeDataSource(context, uri)
+                val durationMs = retriever.extractMetadata(
+                    MediaMetadataRetriever.METADATA_KEY_DURATION
+                )?.toLongOrNull()?.takeIf { it > 0L }
+                val videoWidth = retriever.extractMetadata(
+                    MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH
+                )?.toIntOrNull() ?: 0
+                val videoHeight = retriever.extractMetadata(
+                    MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT
+                )?.toIntOrNull() ?: 0
+                val rotation = retriever.extractMetadata(
+                    MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION
+                )?.toIntOrNull() ?: 0
+                val codec = retriever.extractMetadata(
+                    MediaMetadataRetriever.METADATA_KEY_MIMETYPE
+                )
+                val hasAudio = retriever.extractMetadata(
+                    MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO
+                ) == "yes"
+                val dateStr = retriever.extractMetadata(
+                    MediaMetadataRetriever.METADATA_KEY_DATE
+                )
+                val videoCreatedAt = dateStr?.let { parseVideoDate(it) }
 
-            val dateStr = retriever.extractMetadata(
-                MediaMetadataRetriever.METADATA_KEY_DATE
-            )
-            val videoCreatedAt = dateStr?.let { parseVideoDate(it) }
-
-            val fileSize = when (uri.scheme) {
-                null, ContentResolver.SCHEME_FILE -> uri.path?.let(::File)?.takeIf(File::exists)?.length()
-                else -> context.contentResolver.openFileDescriptor(uri, "r")?.use { it.statSize }
-            } ?: 0L
-
-            // For images, video width/height may be 0; fall back to BitmapFactory
-            val (finalWidth, finalHeight) = if (videoWidth == 0 || videoHeight == 0) {
-                val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                context.contentResolver.openInputStream(uri)?.use {
-                    BitmapFactory.decodeStream(it, null, options)
-                }
-                Pair(options.outWidth.coerceAtLeast(0), options.outHeight.coerceAtLeast(0))
-            } else {
-                Pair(videoWidth, videoHeight)
+                MediaInfo(
+                    durationMs = durationMs,
+                    width = videoWidth,
+                    height = videoHeight,
+                    rotation = rotation,
+                    codec = codec,
+                    hasAudio = hasAudio,
+                    audioCodec = null,
+                    fileSize = fileSize,
+                    videoCreatedAt = videoCreatedAt
+                )
+            } finally {
+                retriever.release()
             }
+        } catch (_: Exception) {
+            null
+        }
 
+        // If retriever succeeded with valid dimensions, use it
+        if (retrieverInfo != null && retrieverInfo.width > 0 && retrieverInfo.height > 0) {
+            return@withContext retrieverInfo
+        }
+
+        // Fall back to BitmapFactory for dimensions (handles images and cases where
+        // MediaMetadataRetriever failed or returned 0×0)
+        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        context.contentResolver.openInputStream(uri)?.use {
+            BitmapFactory.decodeStream(it, null, options)
+        }
+        val imgWidth = options.outWidth.coerceAtLeast(0)
+        val imgHeight = options.outHeight.coerceAtLeast(0)
+
+        if (retrieverInfo != null) {
+            // Retriever worked but had 0×0 dimensions — patch with BitmapFactory sizes
+            retrieverInfo.copy(width = imgWidth, height = imgHeight)
+        } else {
+            // Pure image fallback — no video metadata available
+            val mimeType = context.contentResolver.getType(uri)
             MediaInfo(
-                durationMs = durationMs,
-                width = finalWidth,
-                height = finalHeight,
-                rotation = rotation,
-                codec = codec,
-                hasAudio = hasAudio,
+                durationMs = null,
+                width = imgWidth,
+                height = imgHeight,
+                rotation = 0,
+                codec = mimeType,
+                hasAudio = false,
                 audioCodec = null,
                 fileSize = fileSize,
-                videoCreatedAt = videoCreatedAt
+                videoCreatedAt = null
             )
-        } finally {
-            retriever.release()
         }
     }
 }
