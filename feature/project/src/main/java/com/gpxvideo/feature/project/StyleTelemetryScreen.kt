@@ -158,6 +158,9 @@ fun StyleTelemetryScreen(
     var showSyncSheet by rememberSaveable { mutableStateOf(false) }
     var showGpxSourcePicker by remember { mutableStateOf(false) }
     var showStravaSheet by remember { mutableStateOf(false) }
+    var showExportSheet by remember { mutableStateOf(false) }
+
+    val frameExportState by viewModel.frameExportState.collectAsStateWithLifecycle()
 
     val stravaIsLinked by viewModel.stravaTokenStore.isLinked.collectAsState(initial = false)
 
@@ -230,7 +233,7 @@ fun StyleTelemetryScreen(
                 uiState.clipSyncPoints.values.none { it.isSynced }
             StyleBottomBar(
                 onExport = {
-                    if (projectIdStr.isNotBlank()) onNavigateToExport(projectIdStr)
+                    if (projectIdStr.isNotBlank()) showExportSheet = true
                 },
                 enabled = !isLiveSyncWithoutPoints,
                 warningMessage = if (isLiveSyncWithoutPoints) "Sync clips with GPX before exporting" else null
@@ -347,6 +350,58 @@ fun StyleTelemetryScreen(
             },
             onDismiss = { showStravaSheet = false }
         )
+    }
+
+    // Export options sheet
+    if (showExportSheet) {
+        ExportOptionsSheet(
+            onExportVideo = {
+                showExportSheet = false
+                onNavigateToExport(projectIdStr)
+            },
+            onExportFrame = {
+                showExportSheet = false
+                viewModel.pause()
+                val frameData = OverlayFrameData(
+                    distance = liveGpxValues.distance,
+                    elevation = liveGpxValues.elevation,
+                    elevationGain = liveGpxValues.elevation,
+                    speed = liveGpxValues.speed,
+                    pace = speedOrPaceValue(liveGpxValues.speed, isRunning),
+                    heartRate = liveGpxValues.heartRate,
+                    cadence = liveGpxValues.cadence,
+                    power = liveGpxValues.power,
+                    temperature = liveGpxValues.temperature,
+                    grade = liveGpxValues.grade,
+                    elapsedTime = liveGpxValues.elapsedTime,
+                    progress = liveGpxValues.gpxProgress,
+                    latitude = liveGpxValues.latitude,
+                    longitude = liveGpxValues.longitude
+                )
+                viewModel.exportCurrentFrame(frameData)
+            },
+            onDismiss = { showExportSheet = false }
+        )
+    }
+
+    // Frame export feedback
+    val frameContext = LocalContext.current
+    LaunchedEffect(frameExportState) {
+        when (val state = frameExportState) {
+            is FrameExportState.Complete -> {
+                android.widget.Toast.makeText(
+                    frameContext, "Image saved to gallery", android.widget.Toast.LENGTH_SHORT
+                ).show()
+                viewModel.resetFrameExportState()
+            }
+            is FrameExportState.Error -> {
+                android.widget.Toast.makeText(
+                    frameContext, "Export failed: ${state.message}", android.widget.Toast.LENGTH_SHORT
+                ).show()
+                viewModel.resetFrameExportState()
+            }
+            else -> {}
+        }
     }
 }
 
@@ -1864,4 +1919,62 @@ private fun ratioIcon(ratio: SocialAspectRatio): ImageVector = when (ratio) {
     SocialAspectRatio.PORTRAIT_9_16 -> Icons.Outlined.CropPortrait
     SocialAspectRatio.SQUARE_1_1 -> Icons.Outlined.CropSquare
     SocialAspectRatio.PORTRAIT_4_5 -> Icons.Outlined.Photo
+}
+
+// ── Export Options Sheet ──────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ExportOptionsSheet(
+    onExportVideo: () -> Unit,
+    onExportFrame: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState()
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = CardBg,
+        dragHandle = { BottomSheetDefaults.DragHandle(color = Color.White.copy(alpha = 0.3f)) }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp)
+                .navigationBarsPadding(),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                "Export",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+
+            Button(
+                onClick = onExportVideo,
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)
+            ) {
+                Icon(Icons.Outlined.FileUpload, contentDescription = null, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Export Video", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            }
+
+            androidx.compose.material3.OutlinedButton(
+                onClick = onExportFrame,
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.3f))
+            ) {
+                Icon(Icons.Outlined.Photo, contentDescription = null, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Export Current Frame as Image", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            }
+        }
+    }
 }

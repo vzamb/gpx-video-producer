@@ -33,7 +33,8 @@ data class PreviewClip(
     val endMs: Long,
     val speed: Float = 1f,
     val volume: Float = 1f,
-    val displayTransform: PreviewDisplayTransform = PreviewDisplayTransform()
+    val displayTransform: PreviewDisplayTransform = PreviewDisplayTransform(),
+    val isImage: Boolean = false
 )
 
 data class PreviewDisplayTransform(
@@ -69,6 +70,7 @@ class PreviewEngine @Inject constructor(
     private var boundTextureView: TextureView? = null
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var clipRanges: List<PreviewClipRange> = emptyList()
+    private var imageClipIndices: Set<Int> = emptySet()
 
     /** True while setMediaSources is rebuilding — suppresses stale position updates */
     @Volatile
@@ -203,16 +205,26 @@ class PreviewEngine @Inject constructor(
             timelineCursor += durationMs
             range
         }
+        imageClipIndices = validClips.mapIndexedNotNull { index, clip ->
+            if (clip.isImage) index else null
+        }.toSet()
         val items = validClips.map { clip ->
-            MediaItem.Builder()
-                .setUri(clip.uri)
-                .setClippingConfiguration(
-                    MediaItem.ClippingConfiguration.Builder()
-                        .setStartPositionMs(clip.startMs)
-                        .setEndPositionMs(clip.endMs)
-                        .build()
-                )
-                .build()
+            if (clip.isImage) {
+                MediaItem.Builder()
+                    .setUri(clip.uri)
+                    .setImageDurationMs(clip.endMs - clip.startMs)
+                    .build()
+            } else {
+                MediaItem.Builder()
+                    .setUri(clip.uri)
+                    .setClippingConfiguration(
+                        MediaItem.ClippingConfiguration.Builder()
+                            .setStartPositionMs(clip.startMs)
+                            .setEndPositionMs(clip.endMs)
+                            .build()
+                    )
+                    .build()
+            }
         }
         exoPlayer?.setMediaItems(items)
         exoPlayer?.playWhenReady = false
@@ -361,6 +373,24 @@ class PreviewEngine @Inject constructor(
 
         val uri = player.getMediaItemAt(idx).localConfiguration?.uri
             ?: return captureFrame()
+
+        // Image clips: decode directly instead of using MediaMetadataRetriever
+        if (idx in imageClipIndices) {
+            return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    val inputStream = when {
+                        uri.scheme == "file" || uri.scheme == null ->
+                            java.io.File(uri.path!!).inputStream()
+                        else ->
+                            context.contentResolver.openInputStream(uri)
+                    }
+                    inputStream?.use { android.graphics.BitmapFactory.decodeStream(it) }
+                } catch (_: Exception) {
+                    captureFrame()
+                }
+            }
+        }
+
         val positionUs = player.currentPosition * 1000L
 
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {

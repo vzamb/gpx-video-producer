@@ -248,17 +248,18 @@ class ExportViewModel @Inject constructor(
 
         val settings = _uiState.value.settings
 
-        // Build clips from video tracks (timeline-based)
-        val videoTracks = tracks.filter { it.type == TrackType.VIDEO.name }
+        // Build clips from video and image tracks (timeline-based)
+        val visualTracks = tracks.filter { it.type == TrackType.VIDEO.name || it.type == TrackType.IMAGE.name }
         val clips = mutableListOf<ExportClip>()
 
-        for (track in videoTracks) {
+        for (track in visualTracks) {
             val trackClips = timelineClipDao.getByTrackId(track.id).first()
             for (clip in trackClips) {
                 val mediaItem = clip.mediaItemId?.let { mid ->
                     mediaItems.find { it.id == mid }
-                }
-                val filePath = mediaItem?.localCopyPath ?: mediaItem?.sourcePath ?: continue
+                } ?: continue
+                val filePath = mediaItem.localCopyPath.ifBlank { null } ?: mediaItem.sourcePath.ifBlank { null } ?: continue
+                val isImage = mediaItem.type == "IMAGE"
 
                 val transition = clip.entryTransitionType?.let { type ->
                     try {
@@ -284,7 +285,8 @@ class ExportViewModel @Inject constructor(
                         clipId = clip.id,
                         gpxPointIndex = if (clip.gpxPointIndex >= 0) clip.gpxPointIndex else null,
                         gpxDistanceMeters = if (clip.isSynced) clip.gpxDistanceMeters else null,
-                        isSynced = clip.isSynced
+                        isSynced = clip.isSynced,
+                        isImage = isImage
                     )
                 )
             }
@@ -294,12 +296,13 @@ class ExportViewModel @Inject constructor(
         // Fallback: if no timeline clips exist, build directly from media items
         // (Story Creator wizard doesn't create timeline tracks/clips)
         if (clips.isEmpty()) {
-            val videoItems = mediaItems.filter { it.type == "VIDEO" }
+            val visualItems = mediaItems.filter { it.type == "VIDEO" || it.type == "IMAGE" }
             var currentTimeMs = 0L
-            for (media in videoItems) {
+            for (media in visualItems) {
                 val filePath = media.localCopyPath.ifBlank { media.sourcePath }
                 if (filePath.isBlank()) continue
-                val durationMs = media.durationMs ?: 5000L
+                val isImage = media.type == "IMAGE"
+                val durationMs = media.durationMs ?: if (isImage) 3000L else 5000L
                 clips.add(
                     ExportClip(
                         filePath = filePath,
@@ -309,7 +312,8 @@ class ExportViewModel @Inject constructor(
                         trimEndMs = durationMs,
                         speed = 1f,
                         volume = 1f,
-                        transition = null
+                        transition = null,
+                        isImage = isImage
                     )
                 )
                 currentTimeMs += durationMs

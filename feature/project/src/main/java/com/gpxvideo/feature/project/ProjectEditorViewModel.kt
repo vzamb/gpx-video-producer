@@ -65,6 +65,13 @@ data class ProjectEditorUiState(
     val autoSyncedClipIds: Set<UUID> = emptySet()
 )
 
+sealed interface FrameExportState {
+    data object Idle : FrameExportState
+    data object Exporting : FrameExportState
+    data class Complete(val uri: android.net.Uri) : FrameExportState
+    data class Error(val message: String) : FrameExportState
+}
+
 @HiltViewModel
 class ProjectEditorViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
@@ -184,11 +191,102 @@ class ProjectEditorViewModel @Inject constructor(
     fun togglePlayback() { if (previewEngine.isPlaying.value) pause() else play() }
     fun seekTo(positionMs: Long) = previewEngine.seekTo(positionMs)
 
+    private val _frameExportState = MutableStateFlow<FrameExportState>(FrameExportState.Idle)
+    val frameExportState: StateFlow<FrameExportState> = _frameExportState
+
+    /**
+     * Export the current frame (video + overlay) as a PNG image to the gallery.
+     * Renders the overlay at full output resolution.
+     */
+    fun exportCurrentFrame(frameData: com.gpxvideo.core.overlayrenderer.OverlayFrameData) {
+        viewModelScope.launch {
+            _frameExportState.value = FrameExportState.Exporting
+            try {
+                val aspectRatio = _selectedAspectRatio.value
+                val outputW = aspectRatio.width
+                val outputH = aspectRatio.height
+
+                // Get the clean video frame
+                val videoFrame = previewEngine.captureCleanFrame()
+
+                // Render overlay at full output resolution
+                val renderer = com.gpxvideo.core.overlayrenderer.OverlayTemplateRenderer(context)
+                val template = renderer.load(_storyTemplate.value, outputW, outputH)
+                val overlayBitmap = template?.let {
+                    renderer.render(
+                        template = it,
+                        width = outputW,
+                        height = outputH,
+                        frameData = frameData,
+                        gpxData = _gpxData.value,
+                        activityTitle = _activityTitle.value
+                    )
+                }
+
+                // Composite: video frame + overlay
+                val composite = android.graphics.Bitmap.createBitmap(
+                    outputW, outputH, android.graphics.Bitmap.Config.ARGB_8888
+                )
+                val canvas = android.graphics.Canvas(composite)
+                canvas.drawColor(android.graphics.Color.BLACK)
+
+                if (videoFrame != null) {
+                    val src = android.graphics.Rect(0, 0, videoFrame.width, videoFrame.height)
+                    val dst = android.graphics.Rect(0, 0, outputW, outputH)
+                    canvas.drawBitmap(videoFrame, src, dst, null)
+                }
+
+                if (overlayBitmap != null) {
+                    val src = android.graphics.Rect(0, 0, overlayBitmap.width, overlayBitmap.height)
+                    val dst = android.graphics.Rect(0, 0, outputW, outputH)
+                    canvas.drawBitmap(overlayBitmap, src, dst, null)
+                }
+
+                // Save to gallery
+                val savedUri = kotlinx.coroutines.withContext(Dispatchers.IO) {
+                    saveImageToGallery(composite)
+                }
+                _frameExportState.value = if (savedUri != null) {
+                    FrameExportState.Complete(savedUri)
+                } else {
+                    FrameExportState.Error("Failed to save image")
+                }
+            } catch (e: Exception) {
+                _frameExportState.value = FrameExportState.Error(e.message ?: "Export failed")
+            }
+        }
+    }
+
+    fun resetFrameExportState() {
+        _frameExportState.value = FrameExportState.Idle
+    }
+
+    private fun saveImageToGallery(bitmap: android.graphics.Bitmap): android.net.Uri? {
+        val resolver = context.contentResolver
+        val filename = "GPX_Story_${System.currentTimeMillis()}.png"
+        val contentValues = android.content.ContentValues().apply {
+            put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, filename)
+            put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/png")
+            put(
+                android.provider.MediaStore.Images.Media.RELATIVE_PATH,
+                android.os.Environment.DIRECTORY_PICTURES
+            )
+        }
+        val uri = resolver.insert(
+            android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+            contentValues
+        ) ?: return null
+        resolver.openOutputStream(uri)?.use { output ->
+            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, output)
+        }
+        return uri
+    }
+
     /** Load preview clips respecting timeline trims, order, and effects. */
     private suspend fun loadTimelineAwarePreviewClips(mediaItems: List<MediaItemEntity>) {
         val mediaMap = mediaItems.associateBy { it.id }
-        val videoItems = mediaItems.filter { it.type == "VIDEO" }
-        if (videoItems.isEmpty()) {
+        val visualItems = mediaItems.filter { it.type == "VIDEO" || it.type == "IMAGE" }
+        if (visualItems.isEmpty()) {
             kotlinx.coroutines.withContext(Dispatchers.Main) {
                 previewEngine.setMediaSources(emptyList())
             }
@@ -197,59 +295,63 @@ class ProjectEditorViewModel @Inject constructor(
 
         // Try timeline clips first
         val tracks = trackDao.getByProjectId(projectId).first()
-        val videoTrack = tracks.find { it.type == "VIDEO" }
-        if (videoTrack != null) {
-            val clipEntities = clipDao.getByTrackId(videoTrack.id).first()
-            if (clipEntities.isNotEmpty()) {
-                val clips = clipEntities.sortedBy { it.startTimeMs }.mapNotNull { clipEntity ->
-                    val media = mediaMap[clipEntity.mediaItemId] ?: return@mapNotNull null
-                    val path = media.localCopyPath.ifBlank { media.sourcePath }
-                    val uri = if (path.startsWith("content://")) Uri.parse(path) else Uri.fromFile(File(path))
-                    val sourceAR = if (media.height > 0) {
-                        val r = media.rotation % 360
-                        if (r == 90 || r == 270) media.height.toFloat() / media.width.toFloat()
-                        else media.width.toFloat() / media.height.toFloat()
-                    } else 0f
-                    val effectiveDurationMs = clipEntity.endTimeMs - clipEntity.startTimeMs
-                    PreviewClip(
-                        uri = uri,
-                        startMs = clipEntity.trimStartMs,
-                        endMs = clipEntity.trimStartMs + effectiveDurationMs,
-                        speed = clipEntity.speed,
-                        volume = clipEntity.volume,
-                        displayTransform = PreviewDisplayTransform(
-                            brightness = clipEntity.brightness,
-                            contrast = clipEntity.contrast,
-                            saturation = clipEntity.saturation,
-                            sourceVideoAspectRatio = sourceAR
-                        )
-                    )
+        val visualTracks = tracks.filter { it.type == "VIDEO" || it.type == "IMAGE" }
+        val allClipEntities = mutableListOf<com.gpxvideo.core.database.entity.TimelineClipEntity>()
+        for (track in visualTracks) {
+            allClipEntities += clipDao.getByTrackId(track.id).first()
+        }
+        if (allClipEntities.isNotEmpty()) {
+            val clips = allClipEntities.sortedBy { it.startTimeMs }.mapNotNull { clipEntity ->
+                val media = mediaMap[clipEntity.mediaItemId] ?: return@mapNotNull null
+                val path = media.localCopyPath.ifBlank { media.sourcePath }
+                val uri = if (path.startsWith("content://")) Uri.parse(path) else Uri.fromFile(File(path))
+                val isImage = media.type == "IMAGE"
+                val sourceAR = if (media.height > 0) {
+                    val r = media.rotation % 360
+                    if (r == 90 || r == 270) media.height.toFloat() / media.width.toFloat()
+                    else media.width.toFloat() / media.height.toFloat()
+                } else 0f
+                val effectiveDurationMs = clipEntity.endTimeMs - clipEntity.startTimeMs
+                PreviewClip(
+                    uri = uri,
+                    startMs = if (isImage) 0L else clipEntity.trimStartMs,
+                    endMs = if (isImage) effectiveDurationMs else clipEntity.trimStartMs + effectiveDurationMs,
+                    speed = clipEntity.speed,
+                    volume = clipEntity.volume,
+                    displayTransform = PreviewDisplayTransform(
+                        brightness = clipEntity.brightness,
+                        contrast = clipEntity.contrast,
+                        saturation = clipEntity.saturation,
+                        sourceVideoAspectRatio = sourceAR
+                    ),
+                    isImage = isImage
+                )
+            }
+            if (clips.isNotEmpty()) {
+                kotlinx.coroutines.withContext(Dispatchers.Main) {
+                    previewEngine.setMediaSources(clips)
                 }
-                if (clips.isNotEmpty()) {
-                    kotlinx.coroutines.withContext(Dispatchers.Main) {
-                        previewEngine.setMediaSources(clips)
-                    }
-                    return
-                }
+                return
             }
         }
 
         // Fallback: raw media items (no timeline yet)
-        loadPreviewClips(videoItems)
+        loadPreviewClips(visualItems)
     }
 
     private suspend fun loadPreviewClips(items: List<MediaItemEntity>) {
-        val videoItems = items.filter { it.type == "VIDEO" }
-        if (videoItems.isEmpty()) {
+        val visualItems = items.filter { it.type == "VIDEO" || it.type == "IMAGE" }
+        if (visualItems.isEmpty()) {
             kotlinx.coroutines.withContext(Dispatchers.Main) {
                 previewEngine.setMediaSources(emptyList())
             }
             return
         }
-        val clips = videoItems.map { media ->
+        val clips = visualItems.map { media ->
             val path = media.localCopyPath.ifBlank { media.sourcePath }
             val uri = if (path.startsWith("content://")) Uri.parse(path) else Uri.fromFile(File(path))
-            val durationMs = media.durationMs ?: 5000L
+            val isImage = media.type == "IMAGE"
+            val durationMs = media.durationMs ?: if (isImage) 3000L else 5000L
             val sourceAR = if (media.height > 0) {
                 val r = media.rotation % 360
                 if (r == 90 || r == 270) media.height.toFloat() / media.width.toFloat()
@@ -260,7 +362,8 @@ class ProjectEditorViewModel @Inject constructor(
                 startMs = 0L,
                 endMs = durationMs,
                 speed = 1f,
-                displayTransform = PreviewDisplayTransform(sourceVideoAspectRatio = sourceAR)
+                displayTransform = PreviewDisplayTransform(sourceVideoAspectRatio = sourceAR),
+                isImage = isImage
             )
         }
         kotlinx.coroutines.withContext(Dispatchers.Main) {

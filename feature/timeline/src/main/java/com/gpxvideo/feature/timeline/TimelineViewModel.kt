@@ -206,7 +206,7 @@ class TimelineViewModel @AssistedInject constructor(
         val mediaDuration = media.durationMs
         return when {
             media.type == "VIDEO" && mediaDuration != null && mediaDuration > 0 -> mediaDuration
-            media.type == "IMAGE" -> 5000L
+            media.type == "IMAGE" -> 3000L
             else -> 3000L
         }
     }

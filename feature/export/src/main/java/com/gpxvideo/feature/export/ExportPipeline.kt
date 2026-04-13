@@ -161,23 +161,7 @@ class ExportPipeline @Inject constructor(
 
         // Build EditedMediaItems for each clip
         val editedItems = config.clips.map { clip ->
-            val clippingConfig = MediaItem.ClippingConfiguration.Builder()
-            if (clip.trimStartMs > 0) {
-                clippingConfig.setStartPositionMs(clip.trimStartMs)
-            }
-            // trimEndMs = amount trimmed from end; compute absolute end
-            val sourceDuration = clip.endTimeMs - clip.startTimeMs + clip.trimEndMs + clip.trimStartMs
-            if (clip.trimEndMs > 0) {
-                clippingConfig.setEndPositionMs(sourceDuration - clip.trimEndMs)
-            }
-
-            val mediaItem = MediaItem.Builder()
-                .setUri(clip.filePath)
-                .setClippingConfiguration(clippingConfig.build())
-                .build()
-
             val videoEffects = mutableListOf<androidx.media3.common.Effect>()
-            val audioProcessors = mutableListOf<androidx.media3.common.audio.AudioProcessor>()
 
             // Scale to target resolution
             videoEffects.add(
@@ -186,27 +170,54 @@ class ExportPipeline @Inject constructor(
                 )
             )
 
-            // Speed change
-            if (clip.speed != 1.0f) {
-                videoEffects.add(SpeedChangeEffect(clip.speed))
-                audioProcessors.add(SonicAudioProcessor().apply { setSpeed(clip.speed) })
-            }
+            if (clip.isImage) {
+                val mediaItem = MediaItem.Builder()
+                    .setUri(clip.filePath)
+                    .setImageDurationMs(clip.endTimeMs - clip.startTimeMs)
+                    .build()
 
-            // Volume change — SonicAudioProcessor handles speed; for volume-only
-            // we combine into same processor if speed is also set
-            if (clip.volume != 1.0f && clip.volume >= 0f && clip.speed == 1.0f) {
-                // Use SonicAudioProcessor for volume-only changes
-                audioProcessors.add(SonicAudioProcessor().apply { setSpeed(1.0f) })
-            }
-
-            EditedMediaItem.Builder(mediaItem)
-                .setEffects(
-                    androidx.media3.transformer.Effects(
-                        audioProcessors.toList(),
-                        videoEffects.toList()
+                EditedMediaItem.Builder(mediaItem)
+                    .setEffects(
+                        androidx.media3.transformer.Effects(
+                            emptyList(),
+                            videoEffects.toList()
+                        )
                     )
-                )
-                .build()
+                    .build()
+            } else {
+                val audioProcessors = mutableListOf<androidx.media3.common.audio.AudioProcessor>()
+                val clippingConfig = MediaItem.ClippingConfiguration.Builder()
+                if (clip.trimStartMs > 0) {
+                    clippingConfig.setStartPositionMs(clip.trimStartMs)
+                }
+                val sourceDuration = clip.endTimeMs - clip.startTimeMs + clip.trimEndMs + clip.trimStartMs
+                if (clip.trimEndMs > 0) {
+                    clippingConfig.setEndPositionMs(sourceDuration - clip.trimEndMs)
+                }
+
+                val mediaItem = MediaItem.Builder()
+                    .setUri(clip.filePath)
+                    .setClippingConfiguration(clippingConfig.build())
+                    .build()
+
+                if (clip.speed != 1.0f) {
+                    videoEffects.add(SpeedChangeEffect(clip.speed))
+                    audioProcessors.add(SonicAudioProcessor().apply { setSpeed(clip.speed) })
+                }
+
+                if (clip.volume != 1.0f && clip.volume >= 0f && clip.speed == 1.0f) {
+                    audioProcessors.add(SonicAudioProcessor().apply { setSpeed(1.0f) })
+                }
+
+                EditedMediaItem.Builder(mediaItem)
+                    .setEffects(
+                        androidx.media3.transformer.Effects(
+                            audioProcessors.toList(),
+                            videoEffects.toList()
+                        )
+                    )
+                    .build()
+            }
         }
 
         val sequence = EditedMediaItemSequence(editedItems)
