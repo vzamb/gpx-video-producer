@@ -13,8 +13,10 @@ import com.gpxvideo.core.model.GpxData
 import com.gpxvideo.core.model.GpxPoint
 import com.gpxvideo.core.model.MapStyle
 import com.gpxvideo.core.model.OverlayConfig
+import com.gpxvideo.core.model.OverlayStyle
 import com.gpxvideo.core.model.StatField
 import com.gpxvideo.core.model.StatsLayout
+import com.gpxvideo.core.overlayrenderer.TemplateFontProvider
 import com.gpxvideo.lib.gpxparser.GpxStatistics
 import com.gpxvideo.lib.gpxparser.GpxStats
 import com.gpxvideo.core.common.FormatUtils
@@ -27,7 +29,8 @@ object OverlayRenderer {
         overlay: OverlayConfig.StaticAltitudeProfile,
         gpxData: GpxData,
         width: Int,
-        height: Int
+        height: Int,
+        fontProvider: TemplateFontProvider? = null
     ): Bitmap {
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
@@ -118,7 +121,7 @@ object OverlayRenderer {
                 color = Color.argb(220, 255, 255, 255)
                 textSize = height * 0.08f
                 isAntiAlias = true
-                typeface = Typeface.MONOSPACE
+                typeface = resolveTypeface(null, bold = false, fontProvider)
                 setShadowLayer(3f, 1f, 1f, Color.argb(200, 0, 0, 0))
             }
             canvas.drawText("${maxEle.toInt()}m", 2f, topPad + labelPaint.textSize * 0.4f, labelPaint)
@@ -206,7 +209,8 @@ object OverlayRenderer {
         overlay: OverlayConfig.StaticStats,
         stats: GpxStats,
         width: Int,
-        height: Int
+        height: Int,
+        fontProvider: TemplateFontProvider? = null
     ): Bitmap {
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
@@ -226,13 +230,17 @@ object OverlayRenderer {
         val shadowRadius = width * 0.008f
         val shadowColor = Color.argb(220, 0, 0, 0)
 
+        val fontFamily = overlay.style.fontFamily
+        val normalTypeface = resolveTypeface(fontFamily, bold = false, fontProvider)
+        val boldTypeface = resolveTypeface(fontFamily, bold = true, fontProvider)
+
         // Scale text to fill the cell — remove tight caps so single-stat overlays look good
         val labelPaint = Paint().apply {
             color = Color.argb(180, 255, 255, 255)
             textSize = (cellH * 0.22f).coerceAtLeast(9f)
             isAntiAlias = true
             textAlign = Paint.Align.CENTER
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+            typeface = normalTypeface
             letterSpacing = 0.06f
             setShadowLayer(shadowRadius, 1f, 1f, shadowColor)
         }
@@ -241,7 +249,7 @@ object OverlayRenderer {
             textSize = (cellH * 0.42f).coerceAtLeast(14f)
             isAntiAlias = true
             textAlign = Paint.Align.CENTER
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            typeface = boldTypeface
             setShadowLayer(shadowRadius * 2f, 1.5f, 1.5f, shadowColor)
         }
         val unitPaint = Paint().apply {
@@ -249,6 +257,7 @@ object OverlayRenderer {
             textSize = (cellH * 0.16f).coerceAtLeast(8f)
             isAntiAlias = true
             textAlign = Paint.Align.CENTER
+            typeface = normalTypeface
             setShadowLayer(shadowRadius, 1f, 1f, shadowColor)
         }
 
@@ -277,7 +286,7 @@ object OverlayRenderer {
             val startY = cellTop + (cellH - totalH) / 2f + labelH
 
             canvas.drawText(field.displayName.uppercase(), cx, startY, labelPaint)
-            canvas.drawText(value, cx, startY + spacing + valueH, valuePaint)
+            drawOutlinedText(canvas, value, cx, startY + spacing + valueH, valuePaint, overlay.style)
             if (field.unit.isNotEmpty()) {
                 canvas.drawText(field.unit, cx, startY + spacing + valueH + spacing * 0.5f + unitH, unitPaint)
             }
@@ -366,4 +375,42 @@ object OverlayRenderer {
     private fun formatDistance(meters: Double) = FormatUtils.formatDistance(meters)
     private fun formatDuration(duration: Duration) = FormatUtils.formatDuration(duration)
     private fun formatPace(paceMinPerKm: Double) = FormatUtils.formatPace(paceMinPerKm)
+
+    private fun resolveTypeface(
+        fontFamily: String?,
+        bold: Boolean,
+        fontProvider: TemplateFontProvider?
+    ): Typeface {
+        if (fontProvider != null && fontFamily != null) {
+            return fontProvider.getTypeface(fontFamily, bold)
+        }
+        val base = if (fontFamily != null) {
+            Typeface.create(fontFamily, if (bold) Typeface.BOLD else Typeface.NORMAL)
+        } else {
+            Typeface.DEFAULT
+        }
+        return if (bold) Typeface.create(base, Typeface.BOLD) else base
+    }
+
+    private fun drawOutlinedText(
+        canvas: Canvas,
+        text: String,
+        x: Float, y: Float,
+        fillPaint: Paint,
+        style: OverlayStyle
+    ) {
+        val strokeWidth = style.strokeWidth
+        val strokeColor = style.strokeColor
+        if (strokeWidth > 0 && strokeColor != 0L) {
+            val outlinePaint = Paint(fillPaint).apply {
+                this.style = Paint.Style.STROKE
+                this.strokeWidth = strokeWidth
+                this.color = colorFromLong(strokeColor)
+                strokeCap = Paint.Cap.ROUND
+                strokeJoin = Paint.Join.ROUND
+            }
+            canvas.drawText(text, x, y, outlinePaint)
+        }
+        canvas.drawText(text, x, y, fillPaint)
+    }
 }

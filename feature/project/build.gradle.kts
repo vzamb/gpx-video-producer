@@ -38,9 +38,6 @@ dependencies {
     implementation(project(":lib:gpx-parser"))
     implementation(project(":lib:strava"))
 
-    implementation(libs.lottie)
-    implementation(libs.lottie.compose)
-
     implementation(libs.androidx.datastore.preferences)
 
     implementation(platform(libs.androidx.compose.bom))

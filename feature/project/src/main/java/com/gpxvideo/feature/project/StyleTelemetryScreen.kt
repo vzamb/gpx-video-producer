@@ -48,7 +48,6 @@ import androidx.compose.material.icons.outlined.FileUpload
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.LinkOff
 import androidx.compose.material.icons.outlined.MyLocation
-import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.Photo
 import androidx.compose.material.icons.outlined.PlayArrow
@@ -101,7 +100,6 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -119,10 +117,9 @@ import com.gpxvideo.core.model.GpxData
 import com.gpxvideo.core.model.GpxPoint
 import com.gpxvideo.core.model.SocialAspectRatio
 import com.gpxvideo.core.model.StoryMode
-import com.gpxvideo.core.overlayrenderer.TemplateInfo
-import com.gpxvideo.core.overlayrenderer.LottieOverlayRenderer
-import com.gpxvideo.core.overlayrenderer.LottieTemplateLoader
-import com.gpxvideo.core.overlayrenderer.LoadedTemplate
+import com.gpxvideo.core.overlayrenderer.OverlayTemplateRenderer
+import com.gpxvideo.core.overlayrenderer.UnifiedTemplate
+import com.gpxvideo.core.overlayrenderer.UnifiedTemplateInfo
 import com.gpxvideo.core.overlayrenderer.OverlayFrameData
 import com.gpxvideo.lib.gpxparser.GpxStats
 import com.gpxvideo.lib.gpxparser.GpxStatistics
@@ -155,7 +152,6 @@ fun StyleTelemetryScreen(
     val isPlaying by viewModel.isPlaying.collectAsStateWithLifecycle()
     val videoDuration by viewModel.videoDuration.collectAsStateWithLifecycle()
 
-    var showColorPicker by rememberSaveable { mutableStateOf(false) }
     var showTitleEditor by rememberSaveable { mutableStateOf(false) }
     var showInfoSheet by rememberSaveable { mutableStateOf(false) }
     var showAspectRatioMenu by remember { mutableStateOf(false) }
@@ -223,7 +219,6 @@ fun StyleTelemetryScreen(
                     showAspectRatioMenu = false
                 },
                 onNavigateBack = onNavigateBack,
-                onColorPickerClick = { showColorPicker = true },
                 onInfoClick = { showInfoSheet = true },
                 onTitleClick = { showTitleEditor = true },
                 onReplaceGpx = { showGpxSourcePicker = true },
@@ -251,7 +246,6 @@ fun StyleTelemetryScreen(
             TemplatePreviewSection(
                 uiState = uiState,
                 aspectRatio = uiState.selectedAspectRatio,
-                accentColor = Color(uiState.accentColor),
                 activityTitle = uiState.activityTitle,
                 onTemplateSelected = viewModel::setStoryTemplate,
                 onTitleClick = { showTitleEditor = true },
@@ -296,14 +290,6 @@ fun StyleTelemetryScreen(
                 modifier = Modifier.fillMaxWidth()
             )
         }
-    }
-
-    if (showColorPicker) {
-        ColorPickerSheet(
-            currentColor = uiState.accentColor,
-            onColorSelected = { viewModel.setAccentColor(it) },
-            onDismiss = { showColorPicker = false }
-        )
     }
 
     if (showTitleEditor) {
@@ -635,7 +621,6 @@ private fun StyleTopBar(
     onToggleAspectRatioMenu: () -> Unit,
     onAspectRatioSelected: (SocialAspectRatio) -> Unit,
     onNavigateBack: () -> Unit,
-    onColorPickerClick: () -> Unit,
     onInfoClick: () -> Unit,
     onTitleClick: () -> Unit,
     onReplaceGpx: () -> Unit,
@@ -671,10 +656,6 @@ private fun StyleTopBar(
 
             IconButton(onClick = onTitleClick) {
                 Icon(Icons.Outlined.Title, contentDescription = "Edit Title", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
-            }
-
-            IconButton(onClick = onColorPickerClick) {
-                Icon(Icons.Outlined.Palette, contentDescription = "Accent Color", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
             }
 
             // Aspect ratio dropdown — always rightmost
@@ -784,7 +765,6 @@ private fun StyleBottomBar(onExport: () -> Unit, enabled: Boolean = true, warnin
 private fun TemplatePreviewSection(
     uiState: ProjectEditorUiState,
     aspectRatio: SocialAspectRatio,
-    accentColor: Color,
     activityTitle: String,
     onTemplateSelected: (String) -> Unit,
     onTitleClick: () -> Unit,
@@ -798,8 +778,8 @@ private fun TemplatePreviewSection(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val loader = remember { LottieTemplateLoader(context) }
-    val templates = remember { loader.discoverTemplates() }
+    val templateRenderer = remember { OverlayTemplateRenderer(context) }
+    val templates = remember { templateRenderer.discoverTemplates() }
     val pagerState = rememberPagerState(
         initialPage = templates.indexOfFirst { it.id.equals(uiState.storyTemplate, ignoreCase = true) }.coerceAtLeast(0),
         pageCount = { templates.size }
@@ -828,7 +808,6 @@ private fun TemplatePreviewSection(
                     template = templates[page],
                     gpxData = uiState.gpxData,
                     aspectRatio = aspectRatio,
-                    accentColor = accentColor,
                     activityTitle = activityTitle,
                     onTitleClick = onTitleClick,
                     previewEngine = previewEngine,
@@ -872,10 +851,9 @@ private fun TemplatePreviewSection(
 
 @Composable
 private fun StyleTemplateCard(
-    template: TemplateInfo,
+    template: UnifiedTemplateInfo,
     gpxData: GpxData?,
     aspectRatio: SocialAspectRatio,
-    accentColor: Color,
     activityTitle: String,
     onTitleClick: () -> Unit,
     previewEngine: com.gpxvideo.feature.preview.PreviewEngine,
@@ -917,12 +895,11 @@ private fun StyleTemplateCard(
                 )
             }
 
-            // Template overlay — rendered via Lottie
-            LottieOverlayPreview(
+            // Template overlay
+            TemplateOverlayPreview(
                 template = template,
                 aspectRatio = aspectRatio,
                 gpxData = gpxData,
-                accentColor = accentColor,
                 activityTitle = activityTitle,
                 progress = playbackProgress,
                 liveValues = liveGpxValues,
@@ -980,14 +957,13 @@ private fun speedOrPaceLabel(isRunning: Boolean): String = "PACE"
 private fun speedOrPaceValue(metersPerSec: Double, isRunning: Boolean): String = formatPace(metersPerSec)
 private fun speedOrPaceUnit(isRunning: Boolean): String = "min/km"
 
-// ── Lottie Overlay Preview ────────────────────────────────────────────────
+// ── Template Overlay Preview ──────────────────────────────────────────────
 
 @Composable
-private fun LottieOverlayPreview(
-    template: TemplateInfo,
+private fun TemplateOverlayPreview(
+    template: UnifiedTemplateInfo,
     aspectRatio: SocialAspectRatio,
     gpxData: GpxData?,
-    accentColor: Color,
     activityTitle: String,
     progress: Float,
     liveValues: LiveGpxValues,
@@ -996,21 +972,17 @@ private fun LottieOverlayPreview(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val loader = remember { LottieTemplateLoader(context) }
-    val renderer = remember { LottieOverlayRenderer() }
-
-    // Convert Compose Color to ARGB int
-    val accentArgb = remember(accentColor) { accentColor.toArgb() }
+    val templateRenderer = remember { OverlayTemplateRenderer(context) }
 
     // Use actual output dimensions for template resolution
     val outputW = aspectRatio.width
     val outputH = aspectRatio.height
 
-    var loadedTemplate by remember { mutableStateOf<LoadedTemplate?>(null) }
+    var loadedTemplate by remember { mutableStateOf<UnifiedTemplate?>(null) }
 
-    // Load the Lottie composition using the project aspect ratio
+    // Load the template using the project aspect ratio
     LaunchedEffect(template, aspectRatio) {
-        loadedTemplate = loader.load(template.id, outputW, outputH)
+        loadedTemplate = templateRenderer.load(template.id, outputW, outputH)
     }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize().clickable(onClick = onTitleClick)) {
@@ -1038,16 +1010,14 @@ private fun LottieOverlayPreview(
                 )
             }
 
-            val bitmap = remember(tmpl, widthPx, heightPx, frameData, activityTitle, accentArgb) {
+            val bitmap = remember(tmpl, widthPx, heightPx, frameData, activityTitle) {
                 try {
-                    renderer.render(
-                        composition = tmpl.composition,
-                        jsonString = tmpl.jsonString,
+                    templateRenderer.render(
+                        template = tmpl,
                         width = widthPx,
                         height = heightPx,
                         frameData = frameData,
                         gpxData = gpxData,
-                        accentColor = accentArgb,
                         activityTitle = activityTitle
                     )
                 } catch (e: Exception) {
@@ -1256,68 +1226,6 @@ private fun StyleMiniScrubber(
                 }
             }
         }
-    }
-}
-
-// ── Color Picker Sheet ───────────────────────────────────────────────────
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ColorPickerSheet(
-    currentColor: Int,
-    onColorSelected: (Int) -> Unit,
-    onDismiss: () -> Unit
-) {
-    val sheetState = rememberModalBottomSheetState()
-    val presetColors = listOf(
-        0xFF448AFF.toInt() to "Blue", 0xFF00C853.toInt() to "Green",
-        0xFFFF6D00.toInt() to "Orange", 0xFFEF5350.toInt() to "Red",
-        0xFFAB47BC.toInt() to "Purple", 0xFF26A69A.toInt() to "Teal",
-        0xFFFFD600.toInt() to "Yellow", 0xFFEC407A.toInt() to "Pink",
-        0xFFFFFFFF.toInt() to "White"
-    )
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss, sheetState = sheetState,
-        containerColor = CardBg,
-        dragHandle = { BottomSheetDefaults.DragHandle(color = Color.White.copy(alpha = 0.3f)) }
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 32.dp).navigationBarsPadding()
-        ) {
-            Text("Accent Color", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.padding(bottom = 4.dp))
-            Text("Choose the highlight color for your overlay", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.4f), modifier = Modifier.padding(bottom = 20.dp))
-
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                presetColors.take(5).forEach { (color, name) ->
-                    ColorSwatch(color, name, color == currentColor, { onColorSelected(color); onDismiss() }, Modifier.weight(1f))
-                }
-            }
-            Spacer(Modifier.height(12.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                presetColors.drop(5).forEach { (color, name) ->
-                    ColorSwatch(color, name, color == currentColor, { onColorSelected(color); onDismiss() }, Modifier.weight(1f))
-                }
-                repeat(5 - presetColors.drop(5).size) { Spacer(Modifier.weight(1f)) }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ColorSwatch(color: Int, name: String, isSelected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Column(modifier = modifier.clickable(onClick = onClick), horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(
-            modifier = Modifier.size(44.dp).clip(CircleShape).background(Color(color))
-                .then(if (isSelected) Modifier.border(3.dp, Color.White, CircleShape) else Modifier.border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)),
-            contentAlignment = Alignment.Center
-        ) {
-            if (isSelected) {
-                Icon(Icons.Outlined.Check, contentDescription = null, modifier = Modifier.size(20.dp),
-                    tint = if (color == 0xFFFFFFFF.toInt() || color == 0xFFFFD600.toInt()) Color.Black else Color.White)
-            }
-        }
-        Text(name, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = if (isSelected) 0.8f else 0.4f), modifier = Modifier.padding(top = 4.dp), fontSize = 9.sp)
     }
 }
 

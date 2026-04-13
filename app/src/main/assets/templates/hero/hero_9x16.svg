@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1920" width="1080" height="1920">
+
+  <!-- Title -->
+  <text id="title_text" x="540" y="84" font-family="sans-serif" font-size="33" fill="#448AFF" text-anchor="middle">Activity Title</text>
+
+  <!-- Route Map -->
+  <g id="route_map" transform="translate(672, 6)">
+    <rect id="background" x="0" y="0" width="380" height="380" rx="24" fill="#1A1A2E" fill-opacity="0.6"/>
+    <polyline id="line" points="" fill="none" stroke="#FF5722" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <polygon id="area" points="" fill="#FF5722" fill-opacity="0.15"/>
+    <path id="full_path" d="" fill="none" stroke="#FF5722" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle id="dot" cx="0" cy="0" r="6" fill="#FF5722"/>
+    <circle id="glow" cx="0" cy="0" r="12" fill="#FF5722" fill-opacity="0.3"/>
+  </g>
+
+  <!-- Distance Label -->
+  <text id="label_distance" x="540" y="686" font-family="sans-serif" font-size="30" fill="#448AFF" text-anchor="middle">DISTANCE</text>
+
+  <!-- Hero Distance Stat -->
+  <text id="stat_distance" x="540" y="866" font-family="sans-serif" font-size="168" font-weight="bold" fill="#FFFFFF" text-anchor="middle">0.0</text>
+
+  <!-- Distance Unit -->
+  <text id="stat_distance_unit" x="540" y="941" font-family="sans-serif" font-size="48" font-weight="bold" fill="#FFFFFF" text-anchor="middle">KM</text>
+
+  <!-- Elevation Card -->
+  <rect id="card_elevation" x="48" y="1016" width="312" height="180" rx="30" fill="#FFFFFF" fill-opacity="0.08" stroke="#FFFFFF" stroke-opacity="0.3" stroke-width="1.5"/>
+  <text id="label_elevation" x="204" y="1064" font-family="sans-serif" font-size="24" fill="#66BB6A" text-anchor="middle">ELEVATION</text>
+  <text id="stat_elevation" x="204" y="1136" font-family="sans-serif" font-size="48" font-weight="bold" fill="#FFFFFF" text-anchor="middle">↑ 0</text>
+
+  <!-- Time Card -->
+  <rect id="card_time" x="384" y="1016" width="312" height="180" rx="30" fill="#FFFFFF" fill-opacity="0.08" stroke="#FFFFFF" stroke-opacity="0.3" stroke-width="1.5"/>
+  <text id="label_time" x="540" y="1064" font-family="sans-serif" font-size="24" fill="#26A69A" text-anchor="middle">TIME</text>
+  <text id="stat_time" x="540" y="1136" font-family="sans-serif" font-size="48" font-weight="bold" fill="#FFFFFF" text-anchor="middle">0:00</text>
+
+  <!-- Heart Rate Card -->
+  <rect id="card_hr" x="720" y="1016" width="312" height="180" rx="30" fill="#FFFFFF" fill-opacity="0.08" stroke="#FFFFFF" stroke-opacity="0.3" stroke-width="1.5"/>
+  <text id="label_hr" x="876" y="1064" font-family="sans-serif" font-size="24" fill="#EF5350" text-anchor="middle">HEART RATE</text>
+  <text id="stat_hr" x="876" y="1136" font-family="sans-serif" font-size="48" font-weight="bold" fill="#FFFFFF" text-anchor="middle">—</text>
+
+  <!-- Elevation Chart -->
+  <g id="elevation_chart" transform="translate(48, 1736)">
+    <rect id="background" x="0" y="0" width="984" height="135" rx="16" fill="#1A1A2E" fill-opacity="0.6"/>
+    <polyline id="line" points="" fill="none" stroke="#448AFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <polygon id="area" points="" fill="#448AFF" fill-opacity="0.2"/>
+    <path id="full_path" d="" fill="none" stroke="#448AFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle id="dot" cx="0" cy="0" r="5" fill="#448AFF"/>
+    <circle id="glow" cx="0" cy="0" r="10" fill="#448AFF" fill-opacity="0.3"/>
+  </g>
+
+</svg>

@@ -29,7 +29,9 @@ dependencies {
     implementation(project(":core:common"))
     implementation(project(":core:ui"))
     implementation(project(":core:database"))
+    implementation(project(":core:overlay-renderer"))
     implementation(project(":lib:gpx-parser"))
+    implementation(libs.androidsvg)
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)

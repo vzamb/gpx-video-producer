@@ -30,7 +30,6 @@ dependencies {
     implementation(project(":core:common"))
     implementation(project(":core:ui"))
     implementation(project(":core:overlay-renderer"))
-    implementation(libs.lottie)
     implementation(project(":lib:ffmpeg"))
     implementation(project(":lib:gpx-parser"))
     implementation(project(":feature:overlays"))

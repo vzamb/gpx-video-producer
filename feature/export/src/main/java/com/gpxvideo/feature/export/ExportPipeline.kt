@@ -26,9 +26,8 @@ import androidx.media3.transformer.Transformer
 import com.gpxvideo.core.model.ExportFormat
 import com.gpxvideo.core.model.GpxData
 import com.gpxvideo.core.model.OverlayConfig
-import com.gpxvideo.core.overlayrenderer.LottieOverlayRenderer
-import com.gpxvideo.core.overlayrenderer.LottieTemplateLoader
-import com.gpxvideo.core.overlayrenderer.LoadedTemplate
+import com.gpxvideo.core.overlayrenderer.OverlayTemplateRenderer
+import com.gpxvideo.core.overlayrenderer.UnifiedTemplate
 import com.gpxvideo.core.overlayrenderer.OverlayFrameData
 import com.gpxvideo.lib.ffmpeg.FfmpegResult
 import com.gpxvideo.lib.gpxparser.GpxStats
@@ -251,7 +250,6 @@ class ExportPipeline @Inject constructor(
                     totalDurationMs = totalDurationMs,
                     activityTitle = config.activityTitle,
                     storyMode = config.storyMode,
-                    accentColor = config.accentColor,
                     exportClips = config.clips
                 )
             )
@@ -441,7 +439,7 @@ private class CompositeOverlay(
 
 /**
  * A [BitmapOverlay] that renders the story template overlay per-frame using
- * the Lottie-based LottieOverlayRenderer — same renderer as the preview.
+ * the unified OverlayTemplateRenderer — same renderer as the preview.
  */
 @UnstableApi
 private class DynamicStoryTemplateOverlay(
@@ -454,15 +452,13 @@ private class DynamicStoryTemplateOverlay(
     private val syncEngine: com.gpxvideo.feature.overlays.GpxTimeSyncEngine?,
     private val totalDurationMs: Long,
     private val activityTitle: String = "",
-    private val accentColor: Int = android.graphics.Color.argb(204, 68, 138, 255),
     private val storyMode: String = "FAST_FORWARD",
     private val exportClips: List<ExportClip> = emptyList()
 ) : BitmapOverlay() {
 
-    private val loader = LottieTemplateLoader(context)
-    private val renderer = LottieOverlayRenderer()
-    private val loadedTemplate: LoadedTemplate? by lazy {
-        loader.loadSync(template, width, height)
+    private val templateRenderer = OverlayTemplateRenderer(context)
+    private val loadedTemplate: UnifiedTemplate? by lazy {
+        templateRenderer.loadSync(template, width, height)
     }
 
     // Pre-compute GPX point data for fast indexed lookups
@@ -484,14 +480,12 @@ private class DynamicStoryTemplateOverlay(
             else -> buildAnimatedFrame(progress, timeMs)
         }
 
-        return renderer.render(
-            composition = tmpl.composition,
-            jsonString = tmpl.jsonString,
+        return templateRenderer.render(
+            template = tmpl,
             width = width,
             height = height,
             frameData = frameData,
             gpxData = gpxData,
-            accentColor = accentColor,
             activityTitle = activityTitle
         )
     }

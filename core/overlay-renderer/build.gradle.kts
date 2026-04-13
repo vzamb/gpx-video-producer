@@ -19,7 +19,7 @@ android {
 dependencies {
     implementation(project(":core:model"))
 
-    implementation(libs.lottie)
+    implementation(libs.androidsvg)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.core.ktx)

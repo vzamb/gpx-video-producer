@@ -1,0 +1,14 @@
+{
+  "name": "Pulp",
+  "displayName": "Pulp",
+  "description": "Bold retro overlay with Climate Crisis outlined text and golden accent",
+  "aspectRatios": {
+    "9x16": "pulp_9x16.svg",
+    "16x9": "pulp_16x9.svg",
+    "4x5": "pulp_4x5.svg",
+    "1x1": "pulp_1x1.svg"
+  },
+  "fonts": {
+    "Climate Crisis": "fonts/ClimeCrisis-Regular.ttf"
+  }
+}

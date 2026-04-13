@@ -22,8 +22,8 @@ An Android app for endurance athletes to create professional social media videos
 - **Aspect ratio selector** — switch canvas format (9:16, 16:9, 4:5, 1:1) at any time; preview updates instantly
 
 ### Style & Telemetry ("The Magic")
-- **Predefined templates** — swipe between *Cinematic*, *Hero*, and *Pro Dashboard* overlay layouts
-- **Accent color picker** — customize overlay colors with a tap
+- **SVG overlay templates** — designed in Figma, exported as SVG with per-template custom fonts
+- **Predefined templates** — swipe between *Cinematic*, *Hero*, *Pro Dashboard*, *Pulp*, and more
 - **Two sync modes:**
   - **Summary** — proportionally maps the entire GPX track across your video duration; works with any footage, even clips without timestamps
   - **Live** — real-time sync using GPS timestamps for exact telemetry at each frame; supports spatial alignment via an interactive elevation chart
@@ -59,6 +59,7 @@ gpx-video-producer/
 │   ├── model/              # Domain data classes (Project, GpxData, Overlay, Timeline)
 │   ├── database/           # Room database (v3), entities, DAOs
 │   ├── common/             # Shared utilities, DI modules, DataStore preferences
+│   ├── overlay-renderer/   # SVG template loading, placeholder resolution, Canvas rendering
 │   └── ui/                 # Compose theme, reusable UI components
 ├── feature/
 │   ├── home/               # Project list, onboarding, settings
@@ -111,6 +112,7 @@ Onboarding → Home (project list)
 | Persistence | Room | 2.7.0 |
 | Video Playback | Media3 ExoPlayer | 1.5.1 |
 | Video Export | Media3 Transformer | 1.5.1 |
+| Overlay Templates | AndroidSVG + Figma | 1.4 |
 | Image Loading | Coil 3 | 3.0.4 |
 | Navigation | Navigation Compose | 2.8.5 |
 | Serialization | kotlinx-serialization | 1.7.3 |
@@ -172,6 +174,19 @@ Pure Kotlin JVM module defining the domain language:
 ### `core/database`
 
 Room database (version 3) with 7 entities: `ProjectEntity`, `MediaItemEntity`, `GpxFileEntity`, `TimelineTrackEntity`, `TimelineClipEntity`, `OverlayEntity`, `TemplateEntity`. Each entity has a corresponding DAO with Flow-based reactive queries.
+
+### `core/overlay-renderer`
+
+SVG-based overlay template system:
+
+- **`SvgTemplateLoader`** — discovers templates in `assets/templates/` subdirectories, loads SVG + meta.json, registers per-template custom fonts
+- **`SvgPlaceholderResolver`** — parses SVG XML to extract text layer positions/styles and chart/map bounds from named elements
+- **`SvgOverlayRenderer`** — composites SVG static visuals + Canvas text (fill + stroke outlined) + chart/map data → single Bitmap
+- **`OverlayTemplateRenderer`** — unified facade used by both preview and export for pixel-perfect parity
+- **`ChartRenderer`** — elevation chart with monotone cubic Hermite spline smoothing, gradient fill, glow dot
+- **`RouteMapRenderer`** — route map with Catmull-Rom spline smoothing, direction chevrons, start/end markers
+
+See [`docs/TEMPLATE_GUIDE.md`](docs/TEMPLATE_GUIDE.md) for the full template authoring guide.
 
 ### `feature/preview` — PreviewEngine
 

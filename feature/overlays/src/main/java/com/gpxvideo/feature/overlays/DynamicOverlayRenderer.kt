@@ -15,6 +15,8 @@ import com.gpxvideo.core.model.GpxData
 import com.gpxvideo.core.model.GpxPoint
 import com.gpxvideo.core.model.MapStyle
 import com.gpxvideo.core.model.OverlayConfig
+import com.gpxvideo.core.model.OverlayStyle
+import com.gpxvideo.core.overlayrenderer.TemplateFontProvider
 import com.gpxvideo.lib.gpxparser.GpxStatistics
 import java.time.Duration
 import kotlin.math.cos
@@ -31,7 +33,8 @@ object DynamicOverlayRenderer {
         gpxData: GpxData,
         currentPoint: InterpolatedPoint,
         width: Int,
-        height: Int
+        height: Int,
+        fontProvider: TemplateFontProvider? = null
     ): Bitmap {
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
@@ -183,7 +186,7 @@ object DynamicOverlayRenderer {
             color = Color.WHITE
             textSize = height * 0.1f
             isAntiAlias = true
-            typeface = Typeface.DEFAULT_BOLD
+            typeface = resolveTypeface(null, bold = true, fontProvider)
             textAlign = Paint.Align.CENTER
             setShadowLayer(3f, 1f, 1f, Color.argb(160, 0, 0, 0))
         }
@@ -204,7 +207,8 @@ object DynamicOverlayRenderer {
         gpxData: GpxData,
         currentPoint: InterpolatedPoint,
         width: Int,
-        height: Int
+        height: Int,
+        fontProvider: TemplateFontProvider? = null
     ): Bitmap {
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
@@ -337,7 +341,8 @@ object DynamicOverlayRenderer {
         overlay: OverlayConfig.DynamicStat,
         currentPoint: InterpolatedPoint,
         width: Int,
-        height: Int
+        height: Int,
+        fontProvider: TemplateFontProvider? = null
     ): Bitmap {
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
@@ -347,16 +352,20 @@ object DynamicOverlayRenderer {
         val label = field.displayName
         val unit = field.defaultUnit
         val zoneColor = getZoneColor(field, currentPoint)
+        val fontFamily = overlay.style.fontFamily
 
         val shadowRadius = width * 0.012f
         val shadowColor = Color.argb(220, 0, 0, 0)
+
+        val boldTypeface = resolveTypeface(fontFamily, bold = true, fontProvider)
+        val normalTypeface = resolveTypeface(fontFamily, bold = false, fontProvider)
 
         val valuePaint = Paint().apply {
             color = zoneColor ?: colorFromLong(overlay.style.fontColor)
             textSize = (height * 0.44f).coerceAtLeast(16f)
             isAntiAlias = true
             textAlign = Paint.Align.CENTER
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            typeface = boldTypeface
             setShadowLayer(shadowRadius * 2.5f, 2f, 2f, shadowColor)
         }
 
@@ -365,6 +374,7 @@ object DynamicOverlayRenderer {
             textSize = (height * 0.17f).coerceAtLeast(10f)
             isAntiAlias = true
             textAlign = Paint.Align.CENTER
+            typeface = normalTypeface
             letterSpacing = 0.06f
             setShadowLayer(shadowRadius * 1.5f, 1f, 1f, shadowColor)
         }
@@ -374,6 +384,7 @@ object DynamicOverlayRenderer {
             textSize = (height * 0.14f).coerceAtLeast(9f)
             isAntiAlias = true
             textAlign = Paint.Align.CENTER
+            typeface = normalTypeface
             setShadowLayer(shadowRadius, 1f, 1f, shadowColor)
         }
 
@@ -391,8 +402,10 @@ object DynamicOverlayRenderer {
         val totalH = labelH + spacing + valueH + (if (unitH > 0) spacing * 0.4f + unitH else 0f)
         val baseY = (height - totalH) / 2f + labelH
 
+        // Draw label
         canvas.drawText(label.uppercase(), cx, baseY, labelPaint)
-        canvas.drawText(value, cx, baseY + spacing + valueH, valuePaint)
+        // Draw value with outlined text effect
+        drawOutlinedText(canvas, value, cx, baseY + spacing + valueH, valuePaint, overlay.style)
         if (unit.isNotEmpty()) {
             canvas.drawText(unit, cx, baseY + spacing + valueH + spacing * 0.4f + unitH, unitPaint)
         }
@@ -571,6 +584,48 @@ object DynamicOverlayRenderer {
             isAntiAlias = true
         }
         canvas.drawRoundRect(RectF(0f, 0f, w.toFloat(), h.toFloat()), cr, cr, paint)
+    }
+
+    private fun resolveTypeface(
+        fontFamily: String?,
+        bold: Boolean,
+        fontProvider: TemplateFontProvider?
+    ): Typeface {
+        if (fontProvider != null && fontFamily != null) {
+            return fontProvider.getTypeface(fontFamily, bold)
+        }
+        val base = if (fontFamily != null) {
+            Typeface.create(fontFamily, if (bold) Typeface.BOLD else Typeface.NORMAL)
+        } else {
+            Typeface.DEFAULT
+        }
+        return if (bold) Typeface.create(base, Typeface.BOLD) else base
+    }
+
+    /**
+     * Draws text with a stroke outline then a fill pass, producing the premium
+     * outlined text effect seen in template designs.
+     */
+    private fun drawOutlinedText(
+        canvas: Canvas,
+        text: String,
+        x: Float, y: Float,
+        fillPaint: Paint,
+        style: OverlayStyle
+    ) {
+        val strokeWidth = style.strokeWidth
+        val strokeColor = style.strokeColor
+        if (strokeWidth > 0 && strokeColor != 0L) {
+            val outlinePaint = Paint(fillPaint).apply {
+                this.style = Paint.Style.STROKE
+                this.strokeWidth = strokeWidth
+                this.color = colorFromLong(strokeColor)
+                strokeCap = Paint.Cap.ROUND
+                strokeJoin = Paint.Join.ROUND
+            }
+            canvas.drawText(text, x, y, outlinePaint)
+        }
+        canvas.drawText(text, x, y, fillPaint)
     }
 
     private fun colorFromLong(color: Long): Int = color.toInt()

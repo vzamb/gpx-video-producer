@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1350" width="1080" height="1350">
+  <rect id="dashboard_bg" x="0" y="788" width="1080" height="562" fill="#000000" fill-opacity="0.55"/>
+
+  <text id="title_text" x="36" y="78" font-family="sans-serif" font-size="36" font-weight="bold" fill="#FFFFFF" text-anchor="start">Activity Title</text>
+
+  <g id="route_map" transform="translate(504,0)">
+    <rect id="background" x="0" y="0" width="360" height="360" rx="8" ry="8"
+          fill="#0A0A1A" fill-opacity="0.6"/>
+    <line id="line" x1="0" y1="0" x2="360" y2="0" stroke="#FF5722" stroke-width="2"/>
+    <rect id="area" x="0" y="0" width="360" height="360" fill="#FF5722" fill-opacity="0.2"/>
+    <line id="full_path" x1="0" y1="0" x2="360" y2="0" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.15"/>
+    <circle id="dot" cx="0" cy="0" r="6" fill="#FF5722"/>
+    <circle id="glow" cx="0" cy="0" r="12" fill="#FF5722" fill-opacity="0.3"/>
+  </g>
+
+  <rect id="card_distance" x="24" y="810" width="504" height="120" rx="20" ry="20" fill="#FFFFFF" fill-opacity="0.08" stroke="#FFFFFF" stroke-opacity="0.25" stroke-width="1"/>
+  <text id="label_distance" x="54" y="848" font-family="sans-serif" font-size="22" fill="#448AFF" fill-opacity="0.9" text-anchor="start">DISTANCE</text>
+  <text id="stat_distance" x="54" y="896" font-family="sans-serif" font-size="36" font-weight="bold" fill="#FFFFFF" text-anchor="start">0.0 km</text>
+
+  <rect id="card_elevation" x="546" y="810" width="504" height="120" rx="20" ry="20" fill="#FFFFFF" fill-opacity="0.08" stroke="#FFFFFF" stroke-opacity="0.25" stroke-width="1"/>
+  <text id="label_elevation" x="576" y="848" font-family="sans-serif" font-size="22" fill="#66BB6A" fill-opacity="0.9" text-anchor="start">ELEVATION</text>
+  <text id="stat_elevation" x="576" y="896" font-family="sans-serif" font-size="36" font-weight="bold" fill="#FFFFFF" text-anchor="start">↑ 0 m</text>
+
+  <rect id="card_pace" x="24" y="948" width="504" height="120" rx="20" ry="20" fill="#FFFFFF" fill-opacity="0.08" stroke="#FFFFFF" stroke-opacity="0.25" stroke-width="1"/>
+  <text id="label_pace" x="54" y="986" font-family="sans-serif" font-size="22" fill="#FFAB40" fill-opacity="0.9" text-anchor="start">PACE</text>
+  <text id="stat_pace" x="54" y="1034" font-family="sans-serif" font-size="36" font-weight="bold" fill="#FFFFFF" text-anchor="start">—</text>
+
+  <rect id="card_hr" x="546" y="948" width="504" height="120" rx="20" ry="20" fill="#FFFFFF" fill-opacity="0.08" stroke="#FFFFFF" stroke-opacity="0.25" stroke-width="1"/>
+  <text id="label_hr" x="576" y="986" font-family="sans-serif" font-size="22" fill="#EF5350" fill-opacity="0.9" text-anchor="start">HEART RATE</text>
+  <text id="stat_hr" x="576" y="1034" font-family="sans-serif" font-size="36" font-weight="bold" fill="#FFFFFF" text-anchor="start">—</text>
+
+  <rect id="card_time" x="24" y="1086" width="504" height="120" rx="20" ry="20" fill="#FFFFFF" fill-opacity="0.08" stroke="#FFFFFF" stroke-opacity="0.25" stroke-width="1"/>
+  <text id="label_time" x="54" y="1124" font-family="sans-serif" font-size="22" fill="#26A69A" fill-opacity="0.9" text-anchor="start">TIME</text>
+  <text id="stat_time" x="54" y="1172" font-family="sans-serif" font-size="36" font-weight="bold" fill="#FFFFFF" text-anchor="start">0:00</text>
+
+  <rect id="card_grade" x="546" y="1086" width="504" height="120" rx="20" ry="20" fill="#FFFFFF" fill-opacity="0.08" stroke="#FFFFFF" stroke-opacity="0.25" stroke-width="1"/>
+  <text id="label_grade" x="576" y="1124" font-family="sans-serif" font-size="22" fill="#9C27B0" fill-opacity="0.9" text-anchor="start">GRADE</text>
+  <text id="stat_grade" x="576" y="1172" font-family="sans-serif" font-size="36" font-weight="bold" fill="#FFFFFF" text-anchor="start">0.0%</text>
+
+  <g id="elevation_chart" transform="translate(24,1254)">
+    <rect id="background" x="0" y="0" width="1032" height="72" rx="8" ry="8"
+          fill="#0A0A1A" fill-opacity="0.6"/>
+    <line id="line" x1="0" y1="0" x2="1032" y2="0" stroke="#448AFF" stroke-width="2"/>
+    <rect id="area" x="0" y="0" width="1032" height="72" fill="#448AFF" fill-opacity="0.2"/>
+    <line id="full_path" x1="0" y1="0" x2="1032" y2="0" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.15"/>
+    <circle id="dot" cx="0" cy="0" r="6" fill="#448AFF"/>
+    <circle id="glow" cx="0" cy="0" r="12" fill="#448AFF" fill-opacity="0.3"/>
+  </g>
+</svg>

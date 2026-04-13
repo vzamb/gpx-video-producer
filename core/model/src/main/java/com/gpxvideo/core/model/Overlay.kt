@@ -28,6 +28,9 @@ data class OverlayStyle(
     val fontFamily: String? = null,
     val fontSize: Float = 14f,
     val fontColor: Long = 0xFFFFFFFF,
+    val fontBold: Boolean = false,
+    val strokeColor: Long = 0L,
+    val strokeWidth: Float = 0f,
     val shadowEnabled: Boolean = false,
     val shadowColor: Long = 0x80000000,
     val shadowRadius: Float = 4f
