@@ -1433,7 +1433,13 @@ private fun FrameClipBlock(
     val currentOnTrimDrag by rememberUpdatedState(onTrimDrag)
     val currentOnCommitTrimDrag by rememberUpdatedState(onCommitTrimDrag)
 
-    val mediaDurationMs = mediaItem?.durationMs ?: Long.MAX_VALUE
+    // For images, durationMs is null — images are static and can be extended freely.
+    // Use a large but overflow-safe value instead of Long.MAX_VALUE.
+    val mediaDurationMs = if (mediaItem?.type == "IMAGE") {
+        86_400_000L // 24 hours — effectively unlimited for images
+    } else {
+        mediaItem?.durationMs ?: Long.MAX_VALUE
+    }
 
     val path = mediaItem?.let { it.localCopyPath.ifBlank { it.sourcePath } }
     val isImage = mediaItem?.type == "IMAGE"
