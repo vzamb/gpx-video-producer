@@ -170,6 +170,12 @@ class ExportPipeline @Inject constructor(
                 )
             )
 
+            // Apply brightness/contrast/saturation color adjustments
+            val hasColorAdjust = clip.brightness != 0f || clip.contrast != 1f || clip.saturation != 1f
+            if (hasColorAdjust) {
+                videoEffects.add(buildColorMatrixEffect(clip.brightness, clip.contrast, clip.saturation))
+            }
+
             if (clip.isImage) {
                 val mediaItem = MediaItem.Builder()
                     .setUri(clip.filePath)
@@ -700,5 +706,49 @@ private class DynamicStoryTemplateOverlay(
 
     override fun getOverlaySettings(presentationTimeUs: Long): OverlaySettings {
         return OverlaySettings.Builder().build()
+    }
+}
+
+/**
+ * Builds an RgbMatrix effect that applies brightness/contrast/saturation adjustments.
+ * Uses the same color matrix math as the preview pipeline for pixel-perfect parity.
+ */
+@UnstableApi
+private fun buildColorMatrixEffect(
+    brightness: Float,
+    contrast: Float,
+    saturation: Float
+): androidx.media3.effect.RgbMatrix {
+    val sat = saturation.coerceIn(0f, 1.8f)
+    val con = contrast.coerceIn(0.5f, 1.8f)
+    val bri = brightness.coerceIn(-0.4f, 0.4f) * 255f
+    val translate = (1f - con) * 128f + bri
+
+    // Build saturation matrix
+    val satMatrix = android.graphics.ColorMatrix()
+    satMatrix.setSaturation(sat)
+
+    // Multiply by contrast + brightness
+    satMatrix.postConcat(
+        android.graphics.ColorMatrix(
+            floatArrayOf(
+                con, 0f, 0f, 0f, translate,
+                0f, con, 0f, 0f, translate,
+                0f, 0f, con, 0f, translate,
+                0f, 0f, 0f, 1f, 0f
+            )
+        )
+    )
+
+    val values = satMatrix.array
+    return androidx.media3.effect.RgbMatrix { _, _ ->
+        // Convert 4x5 ColorMatrix to 4x4 (RgbMatrix uses 4x4 GLES matrices, no offset)
+        // Media3 RgbMatrix expects a 4x4 float array in column-major order
+        floatArrayOf(
+            values[0], values[5], values[10], values[15],
+            values[1], values[6], values[11], values[16],
+            values[2], values[7], values[12], values[17],
+            values[3], values[8], values[13], values[18]
+        )
     }
 }

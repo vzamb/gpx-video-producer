@@ -3,7 +3,6 @@ package com.gpxvideo.feature.preview
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.SurfaceTexture
-import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 import android.view.View
 import android.view.TextureView
@@ -22,6 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.viewinterop.AndroidView
@@ -142,11 +142,15 @@ fun VideoPreview(
         // Show image bitmap overlay for image-type clips (ExoPlayer doesn't render
         // images to the video TextureView — they come via setImageOutput callback)
         imageBitmap?.let { bmp ->
+            val imageColorFilter = remember(displayTransform) {
+                buildImageColorFilter(displayTransform)
+            }
             Image(
                 bitmap = bmp.asImageBitmap(),
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
                 alignment = Alignment.Center,
+                colorFilter = imageColorFilter,
                 modifier = Modifier
                     .matchParentSize()
                     .background(Color.Black)
@@ -256,10 +260,10 @@ private fun TextureView.applyVideoColorAdjustments(displayTransform: PreviewDisp
     val brightness = displayTransform.brightness.coerceIn(-0.4f, 0.4f) * 255f
     val translate = (1f - contrast) * 128f + brightness
 
-    val colorMatrix = ColorMatrix().apply {
+    val colorMatrix = android.graphics.ColorMatrix().apply {
         setSaturation(displayTransform.saturation.coerceIn(0f, 1.8f))
         postConcat(
-            ColorMatrix(
+            android.graphics.ColorMatrix(
                 floatArrayOf(
                     contrast, 0f, 0f, 0f, translate,
                     0f, contrast, 0f, 0f, translate,
@@ -274,4 +278,35 @@ private fun TextureView.applyVideoColorAdjustments(displayTransform: PreviewDisp
         colorFilter = ColorMatrixColorFilter(colorMatrix)
     }
     setLayerType(View.LAYER_TYPE_HARDWARE, paint)
+}
+
+/**
+ * Build a Compose ColorFilter matching the same brightness/contrast/saturation
+ * logic used for video TextureView — ensures preview parity for image clips.
+ */
+private fun buildImageColorFilter(displayTransform: PreviewDisplayTransform): ColorFilter? {
+    val isIdentity = displayTransform.brightness == 0f &&
+        displayTransform.contrast == 1f &&
+        displayTransform.saturation == 1f
+
+    if (isIdentity) return null
+
+    val cm = androidx.compose.ui.graphics.ColorMatrix()
+    cm.setToSaturation(displayTransform.saturation.coerceIn(0f, 1.8f))
+
+    val contrast = displayTransform.contrast.coerceIn(0.5f, 1.8f)
+    val brightness = displayTransform.brightness.coerceIn(-0.4f, 0.4f) * 255f
+    val translate = (1f - contrast) * 128f + brightness
+
+    val contrastMatrix = androidx.compose.ui.graphics.ColorMatrix(
+        floatArrayOf(
+            contrast, 0f, 0f, 0f, translate,
+            0f, contrast, 0f, 0f, translate,
+            0f, 0f, contrast, 0f, translate,
+            0f, 0f, 0f, 1f, 0f
+        )
+    )
+    cm *= contrastMatrix
+
+    return ColorFilter.colorMatrix(cm)
 }

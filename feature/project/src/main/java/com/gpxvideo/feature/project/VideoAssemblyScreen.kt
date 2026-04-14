@@ -452,6 +452,7 @@ private fun TimelineAssemblyContent(
                         },
                         onDuplicate = { timelineViewModel.duplicateClip(clip.id) },
                         onDelete = {
+                            clip.mediaItemId?.let { viewModel.deleteMedia(it) }
                             timelineViewModel.deleteClip(clip.id)
                             timelineViewModel.selectClip(null)
                         }
@@ -1435,12 +1436,14 @@ private fun FrameClipBlock(
     val mediaDurationMs = mediaItem?.durationMs ?: Long.MAX_VALUE
 
     val path = mediaItem?.let { it.localCopyPath.ifBlank { it.sourcePath } }
+    val isImage = mediaItem?.type == "IMAGE"
     val frames = if (path != null && clipDurationMs > 0) {
         rememberClipFrames(
             uri = path,
             durationMs = clipDurationMs,
             trimStartMs = clip.trimStartMs,
-            trimEndMs = clip.trimEndMs
+            trimEndMs = clip.trimEndMs,
+            isImage = isImage
         )
     } else {
         emptyList()
@@ -1741,21 +1744,43 @@ private fun EffectPresetRow(
 
     // Extract a single representative frame for effect previews
     var previewFrame by remember(uri) { mutableStateOf<ImageBitmap?>(null) }
-    LaunchedEffect(uri) {
+    val isImage = mediaItem?.type == "IMAGE"
+    LaunchedEffect(uri, isImage) {
         if (uri == null) return@LaunchedEffect
         withContext(Dispatchers.IO) {
-            val retriever = MediaMetadataRetriever()
-            try {
-                val parsedUri = if (uri.startsWith("/")) Uri.fromFile(java.io.File(uri))
-                                else Uri.parse(uri)
-                retriever.setDataSource(context, parsedUri)
-                previewFrame = retriever.getFrameAtTime(
-                    clip.trimStartMs * 1000L,
-                    MediaMetadataRetriever.OPTION_CLOSEST_SYNC
-                )?.asImageBitmap()
-            } catch (_: Exception) {
-            } finally {
-                try { retriever.release() } catch (_: Exception) {}
+            val parsedUri = if (uri.startsWith("/")) Uri.fromFile(java.io.File(uri))
+                            else Uri.parse(uri)
+            if (isImage) {
+                try {
+                    val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    context.contentResolver.openInputStream(parsedUri)?.use {
+                        android.graphics.BitmapFactory.decodeStream(it, null, bounds)
+                    }
+                    var inSampleSize = 1
+                    val maxSize = 128
+                    while (bounds.outWidth / inSampleSize > maxSize ||
+                        bounds.outHeight / inSampleSize > maxSize) {
+                        inSampleSize *= 2
+                    }
+                    val opts = android.graphics.BitmapFactory.Options().apply {
+                        this.inSampleSize = inSampleSize
+                    }
+                    previewFrame = context.contentResolver.openInputStream(parsedUri)?.use {
+                        android.graphics.BitmapFactory.decodeStream(it, null, opts)
+                    }?.asImageBitmap()
+                } catch (_: Exception) {}
+            } else {
+                val retriever = MediaMetadataRetriever()
+                try {
+                    retriever.setDataSource(context, parsedUri)
+                    previewFrame = retriever.getFrameAtTime(
+                        clip.trimStartMs * 1000L,
+                        MediaMetadataRetriever.OPTION_CLOSEST_SYNC
+                    )?.asImageBitmap()
+                } catch (_: Exception) {
+                } finally {
+                    try { retriever.release() } catch (_: Exception) {}
+                }
             }
         }
     }
@@ -1840,36 +1865,64 @@ private fun rememberClipFrames(
     durationMs: Long,
     trimStartMs: Long,
     trimEndMs: Long,
-    frameCount: Int = 4
+    frameCount: Int = 4,
+    isImage: Boolean = false
 ): List<ImageBitmap?> {
     val context = LocalContext.current
     var frames by remember(uri, durationMs, trimStartMs, trimEndMs) {
         mutableStateOf<List<ImageBitmap?>>(emptyList())
     }
 
-    LaunchedEffect(uri, durationMs, trimStartMs, trimEndMs) {
+    LaunchedEffect(uri, durationMs, trimStartMs, trimEndMs, isImage) {
         withContext(Dispatchers.IO) {
-            val retriever = MediaMetadataRetriever()
-            try {
-                val parsedUri = if (uri.startsWith("/")) Uri.fromFile(java.io.File(uri))
-                                else Uri.parse(uri)
-                retriever.setDataSource(context, parsedUri)
-                val effectiveDuration = durationMs.coerceAtLeast(1L)
-                val step = if (frameCount > 1) effectiveDuration / frameCount else effectiveDuration
-                val extracted = (0 until frameCount).map { i ->
-                    val timeUs = (trimStartMs + i * step) * 1000L
-                    try {
-                        retriever.getFrameAtTime(
-                            timeUs,
-                            MediaMetadataRetriever.OPTION_CLOSEST_SYNC
-                        )?.asImageBitmap()
-                    } catch (_: Exception) { null }
+            if (isImage) {
+                // For images, decode once and repeat as thumbnails
+                try {
+                    val parsedUri = if (uri.startsWith("/")) Uri.fromFile(java.io.File(uri))
+                                    else Uri.parse(uri)
+                    val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    context.contentResolver.openInputStream(parsedUri)?.use {
+                        android.graphics.BitmapFactory.decodeStream(it, null, bounds)
+                    }
+                    var inSampleSize = 1
+                    val maxSize = 256
+                    while (bounds.outWidth / inSampleSize > maxSize ||
+                        bounds.outHeight / inSampleSize > maxSize) {
+                        inSampleSize *= 2
+                    }
+                    val opts = android.graphics.BitmapFactory.Options().apply {
+                        this.inSampleSize = inSampleSize
+                    }
+                    val bmp = context.contentResolver.openInputStream(parsedUri)?.use {
+                        android.graphics.BitmapFactory.decodeStream(it, null, opts)
+                    }?.asImageBitmap()
+                    frames = List(frameCount) { bmp }
+                } catch (_: Exception) {
+                    frames = List(frameCount) { null }
                 }
-                frames = extracted
-            } catch (_: Exception) {
-                frames = List(frameCount) { null }
-            } finally {
-                try { retriever.release() } catch (_: Exception) {}
+            } else {
+                val retriever = MediaMetadataRetriever()
+                try {
+                    val parsedUri = if (uri.startsWith("/")) Uri.fromFile(java.io.File(uri))
+                                    else Uri.parse(uri)
+                    retriever.setDataSource(context, parsedUri)
+                    val effectiveDuration = durationMs.coerceAtLeast(1L)
+                    val step = if (frameCount > 1) effectiveDuration / frameCount else effectiveDuration
+                    val extracted = (0 until frameCount).map { i ->
+                        val timeUs = (trimStartMs + i * step) * 1000L
+                        try {
+                            retriever.getFrameAtTime(
+                                timeUs,
+                                MediaMetadataRetriever.OPTION_CLOSEST_SYNC
+                            )?.asImageBitmap()
+                        } catch (_: Exception) { null }
+                    }
+                    frames = extracted
+                } catch (_: Exception) {
+                    frames = List(frameCount) { null }
+                } finally {
+                    try { retriever.release() } catch (_: Exception) {}
+                }
             }
         }
     }

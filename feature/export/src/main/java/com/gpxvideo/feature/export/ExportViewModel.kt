@@ -286,7 +286,10 @@ class ExportViewModel @Inject constructor(
                         gpxPointIndex = if (clip.gpxPointIndex >= 0) clip.gpxPointIndex else null,
                         gpxDistanceMeters = if (clip.isSynced) clip.gpxDistanceMeters else null,
                         isSynced = clip.isSynced,
-                        isImage = isImage
+                        isImage = isImage,
+                        brightness = clip.brightness,
+                        contrast = clip.contrast,
+                        saturation = clip.saturation
                     )
                 )
             }

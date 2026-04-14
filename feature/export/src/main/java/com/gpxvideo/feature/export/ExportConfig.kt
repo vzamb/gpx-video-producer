@@ -39,7 +39,10 @@ data class ExportClip(
     val gpxPointIndex: Int? = null,
     val gpxDistanceMeters: Double? = null,
     val isSynced: Boolean = false,
-    val isImage: Boolean = false
+    val isImage: Boolean = false,
+    val brightness: Float = 0f,
+    val contrast: Float = 1f,
+    val saturation: Float = 1f
 )
 
 data class ExportOverlay(
