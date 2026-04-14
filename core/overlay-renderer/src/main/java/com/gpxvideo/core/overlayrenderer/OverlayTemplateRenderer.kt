@@ -73,7 +73,9 @@ class OverlayTemplateRenderer(private val context: Context) {
         height: Int,
         frameData: OverlayFrameData,
         gpxData: GpxData?,
-        activityTitle: String = ""
+        activityTitle: String = "",
+        showElevationChart: Boolean = true,
+        showRouteMap: Boolean = true
     ): Bitmap {
         return svgRenderer.render(
             svg = template.loaded.svg,
@@ -82,7 +84,9 @@ class OverlayTemplateRenderer(private val context: Context) {
             height = height,
             frameData = frameData,
             gpxData = gpxData,
-            activityTitle = activityTitle
+            activityTitle = activityTitle,
+            showElevationChart = showElevationChart,
+            showRouteMap = showRouteMap
         )
     }
 

@@ -52,7 +52,9 @@ class SvgOverlayRenderer(
         frameData: OverlayFrameData,
         gpxData: GpxData?,
         accentColor: Int = Color.argb(204, 68, 138, 255),
-        activityTitle: String = ""
+        activityTitle: String = "",
+        showElevationChart: Boolean = true,
+        showRouteMap: Boolean = true
     ): Bitmap {
         val bitmap = getOrCreateBitmap(width, height)
         val canvas = Canvas(bitmap)
@@ -105,20 +107,24 @@ class SvgOverlayRenderer(
         val placeholders = cachedPlaceholders ?: emptyMap()
         val dp = width / 360f
 
-        placeholders[SvgTemplateConventions.ELEVATION_CHART]?.let { info ->
-            ChartRenderer.render(
-                canvas, gpxData,
-                info.bounds.left, info.bounds.top, info.bounds.right, info.bounds.bottom,
-                dp, frameData.progress, info.style
-            )
+        if (showElevationChart) {
+            placeholders[SvgTemplateConventions.ELEVATION_CHART]?.let { info ->
+                ChartRenderer.render(
+                    canvas, gpxData,
+                    info.bounds.left, info.bounds.top, info.bounds.right, info.bounds.bottom,
+                    dp, frameData.progress, info.style
+                )
+            }
         }
 
-        placeholders[SvgTemplateConventions.ROUTE_MAP]?.let { info ->
-            RouteMapRenderer.render(
-                canvas, gpxData,
-                info.bounds.left, info.bounds.top, info.bounds.right, info.bounds.bottom,
-                dp, frameData.progress, info.style
-            )
+        if (showRouteMap) {
+            placeholders[SvgTemplateConventions.ROUTE_MAP]?.let { info ->
+                RouteMapRenderer.render(
+                    canvas, gpxData,
+                    info.bounds.left, info.bounds.top, info.bounds.right, info.bounds.bottom,
+                    dp, frameData.progress, info.style
+                )
+            }
         }
 
         return bitmap
@@ -215,11 +221,16 @@ class SvgOverlayRenderer(
             "stat_distance" to frameData.distanceKm,
             "stat_distance_unit" to "km",
             "stat_elevation" to frameData.elevationStr,
+            "stat_elevation_unit" to "m",
             "stat_pace" to frameData.pace,
+            "stat_pace_unit" to "min/km",
             "stat_hr" to frameData.heartRateStr,
+            "stat_hr_unit" to "bpm",
             "stat_time" to frameData.elapsedTimeStr,
             "stat_grade" to frameData.gradeStr,
-            "stat_speed" to "%.1f".format(frameData.speed * 3.6),
+            "stat_grade_unit" to "%",
+            "stat_speed" to frameData.speedKmh,
+            "stat_speed_unit" to "km/h",
             "title_text" to activityTitle
         )
     }

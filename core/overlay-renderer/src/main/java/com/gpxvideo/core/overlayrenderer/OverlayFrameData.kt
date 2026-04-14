@@ -21,9 +21,10 @@ data class OverlayFrameData(
     val longitude: Double = 0.0
 ) {
     val distanceKm: String get() = "%.1f".format(distance / 1000.0)
-    val elevationStr: String get() = "↑ %d".format(elevationGain.toInt())
-    val heartRateStr: String get() = heartRate?.let { "♥ $it" } ?: "—"
-    val gradeStr: String get() = "%.1f%%".format(grade)
+    val elevationStr: String get() = "%d".format(elevationGain.toInt())
+    val heartRateStr: String get() = heartRate?.toString() ?: "—"
+    val gradeStr: String get() = "%.1f".format(grade)
+    val speedKmh: String get() = "%.1f".format(speed * 3.6)
 
     val elapsedTimeStr: String get() {
         val totalSec = elapsedTime / 1000

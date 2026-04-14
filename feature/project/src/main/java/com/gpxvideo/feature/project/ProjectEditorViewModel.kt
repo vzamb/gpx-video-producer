@@ -62,7 +62,9 @@ data class ProjectEditorUiState(
     val accentColor: Int = 0xFF448AFF.toInt(),
     val activityTitle: String = "",
     val clipSyncPoints: Map<UUID, ClipSyncPoint> = emptyMap(),
-    val autoSyncedClipIds: Set<UUID> = emptySet()
+    val autoSyncedClipIds: Set<UUID> = emptySet(),
+    val showElevationChart: Boolean = true,
+    val showRouteMap: Boolean = true
 )
 
 sealed interface FrameExportState {
@@ -106,6 +108,8 @@ class ProjectEditorViewModel @Inject constructor(
     private val _clipSyncPoints = MutableStateFlow<Map<UUID, ClipSyncPoint>>(emptyMap())
     /** Clip IDs that were auto-synced because their video creation date matched the GPX timespan. */
     private val _autoSyncedClipIds = MutableStateFlow<Set<UUID>>(emptySet())
+    private val _showElevationChart = MutableStateFlow(true)
+    private val _showRouteMap = MutableStateFlow(true)
 
     init {
         previewEngine.initialize()
@@ -126,6 +130,8 @@ class ProjectEditorViewModel @Inject constructor(
                     _selectedAspectRatio.value = savedRatio
                     _activityTitle.value = it.activityTitle
                     _accentColor.value = it.accentColor
+                    _showElevationChart.value = it.showElevationChart
+                    _showRouteMap.value = it.showRouteMap
                 }
             }
         }
@@ -219,7 +225,9 @@ class ProjectEditorViewModel @Inject constructor(
                         height = outputH,
                         frameData = frameData,
                         gpxData = _gpxData.value,
-                        activityTitle = _activityTitle.value
+                        activityTitle = _activityTitle.value,
+                        showElevationChart = _showElevationChart.value,
+                        showRouteMap = _showRouteMap.value
                     )
                 }
 
@@ -381,7 +389,11 @@ class ProjectEditorViewModel @Inject constructor(
         _isImportingGpx,
         _storyMode,
         _storyTemplate,
-        combine(_selectedAspectRatio, _accentColor, _activityTitle, _clipSyncPoints, _autoSyncedClipIds) { ar, ac, at, cs, autoIds -> arrayOf(ar, ac, at, cs, autoIds) }
+        combine(
+            combine(_selectedAspectRatio, _accentColor, _activityTitle, _clipSyncPoints, _autoSyncedClipIds) { ar, ac, at, cs, autoIds -> arrayOf(ar, ac, at, cs, autoIds) },
+            _showElevationChart,
+            _showRouteMap
+        ) { extra, sec, srm -> arrayOf(*extra, sec, srm) }
     ) { values ->
         val project = values[0] as ProjectEntity?
         val mediaItems = @Suppress("UNCHECKED_CAST") (values[1] as List<MediaItemEntity>)
@@ -401,6 +413,8 @@ class ProjectEditorViewModel @Inject constructor(
         val clipSyncPoints = extra[3] as Map<UUID, ClipSyncPoint>
         @Suppress("UNCHECKED_CAST")
         val autoSyncedClipIds = extra[4] as Set<UUID>
+        val showElevationChart = extra[5] as Boolean
+        val showRouteMap = extra[6] as Boolean
         ProjectEditorUiState(
             project = project,
             mediaItems = mediaItems,
@@ -416,7 +430,9 @@ class ProjectEditorViewModel @Inject constructor(
             accentColor = accentColor,
             activityTitle = activityTitle,
             clipSyncPoints = clipSyncPoints,
-            autoSyncedClipIds = autoSyncedClipIds
+            autoSyncedClipIds = autoSyncedClipIds,
+            showElevationChart = showElevationChart,
+            showRouteMap = showRouteMap
         )
     }.stateIn(
         scope = viewModelScope,
@@ -656,6 +672,20 @@ class ProjectEditorViewModel @Inject constructor(
         _activityTitle.value = title
         viewModelScope.launch(Dispatchers.IO) {
             projectDao.updateActivityTitle(projectId, title)
+        }
+    }
+
+    fun setShowElevationChart(show: Boolean) {
+        _showElevationChart.value = show
+        viewModelScope.launch(Dispatchers.IO) {
+            projectDao.updateShowElevationChart(projectId, show)
+        }
+    }
+
+    fun setShowRouteMap(show: Boolean) {
+        _showRouteMap.value = show
+        viewModelScope.launch(Dispatchers.IO) {
+            projectDao.updateShowRouteMap(projectId, show)
         }
     }
 

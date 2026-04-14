@@ -59,12 +59,17 @@ These `<text>` elements are **hidden** in the SVG render and **redrawn natively*
 |---|---|
 | `stat_distance` | Distance in km (e.g. `10.5`) |
 | `stat_distance_unit` | Unit label (`km`) |
-| `stat_elevation` | Elevation in meters |
+| `stat_elevation` | Elevation gain in meters (e.g. `234`) |
+| `stat_elevation_unit` | Unit label (`m`) |
 | `stat_pace` | Pace in min/km (e.g. `5:30`) |
-| `stat_hr` | Heart rate in bpm |
+| `stat_pace_unit` | Unit label (`min/km`) |
+| `stat_hr` | Heart rate in bpm (e.g. `160`) |
+| `stat_hr_unit` | Unit label (`bpm`) |
 | `stat_time` | Elapsed time (e.g. `1:23:45`) |
-| `stat_speed` | Speed in km/h |
-| `stat_grade` | Grade percentage |
+| `stat_speed` | Speed in km/h (e.g. `15.3`) |
+| `stat_speed_unit` | Unit label (`km/h`) |
+| `stat_grade` | Grade percentage (e.g. `3.5`) |
+| `stat_grade_unit` | Unit label (`%`) |
 | `title_text` | Activity title |
 
 **Supported attributes on `<text>` elements:**

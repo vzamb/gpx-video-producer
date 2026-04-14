@@ -91,7 +91,12 @@ object SvgTemplateConventions {
     // ── Stat name → OverlayFrameData mapping ──────────────────────────
 
     val STAT_KEYS = setOf(
-        "stat_distance", "stat_distance_unit", "stat_elevation", "stat_pace",
-        "stat_hr", "stat_time", "stat_grade", "stat_speed"
+        "stat_distance", "stat_distance_unit",
+        "stat_elevation", "stat_elevation_unit",
+        "stat_pace", "stat_pace_unit",
+        "stat_hr", "stat_hr_unit",
+        "stat_time",
+        "stat_grade", "stat_grade_unit",
+        "stat_speed", "stat_speed_unit"
     )
 }

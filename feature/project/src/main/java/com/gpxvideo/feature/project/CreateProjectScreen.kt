@@ -73,7 +73,7 @@ fun CreateProjectScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                SportType.entries.forEach { sportType ->
+                SportType.creatableTypes.forEach { sportType ->
                     FilterChip(
                         selected = uiState.sportType == sportType,
                         onClick = { viewModel.onSportTypeSelected(sportType) },

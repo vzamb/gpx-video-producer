@@ -84,6 +84,7 @@ fun SportTypeIcon(
 fun SportType.outlinedIcon(): ImageVector = when (this) {
     SportType.CYCLING -> Icons.Outlined.DirectionsBike
     SportType.RUNNING -> Icons.Outlined.DirectionsRun
+    SportType.WALKING -> Icons.Outlined.Hiking
     SportType.HIKING -> Icons.Outlined.Hiking
     SportType.TRAIL_RUNNING -> Icons.Outlined.Terrain
     SportType.SKIING -> Icons.Outlined.DownhillSkiing

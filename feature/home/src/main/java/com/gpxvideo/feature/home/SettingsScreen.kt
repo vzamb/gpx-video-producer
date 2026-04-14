@@ -146,7 +146,7 @@ fun SettingsScreen(
                 SettingsCycleItem(
                     title = "Default Sport",
                     currentValue = defaultSportType,
-                    options = listOf("Cycling", "Running", "Hiking", "Skiing", "Other"),
+                    options = listOf("Running", "Cycling", "Walking"),
                     onValueChange = { newValue ->
                         defaultSportType = newValue
                         scope.launch {

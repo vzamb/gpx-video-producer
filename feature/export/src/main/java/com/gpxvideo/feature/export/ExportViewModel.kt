@@ -380,7 +380,9 @@ class ExportViewModel @Inject constructor(
             storyTemplate = project.storyTemplate,
             activityTitle = project.activityTitle,
             storyMode = project.storyMode,
-            accentColor = project.accentColor
+            accentColor = project.accentColor,
+            showElevationChart = project.showElevationChart,
+            showRouteMap = project.showRouteMap
         )
     }
 }

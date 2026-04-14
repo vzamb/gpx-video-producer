@@ -77,6 +77,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -259,6 +261,8 @@ fun StyleTelemetryScreen(
                 liveGpxValues = liveGpxValues,
                 storyMode = uiState.storyMode,
                 isRunning = isRunning,
+                showElevationChart = uiState.showElevationChart,
+                showRouteMap = uiState.showRouteMap,
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
@@ -283,6 +287,17 @@ fun StyleTelemetryScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 4.dp)
+            )
+
+            // Graph visibility toggles
+            GraphToggles(
+                showElevationChart = uiState.showElevationChart,
+                showRouteMap = uiState.showRouteMap,
+                onToggleElevation = viewModel::setShowElevationChart,
+                onToggleRouteMap = viewModel::setShowRouteMap,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
             )
 
             // Mini scrubber timeline
@@ -830,6 +845,8 @@ private fun TemplatePreviewSection(
     liveGpxValues: LiveGpxValues,
     storyMode: String,
     isRunning: Boolean,
+    showElevationChart: Boolean = true,
+    showRouteMap: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -872,7 +889,9 @@ private fun TemplatePreviewSection(
                     onTogglePlayback = onTogglePlayback,
                     liveGpxValues = liveGpxValues,
                     storyMode = storyMode,
-                    isRunning = isRunning
+                    isRunning = isRunning,
+                    showElevationChart = showElevationChart,
+                    showRouteMap = showRouteMap
                 )
             }
         }
@@ -918,7 +937,9 @@ private fun StyleTemplateCard(
     onTogglePlayback: () -> Unit,
     liveGpxValues: LiveGpxValues,
     storyMode: String,
-    isRunning: Boolean
+    isRunning: Boolean,
+    showElevationChart: Boolean = true,
+    showRouteMap: Boolean = true
 ) {
     val cardAspectRatio = aspectRatio.width.toFloat() / aspectRatio.height.toFloat()
     val isAnimated = storyMode != StoryMode.STATIC.name
@@ -959,7 +980,9 @@ private fun StyleTemplateCard(
                 progress = playbackProgress,
                 liveValues = liveGpxValues,
                 isRunning = isRunning,
-                onTitleClick = onTitleClick
+                onTitleClick = onTitleClick,
+                showElevationChart = showElevationChart,
+                showRouteMap = showRouteMap
             )
 
             // Play/pause overlay
@@ -1024,6 +1047,8 @@ private fun TemplateOverlayPreview(
     liveValues: LiveGpxValues,
     isRunning: Boolean,
     onTitleClick: () -> Unit,
+    showElevationChart: Boolean = true,
+    showRouteMap: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -1065,7 +1090,7 @@ private fun TemplateOverlayPreview(
                 )
             }
 
-            val bitmap = remember(tmpl, widthPx, heightPx, frameData, activityTitle) {
+            val bitmap = remember(tmpl, widthPx, heightPx, frameData, activityTitle, showElevationChart, showRouteMap) {
                 try {
                     templateRenderer.render(
                         template = tmpl,
@@ -1073,7 +1098,9 @@ private fun TemplateOverlayPreview(
                         height = heightPx,
                         frameData = frameData,
                         gpxData = gpxData,
-                        activityTitle = activityTitle
+                        activityTitle = activityTitle,
+                        showElevationChart = showElevationChart,
+                        showRouteMap = showRouteMap
                     )
                 } catch (e: Exception) {
                     android.util.Log.e("OverlayPreview", "Render failed for ${template.id} ${aspectRatio}: ${e.message}", e)
@@ -1085,6 +1112,60 @@ private fun TemplateOverlayPreview(
                 bitmap = bitmap.asImageBitmap(),
                 contentDescription = "Overlay",
                 modifier = Modifier.fillMaxSize()
+            )
+        }
+    }
+}
+
+// ── Graph Toggles ────────────────────────────────────────────────────────
+
+@Composable
+private fun GraphToggles(
+    showElevationChart: Boolean,
+    showRouteMap: Boolean,
+    onToggleElevation: (Boolean) -> Unit,
+    onToggleRouteMap: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Elevation",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White.copy(alpha = 0.7f)
+            )
+            Switch(
+                checked = showElevationChart,
+                onCheckedChange = onToggleElevation,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = AccentBlue,
+                    checkedTrackColor = AccentBlue.copy(alpha = 0.3f),
+                    uncheckedThumbColor = Color.Gray,
+                    uncheckedTrackColor = Color.Gray.copy(alpha = 0.2f)
+                ),
+                modifier = Modifier.padding(start = 4.dp)
+            )
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Map",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White.copy(alpha = 0.7f)
+            )
+            Switch(
+                checked = showRouteMap,
+                onCheckedChange = onToggleRouteMap,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = AccentBlue,
+                    checkedTrackColor = AccentBlue.copy(alpha = 0.3f),
+                    uncheckedThumbColor = Color.Gray,
+                    uncheckedTrackColor = Color.Gray.copy(alpha = 0.2f)
+                ),
+                modifier = Modifier.padding(start = 4.dp)
             )
         }
     }
@@ -1331,7 +1412,7 @@ private fun ActivityInfoBottomSheet(
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 32.dp).navigationBarsPadding()) {
             val sportIcon = when (sportType.uppercase()) {
                 "RUNNING", "TRAIL_RUNNING" -> Icons.Outlined.DirectionsRun
-                "HIKING" -> Icons.Outlined.Hiking
+                "HIKING", "WALKING" -> Icons.Outlined.Hiking
                 else -> Icons.Outlined.DirectionsBike
             }
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 20.dp)) {

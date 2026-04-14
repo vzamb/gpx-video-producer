@@ -29,7 +29,7 @@ import com.gpxvideo.core.database.entity.TimelineTrackEntity
         OverlayEntity::class,
         TemplateEntity::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = true
 )
 @TypeConverters(Converters::class)

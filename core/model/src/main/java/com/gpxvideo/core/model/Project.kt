@@ -18,6 +18,7 @@ data class Project(
 enum class SportType(val displayName: String) {
     CYCLING("Cycling"),
     RUNNING("Running"),
+    WALKING("Walking"),
     HIKING("Hiking"),
     TRAIL_RUNNING("Trail Running"),
     SKIING("Skiing"),
@@ -26,7 +27,12 @@ enum class SportType(val displayName: String) {
     KAYAKING("Kayaking"),
     CLIMBING("Climbing"),
     MULTI_SPORT("Multi-Sport"),
-    OTHER("Other")
+    OTHER("Other");
+
+    companion object {
+        /** Sport types shown in project creation UI. */
+        val creatableTypes = listOf(RUNNING, CYCLING, WALKING)
+    }
 }
 
 data class OutputSettings(

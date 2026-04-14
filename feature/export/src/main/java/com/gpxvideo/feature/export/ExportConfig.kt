@@ -23,7 +23,9 @@ data class ExportConfig(
     val storyTemplate: String? = null,
     val activityTitle: String = "",
     val storyMode: String = "FAST_FORWARD",
-    val accentColor: Int = 0xFF448AFF.toInt()
+    val accentColor: Int = 0xFF448AFF.toInt(),
+    val showElevationChart: Boolean = true,
+    val showRouteMap: Boolean = true
 )
 
 data class ExportClip(

@@ -267,7 +267,9 @@ class ExportPipeline @Inject constructor(
                     totalDurationMs = totalDurationMs,
                     activityTitle = config.activityTitle,
                     storyMode = config.storyMode,
-                    exportClips = config.clips
+                    exportClips = config.clips,
+                    showElevationChart = config.showElevationChart,
+                    showRouteMap = config.showRouteMap
                 )
             )
         }
@@ -470,7 +472,9 @@ private class DynamicStoryTemplateOverlay(
     private val totalDurationMs: Long,
     private val activityTitle: String = "",
     private val storyMode: String = "FAST_FORWARD",
-    private val exportClips: List<ExportClip> = emptyList()
+    private val exportClips: List<ExportClip> = emptyList(),
+    private val showElevationChart: Boolean = true,
+    private val showRouteMap: Boolean = true
 ) : BitmapOverlay() {
 
     private val templateRenderer = OverlayTemplateRenderer(context)
@@ -503,7 +507,9 @@ private class DynamicStoryTemplateOverlay(
             height = height,
             frameData = frameData,
             gpxData = gpxData,
-            activityTitle = activityTitle
+            activityTitle = activityTitle,
+            showElevationChart = showElevationChart,
+            showRouteMap = showRouteMap
         )
     }
 

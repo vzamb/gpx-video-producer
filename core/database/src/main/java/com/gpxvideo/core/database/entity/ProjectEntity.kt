@@ -41,5 +41,9 @@ data class ProjectEntity(
     @ColumnInfo(name = "activity_title", defaultValue = "")
     val activityTitle: String = "",
     @ColumnInfo(name = "accent_color", defaultValue = "-12010753")
-    val accentColor: Int = 0xFF448AFF.toInt()
+    val accentColor: Int = 0xFF448AFF.toInt(),
+    @ColumnInfo(name = "show_elevation_chart", defaultValue = "1")
+    val showElevationChart: Boolean = true,
+    @ColumnInfo(name = "show_route_map", defaultValue = "1")
+    val showRouteMap: Boolean = true
 )
