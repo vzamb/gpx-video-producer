@@ -168,11 +168,29 @@ class SvgOverlayRenderer(
             }
         }
 
+        // Auto-scale long text (titles) to fit within the available width
+        var fontSize = info.fontSize
+        if (layerName == "title_text") {
+            textPaint.typeface = typeface
+            textPaint.textSize = fontSize
+            val measuredWidth = textPaint.measureText(text)
+            val margin = canvasWidth * 0.04f
+            val availableWidth = when (align) {
+                Paint.Align.RIGHT -> drawX - margin
+                Paint.Align.CENTER -> (canvasWidth - 2 * margin)
+                else -> canvasWidth - drawX - margin
+            }
+            if (measuredWidth > availableWidth && availableWidth > 0) {
+                val scale = (availableWidth / measuredWidth).coerceAtLeast(0.5f)
+                fontSize *= scale
+            }
+        }
+
         // Stroke pass (dark outline) — only if stroke attributes are set
         if (info.strokeWidth > 0 && info.strokeColor != Color.TRANSPARENT) {
             strokePaint.apply {
                 this.typeface = typeface
-                textSize = info.fontSize
+                textSize = fontSize
                 textAlign = align
                 color = info.strokeColor
                 strokeWidth = info.strokeWidth
@@ -185,7 +203,7 @@ class SvgOverlayRenderer(
         // Fill pass
         textPaint.apply {
             this.typeface = typeface
-            textSize = info.fontSize
+            textSize = fontSize
             textAlign = align
             color = info.color
         }

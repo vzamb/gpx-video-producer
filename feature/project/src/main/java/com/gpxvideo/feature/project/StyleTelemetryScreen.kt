@@ -55,6 +55,7 @@ import androidx.compose.material.icons.outlined.Route
 import androidx.compose.material.icons.outlined.EditLocationAlt
 import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.Title
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material.icons.outlined.DirectionsBike
 import androidx.compose.material.icons.outlined.DirectionsRun
@@ -78,7 +79,6 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -227,7 +227,11 @@ fun StyleTelemetryScreen(
                 onInfoClick = { showInfoSheet = true },
                 onTitleClick = { showTitleEditor = true },
                 onReplaceGpx = { showGpxSourcePicker = true },
-                hasGpxData = uiState.gpxData != null
+                hasGpxData = uiState.gpxData != null,
+                showElevationChart = uiState.showElevationChart,
+                showRouteMap = uiState.showRouteMap,
+                onToggleElevation = viewModel::setShowElevationChart,
+                onToggleRouteMap = viewModel::setShowRouteMap
             )
         },
         bottomBar = {
@@ -287,17 +291,6 @@ fun StyleTelemetryScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 4.dp)
-            )
-
-            // Graph visibility toggles
-            GraphToggles(
-                showElevationChart = uiState.showElevationChart,
-                showRouteMap = uiState.showRouteMap,
-                onToggleElevation = viewModel::setShowElevationChart,
-                onToggleRouteMap = viewModel::setShowRouteMap,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
             )
 
             // Mini scrubber timeline
@@ -694,8 +687,13 @@ private fun StyleTopBar(
     onInfoClick: () -> Unit,
     onTitleClick: () -> Unit,
     onReplaceGpx: () -> Unit,
-    hasGpxData: Boolean
+    hasGpxData: Boolean,
+    showElevationChart: Boolean = true,
+    showRouteMap: Boolean = true,
+    onToggleElevation: (Boolean) -> Unit = {},
+    onToggleRouteMap: (Boolean) -> Unit = {}
 ) {
+    var showOverlayMenu by remember { mutableStateOf(false) }
     Surface(color = DarkBg, tonalElevation = 0.dp) {
         Row(
             modifier = Modifier
@@ -726,6 +724,52 @@ private fun StyleTopBar(
 
             IconButton(onClick = onTitleClick) {
                 Icon(Icons.Outlined.Title, contentDescription = "Edit Title", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
+            }
+
+            // Overlay settings dropdown (graph toggles)
+            Box {
+                IconButton(onClick = { showOverlayMenu = true }) {
+                    Icon(Icons.Outlined.Tune, contentDescription = "Overlay Settings", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
+                }
+                DropdownMenu(
+                    expanded = showOverlayMenu,
+                    onDismissRequest = { showOverlayMenu = false }
+                ) {
+                    DropdownMenuItem(
+                        text = {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Elevation Chart")
+                                Switch(
+                                    checked = showElevationChart,
+                                    onCheckedChange = onToggleElevation,
+                                    modifier = Modifier.padding(start = 8.dp)
+                                )
+                            }
+                        },
+                        onClick = { onToggleElevation(!showElevationChart) }
+                    )
+                    DropdownMenuItem(
+                        text = {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Route Map")
+                                Switch(
+                                    checked = showRouteMap,
+                                    onCheckedChange = onToggleRouteMap,
+                                    modifier = Modifier.padding(start = 8.dp)
+                                )
+                            }
+                        },
+                        onClick = { onToggleRouteMap(!showRouteMap) }
+                    )
+                }
             }
 
             // Aspect ratio dropdown — always rightmost
@@ -1112,60 +1156,6 @@ private fun TemplateOverlayPreview(
                 bitmap = bitmap.asImageBitmap(),
                 contentDescription = "Overlay",
                 modifier = Modifier.fillMaxSize()
-            )
-        }
-    }
-}
-
-// ── Graph Toggles ────────────────────────────────────────────────────────
-
-@Composable
-private fun GraphToggles(
-    showElevationChart: Boolean,
-    showRouteMap: Boolean,
-    onToggleElevation: (Boolean) -> Unit,
-    onToggleRouteMap: (Boolean) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "Elevation",
-                style = MaterialTheme.typography.labelSmall,
-                color = Color.White.copy(alpha = 0.7f)
-            )
-            Switch(
-                checked = showElevationChart,
-                onCheckedChange = onToggleElevation,
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = AccentBlue,
-                    checkedTrackColor = AccentBlue.copy(alpha = 0.3f),
-                    uncheckedThumbColor = Color.Gray,
-                    uncheckedTrackColor = Color.Gray.copy(alpha = 0.2f)
-                ),
-                modifier = Modifier.padding(start = 4.dp)
-            )
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "Map",
-                style = MaterialTheme.typography.labelSmall,
-                color = Color.White.copy(alpha = 0.7f)
-            )
-            Switch(
-                checked = showRouteMap,
-                onCheckedChange = onToggleRouteMap,
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = AccentBlue,
-                    checkedTrackColor = AccentBlue.copy(alpha = 0.3f),
-                    uncheckedThumbColor = Color.Gray,
-                    uncheckedTrackColor = Color.Gray.copy(alpha = 0.2f)
-                ),
-                modifier = Modifier.padding(start = 4.dp)
             )
         }
     }
