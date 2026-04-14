@@ -55,22 +55,33 @@ The app identifies elements by their `id` attribute. Wrap everything in a root `
 
 These `<text>` elements are **hidden** in the SVG render and **redrawn natively** with real GPS data using Canvas (fill + stroke outlined text).
 
-| Element ID | Data |
+#### Stat Values
+
+| Element ID | Data | Example |
+|---|---|---|
+| `stat_distance` | Distance in km | `10.5` |
+| `stat_elevation` | Elevation gain in meters | `234` |
+| `stat_pace` | Pace in min/km | `5:30` |
+| `stat_hr` | Heart rate in bpm | `160` |
+| `stat_time` | Elapsed time | `1:23:45` |
+| `stat_speed` | Speed in km/h | `15.3` |
+| `stat_grade` | Grade percentage | `3.5` |
+| `title_text` | Activity title | `Morning Run` |
+
+#### Unit Labels
+
+Each stat can have a companion `_unit` element to display its unit separately. Create a second `<text>` layer in Figma, position it next to the value, and give it the `_unit` ID. The app fills these with fixed strings — they are not editable by the user.
+
+| Element ID | Rendered Value |
 |---|---|
-| `stat_distance` | Distance in km (e.g. `10.5`) |
-| `stat_distance_unit` | Unit label (`km`) |
-| `stat_elevation` | Elevation gain in meters (e.g. `234`) |
-| `stat_elevation_unit` | Unit label (`m`) |
-| `stat_pace` | Pace in min/km (e.g. `5:30`) |
-| `stat_pace_unit` | Unit label (`min/km`) |
-| `stat_hr` | Heart rate in bpm (e.g. `160`) |
-| `stat_hr_unit` | Unit label (`bpm`) |
-| `stat_time` | Elapsed time (e.g. `1:23:45`) |
-| `stat_speed` | Speed in km/h (e.g. `15.3`) |
-| `stat_speed_unit` | Unit label (`km/h`) |
-| `stat_grade` | Grade percentage (e.g. `3.5`) |
-| `stat_grade_unit` | Unit label (`%`) |
-| `title_text` | Activity title |
+| `stat_distance_unit` | `km` |
+| `stat_elevation_unit` | `m` |
+| `stat_pace_unit` | `min/km` |
+| `stat_hr_unit` | `bpm` |
+| `stat_speed_unit` | `km/h` |
+| `stat_grade_unit` | `%` |
+
+> **Tip:** Unit labels are optional. If your design embeds the unit inside a static `label_*` element instead, you don't need the `_unit` fields at all.
 
 **Supported attributes on `<text>` elements:**
 
@@ -78,6 +89,7 @@ These `<text>` elements are **hidden** in the SVG render and **redrawn natively*
 |---|---|
 | `font-family` | Resolved from meta.json fonts or system |
 | `font-size` | Text size in SVG units |
+| `font-weight` | `bold`, `normal`, or numeric (e.g. `700`) |
 | `fill` | Text fill color |
 | `stroke` | Outline color (drawn behind fill) |
 | `stroke-width` | Outline thickness |
@@ -146,3 +158,14 @@ Same structure as elevation chart. The rect defines the map rendering area.
 3. Charts/maps → bounds and colors read from SVG groups, real GPS data rendered by ChartRenderer/RouteMapRenderer
 4. All three layers composite onto a single Bitmap
 5. The **same Bitmap render** is used for both preview and export → pixel-perfect parity
+
+## User Controls
+
+These settings are configured per-project in the app — no template changes needed:
+
+| Setting | Effect |
+|---|---|
+| **Elevation chart toggle** | Show/hide the elevation chart and its background card |
+| **Route map toggle** | Show/hide the route map and its background card |
+| **Activity title** | Text shown in the `title_text` element |
+| **Sync mode** | Static (final totals), Fast Forward (animated), Live Sync (real-time) |
