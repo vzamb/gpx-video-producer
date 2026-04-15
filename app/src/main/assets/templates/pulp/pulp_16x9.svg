@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" fill="none">
+<g id="overlay_16x9">
+<rect width="1080" height="1920" fill="white" />
+<text id="title_text" fill="#FFBE00" stroke="black" style="white-space: pre" stroke-width="2.8" xml:space="preserve" font-family="Wendy One" font-size="56" letter-spacing="0em"><tspan x="49.920" y="115.200">Test Run</tspan></text>
+<g id="elevation_chart" transform="translate(29,842)">
+<g id="glow">
+<circle id="Ellipse 1" cx="357.9" cy="68.9" r="7.5" fill="#FFBE00" fill-opacity="0.3" />
+</g>
+<g id="dot">
+<circle id="Ellipse 1_2" cx="350.8" cy="66.0" r="3.5" fill="#FFBE00" />
+</g>
+<g id="full_path">
+<rect id="Rectangle 1" x="2" y="1" width="1859" height="215" stroke="#FFEFBF" stroke-width="2" />
+</g>
+<g id="line" filter="url(#filter0_d_0_1)">
+<rect id="Rectangle 1_2" x="4" y="1" width="1857" height="214" stroke="#FFBE00" stroke-width="3" />
+</g>
+<g id="area">
+<rect id="Rectangle 1_3" x="0" y="0" width="1862" height="216" fill="#FFBE00" fill-opacity="0.3" />
+</g>
+</g>
+<g id="route_map" transform="translate(58,194)">
+<g id="glow_2">
+<ellipse id="Ellipse 1_3" cx="174.8" cy="197.6" rx="8.83663" ry="5.82461" fill="#FFBE00" fill-opacity="0.3" />
+</g>
+<g id="dot_2">
+<ellipse id="Ellipse 1_4" cx="166.2" cy="193.1" rx="4.12376" ry="2.71815" fill="#FFBE00" />
+</g>
+<g id="full_route" filter="url(#filter1_d_0_1)">
+<rect id="Rectangle 1_4" x="0" y="0" width="864" height="648" stroke="#FFEFBF" stroke-width="3" />
+</g>
+<g id="route">
+<rect id="Rectangle 1_5" x="0" y="0" width="864" height="648" stroke="#FFBE00" stroke-width="3" />
+</g>
+</g>
+<text id="metric_4_label" fill="#FFBE00" stroke="black" style="white-space: pre" stroke-width="2.2" xml:space="preserve" font-family="Wendy One" font-size="28" letter-spacing="0em"><tspan x="1862.400" y="865.772">PACE</tspan></text>
+<text id="metric_4_value" fill="white" stroke="black" style="white-space: pre" stroke-width="2.8" xml:space="preserve" font-family="Wendy One" font-size="42" letter-spacing="0em"><tspan x="1862.400" y="832.022">05:00</tspan></text>
+<text id="metric_3_label" fill="#FFBE00" stroke="black" style="white-space: pre" stroke-width="2.2" xml:space="preserve" font-family="Wendy One" font-size="28" letter-spacing="0em"><tspan x="1862.400" y="663.272">TIME</tspan></text>
+<text id="metric_3_value" fill="white" stroke="black" style="white-space: pre" stroke-width="2.8" xml:space="preserve" font-family="Wendy One" font-size="42" letter-spacing="0em"><tspan x="1862.400" y="629.522">1:00:00</tspan></text>
+<text id="metric_2_label" fill="#FFBE00" stroke="black" style="white-space: pre" stroke-width="2.2" xml:space="preserve" font-family="Wendy One" font-size="28" letter-spacing="0em"><tspan x="1862.400" y="460.772">DIST</tspan></text>
+<text id="metric_2_value" fill="white" stroke="black" style="white-space: pre" stroke-width="2.8" xml:space="preserve" font-family="Wendy One" font-size="42" letter-spacing="0em"><tspan x="1862.400" y="427.022">10.0</tspan></text>
+<text id="metric_1_label" fill="#FFBE00" stroke="black" style="white-space: pre" stroke-width="2.2" xml:space="preserve" font-family="Wendy One" font-size="28" letter-spacing="0em"><tspan x="1862.400" y="258.272">HR</tspan></text>
+<text id="metric_1_value" fill="white" stroke="black" style="white-space: pre" stroke-width="2.8" xml:space="preserve" font-family="Wendy One" font-size="42" letter-spacing="0em"><tspan x="1862.400" y="224.522">130</tspan></text>
+</g>
+<defs>
+<filter id="filter0_d_0_1" x="13" y="1613" width="1046" height="301" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feFlood flood-opacity="0" result="BackgroundImageFix" />
+<feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha" />
+<feOffset dy="4" />
+<feGaussianBlur stdDeviation="2" />
+<feComposite in2="hardAlpha" operator="out" />
+<feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0" />
+<feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_0_1" />
+<feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_0_1" result="shape" />
+</filter>
+<filter id="filter1_d_0_1" x="536" y="228" width="484" height="453" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feFlood flood-opacity="0" result="BackgroundImageFix" />
+<feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha" />
+<feOffset dy="4" />
+<feGaussianBlur stdDeviation="2" />
+<feComposite in2="hardAlpha" operator="out" />
+<feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0" />
+<feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_0_1" />
+<feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_0_1" result="shape" />
+</filter>
+</defs>
+</svg>
