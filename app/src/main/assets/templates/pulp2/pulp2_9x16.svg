@@ -1,13 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920" fill="none">
 <g id="overlay_9x16">
-<text id="label_hr" fill="#FFBE00" stroke="black" style="white-space: pre" stroke-width="4" xml:space="preserve" font-family="Climate Crisis" font-size="50" letter-spacing="0em"><tspan x="942.998" y="227.75">HR</tspan></text>
-<text id="stat_hr" fill="white" stroke="black" style="white-space: pre" stroke-width="5" xml:space="preserve" font-family="Climate Crisis" font-size="75" letter-spacing="0em"><tspan x="837.944" y="174.375">130</tspan></text>
-<text id="label_distance" fill="#FFBE00" stroke="black" style="white-space: pre" stroke-width="4" xml:space="preserve" font-family="Climate Crisis" font-size="50" letter-spacing="0em"><tspan x="869.609" y="431.75">DIST</tspan></text>
-<text id="stat_distance" fill="white" stroke="black" style="white-space: pre" stroke-width="5" xml:space="preserve" font-family="Climate Crisis" font-size="75" letter-spacing="0em"><tspan x="817.476" y="361.375">10.0</tspan></text>
-<text id="label_time" fill="#FFBE00" stroke="black" style="white-space: pre" stroke-width="4" xml:space="preserve" font-family="Climate Crisis" font-size="50" letter-spacing="0em"><tspan x="869.414" y="634.75">TIME</tspan></text>
-<text id="stat_time" fill="white" stroke="black" style="white-space: pre" stroke-width="5" xml:space="preserve" font-family="Climate Crisis" font-size="75" letter-spacing="0em"><tspan x="617.964" y="577.375">1:00:00</tspan></text>
-<text id="label_pace" fill="#FFBE00" stroke="black" style="white-space: pre" stroke-width="4" xml:space="preserve" font-family="Climate Crisis" font-size="50" letter-spacing="0em"><tspan x="846.807" y="837.75">PACE</tspan></text>
-<text id="stat_pace" fill="white" stroke="black" style="white-space: pre" stroke-width="5" xml:space="preserve" font-family="Climate Crisis" font-size="75" letter-spacing="0em"><tspan x="696.919" y="784.375">05:00</tspan></text>
+<text id="metric_1_label" fill="#FFBE00" stroke="black" style="white-space: pre" stroke-width="4" xml:space="preserve" font-family="Climate Crisis" font-size="50" letter-spacing="0em"><tspan x="942.998" y="227.75">HR</tspan></text>
+<text id="metric_1_value" fill="white" stroke="black" style="white-space: pre" stroke-width="5" xml:space="preserve" font-family="Climate Crisis" font-size="75" letter-spacing="0em"><tspan x="837.944" y="174.375">130</tspan></text>
+<text id="metric_2_label" fill="#FFBE00" stroke="black" style="white-space: pre" stroke-width="4" xml:space="preserve" font-family="Climate Crisis" font-size="50" letter-spacing="0em"><tspan x="869.609" y="431.75">DIST</tspan></text>
+<text id="metric_2_value" fill="white" stroke="black" style="white-space: pre" stroke-width="5" xml:space="preserve" font-family="Climate Crisis" font-size="75" letter-spacing="0em"><tspan x="817.476" y="361.375">10.0</tspan></text>
+<text id="metric_3_label" fill="#FFBE00" stroke="black" style="white-space: pre" stroke-width="4" xml:space="preserve" font-family="Climate Crisis" font-size="50" letter-spacing="0em"><tspan x="869.414" y="634.75">TIME</tspan></text>
+<text id="metric_3_value" fill="white" stroke="black" style="white-space: pre" stroke-width="5" xml:space="preserve" font-family="Climate Crisis" font-size="75" letter-spacing="0em"><tspan x="617.964" y="577.375">1:00:00</tspan></text>
+<text id="metric_4_label" fill="#FFBE00" stroke="black" style="white-space: pre" stroke-width="4" xml:space="preserve" font-family="Climate Crisis" font-size="50" letter-spacing="0em"><tspan x="846.807" y="837.75">PACE</tspan></text>
+<text id="metric_4_value" fill="white" stroke="black" style="white-space: pre" stroke-width="5" xml:space="preserve" font-family="Climate Crisis" font-size="75" letter-spacing="0em"><tspan x="696.919" y="784.375">05:00</tspan></text>
 <text id="title_text" fill="#FFBE00" stroke="black" style="white-space: pre" stroke-width="5" xml:space="preserve" font-family="Climate Crisis" font-size="100" letter-spacing="0em"><tspan x="50" y="150">Test Run</tspan></text>
 <g id="elevation_chart">
 <g id="glow">

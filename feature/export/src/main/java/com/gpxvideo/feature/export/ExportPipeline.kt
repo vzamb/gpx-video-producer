@@ -25,6 +25,7 @@ import androidx.media3.transformer.ProgressHolder
 import androidx.media3.transformer.Transformer
 import com.gpxvideo.core.model.ExportFormat
 import com.gpxvideo.core.model.GpxData
+import com.gpxvideo.core.model.MetricType
 import com.gpxvideo.core.model.OverlayConfig
 import com.gpxvideo.core.overlayrenderer.OverlayTemplateRenderer
 import com.gpxvideo.core.overlayrenderer.UnifiedTemplate
@@ -269,7 +270,8 @@ class ExportPipeline @Inject constructor(
                     storyMode = config.storyMode,
                     exportClips = config.clips,
                     showElevationChart = config.showElevationChart,
-                    showRouteMap = config.showRouteMap
+                    showRouteMap = config.showRouteMap,
+                    metricConfig = config.metricConfig
                 )
             )
         }
@@ -474,7 +476,8 @@ private class DynamicStoryTemplateOverlay(
     private val storyMode: String = "FAST_FORWARD",
     private val exportClips: List<ExportClip> = emptyList(),
     private val showElevationChart: Boolean = true,
-    private val showRouteMap: Boolean = true
+    private val showRouteMap: Boolean = true,
+    private val metricConfig: List<MetricType> = MetricType.fallbackMetrics
 ) : BitmapOverlay() {
 
     private val templateRenderer = OverlayTemplateRenderer(context)
@@ -509,7 +512,8 @@ private class DynamicStoryTemplateOverlay(
             gpxData = gpxData,
             activityTitle = activityTitle,
             showElevationChart = showElevationChart,
-            showRouteMap = showRouteMap
+            showRouteMap = showRouteMap,
+            metricConfig = metricConfig
         )
     }
 

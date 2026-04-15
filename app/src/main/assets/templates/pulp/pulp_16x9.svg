@@ -4,17 +4,17 @@
   <text id="title_text" fill="#FFBE00" stroke="black" style="white-space: pre" stroke-width="3" xml:space="preserve" font-family="Climate Crisis" font-size="65" letter-spacing="0em"><tspan x="80" y="95">Test Run</tspan></text>
 
   <!-- Stats: right-aligned column -->
-  <text id="stat_hr" fill="white" stroke="black" style="white-space: pre" stroke-width="3" xml:space="preserve" font-family="Climate Crisis" font-size="48" letter-spacing="0em" text-anchor="end"><tspan x="1870" y="150">130</tspan></text>
-  <text id="label_hr" fill="#FFBE00" stroke="black" style="white-space: pre" stroke-width="2" xml:space="preserve" font-family="Climate Crisis" font-size="32" letter-spacing="0em" text-anchor="end"><tspan x="1870" y="190">HR</tspan></text>
+  <text id="metric_1_value" fill="white" stroke="black" style="white-space: pre" stroke-width="3" xml:space="preserve" font-family="Climate Crisis" font-size="48" letter-spacing="0em" text-anchor="end"><tspan x="1870" y="150">130</tspan></text>
+  <text id="metric_1_label" fill="#FFBE00" stroke="black" style="white-space: pre" stroke-width="2" xml:space="preserve" font-family="Climate Crisis" font-size="32" letter-spacing="0em" text-anchor="end"><tspan x="1870" y="190">HR</tspan></text>
 
-  <text id="stat_distance" fill="white" stroke="black" style="white-space: pre" stroke-width="3" xml:space="preserve" font-family="Climate Crisis" font-size="48" letter-spacing="0em" text-anchor="end"><tspan x="1870" y="275">10.0</tspan></text>
-  <text id="label_distance" fill="#FFBE00" stroke="black" style="white-space: pre" stroke-width="2" xml:space="preserve" font-family="Climate Crisis" font-size="32" letter-spacing="0em" text-anchor="end"><tspan x="1870" y="315">DIST</tspan></text>
+  <text id="metric_2_value" fill="white" stroke="black" style="white-space: pre" stroke-width="3" xml:space="preserve" font-family="Climate Crisis" font-size="48" letter-spacing="0em" text-anchor="end"><tspan x="1870" y="275">10.0</tspan></text>
+  <text id="metric_2_label" fill="#FFBE00" stroke="black" style="white-space: pre" stroke-width="2" xml:space="preserve" font-family="Climate Crisis" font-size="32" letter-spacing="0em" text-anchor="end"><tspan x="1870" y="315">DIST</tspan></text>
 
-  <text id="stat_time" fill="white" stroke="black" style="white-space: pre" stroke-width="3" xml:space="preserve" font-family="Climate Crisis" font-size="48" letter-spacing="0em" text-anchor="end"><tspan x="1870" y="400">10:00:00</tspan></text>
-  <text id="label_time" fill="#FFBE00" stroke="black" style="white-space: pre" stroke-width="2" xml:space="preserve" font-family="Climate Crisis" font-size="32" letter-spacing="0em" text-anchor="end"><tspan x="1870" y="440">TIME</tspan></text>
+  <text id="metric_3_value" fill="white" stroke="black" style="white-space: pre" stroke-width="3" xml:space="preserve" font-family="Climate Crisis" font-size="48" letter-spacing="0em" text-anchor="end"><tspan x="1870" y="400">10:00:00</tspan></text>
+  <text id="metric_3_label" fill="#FFBE00" stroke="black" style="white-space: pre" stroke-width="2" xml:space="preserve" font-family="Climate Crisis" font-size="32" letter-spacing="0em" text-anchor="end"><tspan x="1870" y="440">TIME</tspan></text>
 
-  <text id="stat_pace" fill="white" stroke="black" style="white-space: pre" stroke-width="3" xml:space="preserve" font-family="Climate Crisis" font-size="48" letter-spacing="0em" text-anchor="end"><tspan x="1870" y="525">05:00</tspan></text>
-  <text id="label_pace" fill="#FFBE00" stroke="black" style="white-space: pre" stroke-width="2" xml:space="preserve" font-family="Climate Crisis" font-size="32" letter-spacing="0em" text-anchor="end"><tspan x="1870" y="565">PACE</tspan></text>
+  <text id="metric_4_value" fill="white" stroke="black" style="white-space: pre" stroke-width="3" xml:space="preserve" font-family="Climate Crisis" font-size="48" letter-spacing="0em" text-anchor="end"><tspan x="1870" y="525">05:00</tspan></text>
+  <text id="metric_4_label" fill="#FFBE00" stroke="black" style="white-space: pre" stroke-width="2" xml:space="preserve" font-family="Climate Crisis" font-size="32" letter-spacing="0em" text-anchor="end"><tspan x="1870" y="565">PACE</tspan></text>
 
   <!-- Elevation chart -->
   <g id="elevation_chart">

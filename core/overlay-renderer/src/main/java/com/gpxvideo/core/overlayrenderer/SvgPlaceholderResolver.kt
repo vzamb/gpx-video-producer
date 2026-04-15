@@ -9,7 +9,7 @@ import org.xmlpull.v1.XmlPullParserFactory
  * Resolves text layer positions, chart/map bounds, and chart styles from SVG templates.
  *
  * Uses XML parsing to traverse the SVG DOM and extract:
- * - `<text id="stat_*">` → text layer position, font, colors, stroke
+ * - `<text id="metric_N_value|label|unit">` → text layer position, font, colors, stroke
  * - `<g id="elevation_chart">` → chart bounds + style from named children
  * - `<g id="route_map">` → map bounds + style from named children
  *
@@ -189,7 +189,7 @@ object SvgPlaceholderResolver {
 
         val isBold = fontWeight.equals("bold", ignoreCase = true) ||
                 fontWeight.toIntOrNull()?.let { it >= 700 } == true ||
-                id.startsWith(SvgTemplateConventions.STAT_PREFIX) ||
+                SvgTemplateConventions.isMetricSlot(id) ||
                 id == SvgTemplateConventions.TITLE_TEXT
 
         val justify = when (textAnchor) {

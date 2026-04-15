@@ -6,12 +6,13 @@ package com.gpxvideo.core.overlayrenderer
  * Templates follow a consistent naming scheme so the renderer knows how to
  * handle each element:
  *
- * ## Text layers
- * - `stat_*`   → Dynamic stat values (distance, elevation, pace, hr, time, grade, speed).
- *                Hidden before SVG render; drawn natively with fill + stroke for outlined text.
- * - `label_*`  → Static labels ("DIST", "TIME", etc.). Exported as vector paths from Figma;
- *                rendered by AndroidSVG as-is. No font file needed.
- * - `title_text` → Activity title. Dynamic, drawn natively with accent color.
+ * ## Metric text layers (generic positional slots)
+ * - `metric_N_value` → Dynamic metric value (e.g. "12.3"). Drawn natively with fill + stroke.
+ * - `metric_N_label` → Dynamic metric label (e.g. "DIST"). Drawn natively with fill + stroke.
+ * - `metric_N_unit`  → Dynamic metric unit (e.g. "km"). Drawn natively with fill + stroke.
+ * - `title_text`     → Activity title. Dynamic, drawn natively with accent color.
+ *
+ * The renderer maps each slot to a [MetricType] from the project's metric config.
  *
  * ## Chart / map layers
  * - `elevation_chart` → Group (`<g>`) containing chart style sub-elements:
@@ -28,7 +29,7 @@ package com.gpxvideo.core.overlayrenderer
  * - `card_*`  → Background card shapes (rects, rounded rects)
  * - `scrim`   → Semi-transparent gradient overlay
  *
- * ## SVG attributes on `stat_*` text elements
+ * ## SVG attributes on metric text elements
  * - `font-family`   → Maps to a bundled .ttf via TemplateFontProvider
  * - `font-size`     → Text size in SVG units (scaled to canvas)
  * - `fill`          → Fill color (e.g. "#FFFFFF")
@@ -39,13 +40,14 @@ package com.gpxvideo.core.overlayrenderer
  */
 object SvgTemplateConventions {
 
-    // ── Layer name prefixes ────────────────────────────────────────────
+    // ── Layer name patterns ────────────────────────────────────────────
 
-    const val STAT_PREFIX = "stat_"
-    const val LABEL_PREFIX = "label_"
     const val TITLE_TEXT = "title_text"
     const val CARD_PREFIX = "card_"
     const val SCRIM = "scrim"
+
+    /** Regex matching generic metric slot IDs: metric_1_value, metric_2_label, etc. */
+    private val METRIC_SLOT_REGEX = Regex("""^metric_(\d+)_(value|label|unit)$""")
 
     // ── Chart / map layer ids ──────────────────────────────────────────
 
@@ -72,7 +74,16 @@ object SvgTemplateConventions {
 
     /** Returns true if this layer should be rendered natively (not by SVG). */
     fun isDynamicTextLayer(id: String): Boolean =
-        id.startsWith(STAT_PREFIX) || id == TITLE_TEXT
+        isMetricSlot(id) || id == TITLE_TEXT
+
+    /** Returns true if the id matches `metric_N_(value|label|unit)`. */
+    fun isMetricSlot(id: String): Boolean = METRIC_SLOT_REGEX.matches(id)
+
+    /** Extract the slot number from a metric id (e.g. "metric_2_value" → 2), or null. */
+    fun metricSlotNumber(id: String): Int? = METRIC_SLOT_REGEX.matchEntire(id)?.groupValues?.get(1)?.toIntOrNull()
+
+    /** Extract the slot part from a metric id (e.g. "metric_2_value" → "value"), or null. */
+    fun metricSlotPart(id: String): String? = METRIC_SLOT_REGEX.matchEntire(id)?.groupValues?.get(2)
 
     /** Returns true if this layer is a chart or map placeholder. */
     fun isChartOrMapLayer(id: String): Boolean =
@@ -88,15 +99,15 @@ object SvgTemplateConventions {
     fun stripFigmaSuffix(id: String): String =
         id.replace(Regex("""_\d+$"""), "")
 
-    // ── Stat name → OverlayFrameData mapping ──────────────────────────
+    // ── Slot count detection ──────────────────────────────────────────
 
-    val STAT_KEYS = setOf(
-        "stat_distance", "stat_distance_unit",
-        "stat_elevation", "stat_elevation_unit",
-        "stat_pace", "stat_pace_unit",
-        "stat_hr", "stat_hr_unit",
-        "stat_time",
-        "stat_grade", "stat_grade_unit",
-        "stat_speed", "stat_speed_unit"
-    )
+    /** Count how many metric slots the SVG defines (by scanning for metric_N_value). */
+    fun countSlots(svgString: String): Int {
+        val slots = mutableSetOf<Int>()
+        val regex = Regex("""id\s*=\s*"metric_(\d+)_value"""")
+        for (m in regex.findAll(svgString)) {
+            m.groupValues[1].toIntOrNull()?.let { slots.add(it) }
+        }
+        return slots.size
+    }
 }

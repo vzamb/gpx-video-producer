@@ -45,5 +45,7 @@ data class ProjectEntity(
     @ColumnInfo(name = "show_elevation_chart", defaultValue = "1")
     val showElevationChart: Boolean = true,
     @ColumnInfo(name = "show_route_map", defaultValue = "1")
-    val showRouteMap: Boolean = true
+    val showRouteMap: Boolean = true,
+    @ColumnInfo(name = "metric_config", defaultValue = "NULL")
+    val metricConfig: String? = null
 )

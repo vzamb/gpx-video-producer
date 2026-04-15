@@ -173,15 +173,16 @@ Pure Kotlin JVM module defining the domain language:
 
 ### `core/database`
 
-Room database (version 3) with 7 entities: `ProjectEntity`, `MediaItemEntity`, `GpxFileEntity`, `TimelineTrackEntity`, `TimelineClipEntity`, `OverlayEntity`, `TemplateEntity`. Each entity has a corresponding DAO with Flow-based reactive queries.
+Room database (version 10) with 7 entities: `ProjectEntity`, `MediaItemEntity`, `GpxFileEntity`, `TimelineTrackEntity`, `TimelineClipEntity`, `OverlayEntity`, `TemplateEntity`. Each entity has a corresponding DAO with Flow-based reactive queries.
 
 ### `core/overlay-renderer`
 
-SVG-based overlay template system:
+SVG-based overlay template system with **metric-agnostic slots** (`metric_N_value`, `metric_N_label`, `metric_N_unit`):
 
 - **`SvgTemplateLoader`** — discovers templates in `assets/templates/` subdirectories, loads SVG + meta.json, registers per-template custom fonts
 - **`SvgPlaceholderResolver`** — parses SVG XML to extract text layer positions/styles and chart/map bounds from named elements
-- **`SvgOverlayRenderer`** — composites SVG static visuals + Canvas text (fill + stroke outlined) + chart/map data → single Bitmap
+- **`SvgOverlayRenderer`** — composites SVG static visuals + Canvas text (fill + stroke outlined) + chart/map data → single Bitmap. Maps metric config (per-sport defaults or user overrides) to generic template slots at render time.
+- **`SvgTemplateConventions`** — naming conventions and slot detection (`metric_N_value/label/unit`, `title_text`, chart/map groups)
 - **`OverlayTemplateRenderer`** — unified facade used by both preview and export for pixel-perfect parity
 - **`ChartRenderer`** — elevation chart with monotone cubic Hermite spline smoothing, gradient fill, glow dot
 - **`RouteMapRenderer`** — route map with Catmull-Rom spline smoothing, direction chevrons, start/end markers

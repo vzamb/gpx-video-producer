@@ -66,9 +66,12 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -117,6 +120,7 @@ import androidx.compose.runtime.collectAsState
 import com.gpxvideo.core.model.ClipSyncPoint
 import com.gpxvideo.core.model.GpxData
 import com.gpxvideo.core.model.GpxPoint
+import com.gpxvideo.core.model.MetricType
 import com.gpxvideo.core.model.SocialAspectRatio
 import com.gpxvideo.core.model.StoryMode
 import com.gpxvideo.core.overlayrenderer.OverlayTemplateRenderer
@@ -231,7 +235,10 @@ fun StyleTelemetryScreen(
                 showElevationChart = uiState.showElevationChart,
                 showRouteMap = uiState.showRouteMap,
                 onToggleElevation = viewModel::setShowElevationChart,
-                onToggleRouteMap = viewModel::setShowRouteMap
+                onToggleRouteMap = viewModel::setShowRouteMap,
+                metricConfig = uiState.metricConfig,
+                templateSlotCount = uiState.templateSlotCount,
+                onMetricConfigChanged = viewModel::setMetricConfig
             )
         },
         bottomBar = {
@@ -267,6 +274,7 @@ fun StyleTelemetryScreen(
                 isRunning = isRunning,
                 showElevationChart = uiState.showElevationChart,
                 showRouteMap = uiState.showRouteMap,
+                metricConfig = uiState.metricConfig,
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
@@ -691,7 +699,10 @@ private fun StyleTopBar(
     showElevationChart: Boolean = true,
     showRouteMap: Boolean = true,
     onToggleElevation: (Boolean) -> Unit = {},
-    onToggleRouteMap: (Boolean) -> Unit = {}
+    onToggleRouteMap: (Boolean) -> Unit = {},
+    metricConfig: List<MetricType> = MetricType.fallbackMetrics,
+    templateSlotCount: Int = 4,
+    onMetricConfigChanged: (List<MetricType>) -> Unit = {}
 ) {
     var showOverlayMenu by remember { mutableStateOf(false) }
     Surface(color = DarkBg, tonalElevation = 0.dp) {
@@ -726,7 +737,7 @@ private fun StyleTopBar(
                 Icon(Icons.Outlined.Title, contentDescription = "Edit Title", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
             }
 
-            // Overlay settings dropdown (graph toggles)
+            // Overlay settings dropdown (graph toggles + metrics)
             Box {
                 IconButton(onClick = { showOverlayMenu = true }) {
                     Icon(Icons.Outlined.Tune, contentDescription = "Overlay Settings", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
@@ -735,6 +746,7 @@ private fun StyleTopBar(
                     expanded = showOverlayMenu,
                     onDismissRequest = { showOverlayMenu = false }
                 ) {
+                    // Graph toggles
                     DropdownMenuItem(
                         text = {
                             Row(
@@ -769,6 +781,56 @@ private fun StyleTopBar(
                         },
                         onClick = { onToggleRouteMap(!showRouteMap) }
                     )
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                    // Metric selection section
+                    Text(
+                        "Metrics ($templateSlotCount slots)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                    )
+
+                    val enabledSet = remember(metricConfig) { metricConfig.toSet() }
+                    MetricType.entries.forEach { metric ->
+                        val isEnabled = metric in enabledSet
+                        val atLimit = metricConfig.size >= templateSlotCount && !isEnabled
+                        DropdownMenuItem(
+                            text = {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Checkbox(
+                                        checked = isEnabled,
+                                        onCheckedChange = null,
+                                        enabled = !atLimit,
+                                        colors = CheckboxDefaults.colors(
+                                            checkedColor = MaterialTheme.colorScheme.primary,
+                                            disabledUncheckedColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
+                                        )
+                                    )
+                                    Text(
+                                        metric.displayName,
+                                        modifier = Modifier.padding(start = 4.dp),
+                                        color = if (atLimit) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                                else MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            },
+                            onClick = {
+                                if (isEnabled) {
+                                    // Remove — always allowed (at least 0 metrics)
+                                    onMetricConfigChanged(metricConfig - metric)
+                                } else if (!atLimit) {
+                                    // Add — only if below slot limit
+                                    onMetricConfigChanged(metricConfig + metric)
+                                }
+                            },
+                            enabled = isEnabled || !atLimit
+                        )
+                    }
                 }
             }
 
@@ -891,6 +953,7 @@ private fun TemplatePreviewSection(
     isRunning: Boolean,
     showElevationChart: Boolean = true,
     showRouteMap: Boolean = true,
+    metricConfig: List<MetricType> = MetricType.fallbackMetrics,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -935,7 +998,8 @@ private fun TemplatePreviewSection(
                     storyMode = storyMode,
                     isRunning = isRunning,
                     showElevationChart = showElevationChart,
-                    showRouteMap = showRouteMap
+                    showRouteMap = showRouteMap,
+                    metricConfig = metricConfig
                 )
             }
         }
@@ -983,7 +1047,8 @@ private fun StyleTemplateCard(
     storyMode: String,
     isRunning: Boolean,
     showElevationChart: Boolean = true,
-    showRouteMap: Boolean = true
+    showRouteMap: Boolean = true,
+    metricConfig: List<MetricType> = MetricType.fallbackMetrics
 ) {
     val cardAspectRatio = aspectRatio.width.toFloat() / aspectRatio.height.toFloat()
     val isAnimated = storyMode != StoryMode.STATIC.name
@@ -1026,7 +1091,8 @@ private fun StyleTemplateCard(
                 isRunning = isRunning,
                 onTitleClick = onTitleClick,
                 showElevationChart = showElevationChart,
-                showRouteMap = showRouteMap
+                showRouteMap = showRouteMap,
+                metricConfig = metricConfig
             )
 
             // Play/pause overlay
@@ -1093,6 +1159,7 @@ private fun TemplateOverlayPreview(
     onTitleClick: () -> Unit,
     showElevationChart: Boolean = true,
     showRouteMap: Boolean = true,
+    metricConfig: List<MetricType> = MetricType.fallbackMetrics,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -1134,7 +1201,7 @@ private fun TemplateOverlayPreview(
                 )
             }
 
-            val bitmap = remember(tmpl, widthPx, heightPx, frameData, activityTitle, showElevationChart, showRouteMap) {
+            val bitmap = remember(tmpl, widthPx, heightPx, frameData, activityTitle, showElevationChart, showRouteMap, metricConfig) {
                 try {
                     templateRenderer.render(
                         template = tmpl,
@@ -1144,7 +1211,8 @@ private fun TemplateOverlayPreview(
                         gpxData = gpxData,
                         activityTitle = activityTitle,
                         showElevationChart = showElevationChart,
-                        showRouteMap = showRouteMap
+                        showRouteMap = showRouteMap,
+                        metricConfig = metricConfig
                     )
                 } catch (e: Exception) {
                     android.util.Log.e("OverlayPreview", "Render failed for ${template.id} ${aspectRatio}: ${e.message}", e)

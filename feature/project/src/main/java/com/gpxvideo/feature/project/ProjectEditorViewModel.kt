@@ -18,8 +18,12 @@ import com.gpxvideo.core.database.entity.MediaItemEntity
 import com.gpxvideo.core.database.entity.ProjectEntity
 import com.gpxvideo.core.model.ClipSyncPoint
 import com.gpxvideo.core.model.GpxData
+import com.gpxvideo.core.model.MetricType
 import com.gpxvideo.core.model.SocialAspectRatio
+import com.gpxvideo.core.model.SportType
 import com.gpxvideo.core.model.StoryMode
+import com.gpxvideo.core.overlayrenderer.OverlayTemplateRenderer
+import com.gpxvideo.core.overlayrenderer.SvgTemplateConventions
 import com.gpxvideo.feature.gpx.GpxImportManager
 import com.gpxvideo.feature.gpx.StravaStreamConverter
 import com.gpxvideo.feature.preview.PreviewClip
@@ -64,7 +68,9 @@ data class ProjectEditorUiState(
     val clipSyncPoints: Map<UUID, ClipSyncPoint> = emptyMap(),
     val autoSyncedClipIds: Set<UUID> = emptySet(),
     val showElevationChart: Boolean = true,
-    val showRouteMap: Boolean = true
+    val showRouteMap: Boolean = true,
+    val metricConfig: List<MetricType> = MetricType.fallbackMetrics,
+    val templateSlotCount: Int = 4
 )
 
 sealed interface FrameExportState {
@@ -110,6 +116,8 @@ class ProjectEditorViewModel @Inject constructor(
     private val _autoSyncedClipIds = MutableStateFlow<Set<UUID>>(emptySet())
     private val _showElevationChart = MutableStateFlow(true)
     private val _showRouteMap = MutableStateFlow(true)
+    private val _metricConfig = MutableStateFlow(MetricType.fallbackMetrics)
+    private val _templateSlotCount = MutableStateFlow(4)
 
     init {
         previewEngine.initialize()
@@ -132,6 +140,7 @@ class ProjectEditorViewModel @Inject constructor(
                     _accentColor.value = it.accentColor
                     _showElevationChart.value = it.showElevationChart
                     _showRouteMap.value = it.showRouteMap
+                    _metricConfig.value = resolveMetricConfig(it)
                 }
             }
         }
@@ -185,6 +194,18 @@ class ProjectEditorViewModel @Inject constructor(
                 _autoSyncedClipIds.value = autoIds
             }
         }
+        // Compute template slot count when template or aspect ratio changes
+        viewModelScope.launch(Dispatchers.IO) {
+            combine(_storyTemplate, _selectedAspectRatio) { tmpl, ratio -> tmpl to ratio }
+                .collect { (templateId, ratio) ->
+                    val renderer = OverlayTemplateRenderer(context)
+                    val loaded = renderer.load(templateId, ratio.width, ratio.height)
+                    val slots = loaded?.let {
+                        SvgTemplateConventions.countSlots(it.loaded.rawSvgString)
+                    } ?: 4
+                    _templateSlotCount.value = slots
+                }
+        }
     }
 
     // ── Preview playback ─────────────────────────────────────────────────
@@ -227,7 +248,8 @@ class ProjectEditorViewModel @Inject constructor(
                         gpxData = _gpxData.value,
                         activityTitle = _activityTitle.value,
                         showElevationChart = _showElevationChart.value,
-                        showRouteMap = _showRouteMap.value
+                        showRouteMap = _showRouteMap.value,
+                        metricConfig = _metricConfig.value
                     )
                 }
 
@@ -392,8 +414,10 @@ class ProjectEditorViewModel @Inject constructor(
         combine(
             combine(_selectedAspectRatio, _accentColor, _activityTitle, _clipSyncPoints, _autoSyncedClipIds) { ar, ac, at, cs, autoIds -> arrayOf(ar, ac, at, cs, autoIds) },
             _showElevationChart,
-            _showRouteMap
-        ) { extra, sec, srm -> arrayOf(*extra, sec, srm) }
+            _showRouteMap,
+            _metricConfig,
+            _templateSlotCount
+        ) { extra, sec, srm, mc, tsc -> arrayOf(*extra, sec, srm, mc, tsc) }
     ) { values ->
         val project = values[0] as ProjectEntity?
         val mediaItems = @Suppress("UNCHECKED_CAST") (values[1] as List<MediaItemEntity>)
@@ -415,6 +439,9 @@ class ProjectEditorViewModel @Inject constructor(
         val autoSyncedClipIds = extra[4] as Set<UUID>
         val showElevationChart = extra[5] as Boolean
         val showRouteMap = extra[6] as Boolean
+        @Suppress("UNCHECKED_CAST")
+        val metricConfig = extra[7] as List<MetricType>
+        val templateSlotCount = extra[8] as Int
         ProjectEditorUiState(
             project = project,
             mediaItems = mediaItems,
@@ -432,7 +459,9 @@ class ProjectEditorViewModel @Inject constructor(
             clipSyncPoints = clipSyncPoints,
             autoSyncedClipIds = autoSyncedClipIds,
             showElevationChart = showElevationChart,
-            showRouteMap = showRouteMap
+            showRouteMap = showRouteMap,
+            metricConfig = metricConfig,
+            templateSlotCount = templateSlotCount
         )
     }.stateIn(
         scope = viewModelScope,
@@ -687,6 +716,32 @@ class ProjectEditorViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             projectDao.updateShowRouteMap(projectId, show)
         }
+    }
+
+    fun setMetricConfig(config: List<MetricType>) {
+        _metricConfig.value = config
+        val json = "[${config.joinToString(",") { "\"${it.name}\"" }}]"
+        viewModelScope.launch(Dispatchers.IO) {
+            projectDao.updateMetricConfig(projectId, json)
+        }
+    }
+
+    /** Resolve metric config from project entity: use DB override if set, else sport defaults. */
+    private fun resolveMetricConfig(project: ProjectEntity): List<MetricType> {
+        project.metricConfig?.let { json ->
+            try {
+                val names = json.removeSurrounding("[", "]")
+                    .split(",")
+                    .map { it.trim().removeSurrounding("\"") }
+                    .filter { it.isNotBlank() }
+                val types = names.mapNotNull { name ->
+                    try { MetricType.valueOf(name) } catch (_: Exception) { null }
+                }
+                if (types.isNotEmpty()) return types
+            } catch (_: Exception) { }
+        }
+        val sportType = try { SportType.valueOf(project.sportType) } catch (_: Exception) { null }
+        return sportType?.let { MetricType.forSport(it) } ?: MetricType.fallbackMetrics
     }
 
     fun setClipSyncPoint(clipId: UUID, syncPoint: ClipSyncPoint) {

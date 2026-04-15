@@ -6,6 +6,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.PorterDuff
 import com.caverock.androidsvg.SVG
+import com.gpxvideo.core.model.MetricType
 import com.gpxvideo.core.model.GpxData
 
 /**
@@ -43,6 +44,7 @@ class SvgOverlayRenderer(
      * @param gpxData       full GPX data for chart/map rendering
      * @param accentColor   theme accent color
      * @param activityTitle user-supplied activity title
+     * @param metricConfig  ordered list of metrics to fill template slots (packed, no gaps)
      */
     fun render(
         svg: SVG,
@@ -54,7 +56,8 @@ class SvgOverlayRenderer(
         accentColor: Int = Color.argb(204, 68, 138, 255),
         activityTitle: String = "",
         showElevationChart: Boolean = true,
-        showRouteMap: Boolean = true
+        showRouteMap: Boolean = true,
+        metricConfig: List<MetricType> = MetricType.fallbackMetrics
     ): Bitmap {
         val bitmap = getOrCreateBitmap(width, height)
         val canvas = Canvas(bitmap)
@@ -96,7 +99,7 @@ class SvgOverlayRenderer(
         val textLayers = cachedTextLayers ?: emptyMap()
 
         // 3. Draw dynamic text natively on Canvas (fill + stroke for outlined effect)
-        val textValues = buildTextValues(frameData, activityTitle)
+        val textValues = buildTextValues(frameData, activityTitle, metricConfig)
         for ((name, info) in textLayers) {
             val text = textValues[name] ?: continue
             if (text.isBlank()) continue
@@ -212,14 +215,14 @@ class SvgOverlayRenderer(
 
     /**
      * Hides dynamic elements from the SVG before AndroidSVG renders it:
-     * - stat_* and title_text: text content cleared (re-drawn natively with custom fonts)
+     * - metric_N_* and title_text: text content cleared (re-drawn natively with custom fonts)
      * - elevation_chart and route_map groups: hidden via display:none (rendered by ChartRenderer/RouteMapRenderer)
      */
     private fun hideStatTextInSvg(svgString: String): String {
-        // 1. Clear text content from stat_*/title_text elements
+        // 1. Clear text content from metric_N_*/title_text elements
         //    Handles both direct text content and Figma's <tspan> wrapper
         var result = svgString.replace(
-            Regex("""(<text\s[^>]*id\s*=\s*"(?:stat_[^"]*|title_text)"[^>]*>)(.+?)(</text>)""")
+            Regex("""(<text\s[^>]*id\s*=\s*"(?:metric_\d+_(?:value|label|unit)|title_text)"[^>]*>)(.+?)(</text>)""")
         ) { match ->
             "${match.groupValues[1]}${match.groupValues[3]}"
         }
@@ -234,23 +237,39 @@ class SvgOverlayRenderer(
         return result
     }
 
-    private fun buildTextValues(frameData: OverlayFrameData, activityTitle: String): Map<String, String> {
-        return mapOf(
-            "stat_distance" to frameData.distanceKm,
-            "stat_distance_unit" to "km",
-            "stat_elevation" to frameData.elevationStr,
-            "stat_elevation_unit" to "m",
-            "stat_pace" to frameData.pace,
-            "stat_pace_unit" to "min/km",
-            "stat_hr" to frameData.heartRateStr,
-            "stat_hr_unit" to "bpm",
-            "stat_time" to frameData.elapsedTimeStr,
-            "stat_grade" to frameData.gradeStr,
-            "stat_grade_unit" to "%",
-            "stat_speed" to frameData.speedKmh,
-            "stat_speed_unit" to "km/h",
-            "title_text" to activityTitle
-        )
+    /**
+     * Build the text value map for all metric slots + title.
+     *
+     * Maps generic slot IDs (metric_1_value, metric_1_label, metric_1_unit, ...)
+     * to actual values based on the resolved [metricConfig].
+     */
+    private fun buildTextValues(
+        frameData: OverlayFrameData,
+        activityTitle: String,
+        metricConfig: List<MetricType>
+    ): Map<String, String> {
+        val map = mutableMapOf<String, String>()
+        map["title_text"] = activityTitle
+
+        for ((index, metric) in metricConfig.withIndex()) {
+            val slot = index + 1
+            map["metric_${slot}_value"] = extractValue(metric, frameData)
+            map["metric_${slot}_label"] = metric.labelText
+            map["metric_${slot}_unit"] = metric.unitText
+        }
+
+        return map
+    }
+
+    /** Extract the formatted value for a given metric type from frame data. */
+    private fun extractValue(metric: MetricType, data: OverlayFrameData): String = when (metric) {
+        MetricType.DISTANCE -> data.distanceKm
+        MetricType.ELEVATION -> data.elevationStr
+        MetricType.PACE -> data.pace
+        MetricType.HR -> data.heartRateStr
+        MetricType.TIME -> data.elapsedTimeStr
+        MetricType.SPEED -> data.speedKmh
+        MetricType.GRADE -> data.gradeStr
     }
 
     private fun getOrCreateBitmap(width: Int, height: Int): Bitmap {

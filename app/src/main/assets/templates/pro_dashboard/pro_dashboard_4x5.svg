@@ -14,28 +14,28 @@
   </g>
 
   <rect id="card_distance" x="24" y="810" width="504" height="120" rx="20" ry="20" fill="#FFFFFF" fill-opacity="0.08" stroke="#FFFFFF" stroke-opacity="0.25" stroke-width="1"/>
-  <text id="label_distance" x="54" y="848" font-family="sans-serif" font-size="22" fill="#448AFF" fill-opacity="0.9" text-anchor="start">DISTANCE</text>
-  <text id="stat_distance" x="54" y="896" font-family="sans-serif" font-size="36" font-weight="bold" fill="#FFFFFF" text-anchor="start">0.0 km</text>
+  <text id="metric_1_label" x="54" y="848" font-family="sans-serif" font-size="22" fill="#448AFF" fill-opacity="0.9" text-anchor="start">DISTANCE</text>
+  <text id="metric_1_value" x="54" y="896" font-family="sans-serif" font-size="36" font-weight="bold" fill="#FFFFFF" text-anchor="start">0.0 km</text>
 
   <rect id="card_elevation" x="546" y="810" width="504" height="120" rx="20" ry="20" fill="#FFFFFF" fill-opacity="0.08" stroke="#FFFFFF" stroke-opacity="0.25" stroke-width="1"/>
-  <text id="label_elevation" x="576" y="848" font-family="sans-serif" font-size="22" fill="#66BB6A" fill-opacity="0.9" text-anchor="start">ELEVATION</text>
-  <text id="stat_elevation" x="576" y="896" font-family="sans-serif" font-size="36" font-weight="bold" fill="#FFFFFF" text-anchor="start">↑ 0 m</text>
+  <text id="metric_2_label" x="576" y="848" font-family="sans-serif" font-size="22" fill="#66BB6A" fill-opacity="0.9" text-anchor="start">ELEVATION</text>
+  <text id="metric_2_value" x="576" y="896" font-family="sans-serif" font-size="36" font-weight="bold" fill="#FFFFFF" text-anchor="start">↑ 0 m</text>
 
   <rect id="card_pace" x="24" y="948" width="504" height="120" rx="20" ry="20" fill="#FFFFFF" fill-opacity="0.08" stroke="#FFFFFF" stroke-opacity="0.25" stroke-width="1"/>
-  <text id="label_pace" x="54" y="986" font-family="sans-serif" font-size="22" fill="#FFAB40" fill-opacity="0.9" text-anchor="start">PACE</text>
-  <text id="stat_pace" x="54" y="1034" font-family="sans-serif" font-size="36" font-weight="bold" fill="#FFFFFF" text-anchor="start">—</text>
+  <text id="metric_3_label" x="54" y="986" font-family="sans-serif" font-size="22" fill="#FFAB40" fill-opacity="0.9" text-anchor="start">PACE</text>
+  <text id="metric_3_value" x="54" y="1034" font-family="sans-serif" font-size="36" font-weight="bold" fill="#FFFFFF" text-anchor="start">—</text>
 
   <rect id="card_hr" x="546" y="948" width="504" height="120" rx="20" ry="20" fill="#FFFFFF" fill-opacity="0.08" stroke="#FFFFFF" stroke-opacity="0.25" stroke-width="1"/>
-  <text id="label_hr" x="576" y="986" font-family="sans-serif" font-size="22" fill="#EF5350" fill-opacity="0.9" text-anchor="start">HEART RATE</text>
-  <text id="stat_hr" x="576" y="1034" font-family="sans-serif" font-size="36" font-weight="bold" fill="#FFFFFF" text-anchor="start">—</text>
+  <text id="metric_4_label" x="576" y="986" font-family="sans-serif" font-size="22" fill="#EF5350" fill-opacity="0.9" text-anchor="start">HEART RATE</text>
+  <text id="metric_4_value" x="576" y="1034" font-family="sans-serif" font-size="36" font-weight="bold" fill="#FFFFFF" text-anchor="start">—</text>
 
   <rect id="card_time" x="24" y="1086" width="504" height="120" rx="20" ry="20" fill="#FFFFFF" fill-opacity="0.08" stroke="#FFFFFF" stroke-opacity="0.25" stroke-width="1"/>
-  <text id="label_time" x="54" y="1124" font-family="sans-serif" font-size="22" fill="#26A69A" fill-opacity="0.9" text-anchor="start">TIME</text>
-  <text id="stat_time" x="54" y="1172" font-family="sans-serif" font-size="36" font-weight="bold" fill="#FFFFFF" text-anchor="start">0:00</text>
+  <text id="metric_5_label" x="54" y="1124" font-family="sans-serif" font-size="22" fill="#26A69A" fill-opacity="0.9" text-anchor="start">TIME</text>
+  <text id="metric_5_value" x="54" y="1172" font-family="sans-serif" font-size="36" font-weight="bold" fill="#FFFFFF" text-anchor="start">0:00</text>
 
   <rect id="card_grade" x="546" y="1086" width="504" height="120" rx="20" ry="20" fill="#FFFFFF" fill-opacity="0.08" stroke="#FFFFFF" stroke-opacity="0.25" stroke-width="1"/>
-  <text id="label_grade" x="576" y="1124" font-family="sans-serif" font-size="22" fill="#9C27B0" fill-opacity="0.9" text-anchor="start">GRADE</text>
-  <text id="stat_grade" x="576" y="1172" font-family="sans-serif" font-size="36" font-weight="bold" fill="#FFFFFF" text-anchor="start">0.0%</text>
+  <text id="metric_6_label" x="576" y="1124" font-family="sans-serif" font-size="22" fill="#9C27B0" fill-opacity="0.9" text-anchor="start">GRADE</text>
+  <text id="metric_6_value" x="576" y="1172" font-family="sans-serif" font-size="36" font-weight="bold" fill="#FFFFFF" text-anchor="start">0.0%</text>
 
   <g id="elevation_chart" transform="translate(24,1254)">
     <rect id="background" x="0" y="0" width="1032" height="72" rx="8" ry="8"

@@ -16,8 +16,9 @@ all four aspect-ratio variants plus the directory structure needed by the app:
 Usage:
     python3 tools/convert_template.py <source.svg> [--name NAME] [--out DIR]
 
-The script detects element roles from their SVG ids (stat_*, label_*, title_text,
-elevation_chart, route_map) and repositions them intelligently for each ratio.
+The script detects element roles from their SVG ids (metric_N_value, metric_N_label,
+metric_N_unit, title_text, elevation_chart, route_map) and repositions them
+intelligently for each ratio.
 """
 
 import argparse
@@ -108,40 +109,57 @@ ZONE_LAYOUTS = {
 
 @dataclass
 class StatRow:
-    """A stat/label pair occupying a row in the stats column."""
-    stat_id: str
+    """A metric slot row (value + label + optional unit) occupying a row in the stats column."""
+    value_id: str
     label_id: Optional[str]
-    stat_elem: ET.Element
+    unit_id: Optional[str]
+    value_elem: ET.Element
     label_elem: Optional[ET.Element]
+    unit_elem: Optional[ET.Element]
     y_center: float  # average y of the pair in source coords
 
 
 def extract_stat_rows(overlay_group: ET.Element):
-    """Find stat+label pairs, sorted by vertical position."""
-    texts = {}
+    """Find metric_N_value/label/unit triplets, sorted by slot number."""
+    import re
+    metric_re = re.compile(r'^metric_(\d+)_(value|label|unit)$')
+    slots = {}  # slot_num -> {part: (elem, y)}
+
     for elem in overlay_group:
         tag = elem.tag.replace(f"{{{SVG_NS}}}", "")
         if tag != "text":
             continue
         eid = elem.get("id", "")
-        if eid.startswith("stat_") or eid.startswith("label_"):
+        m = metric_re.match(eid)
+        if m:
+            slot_num = int(m.group(1))
+            part = m.group(2)
+            # Get Y from tspan child or text element itself
             tspan = elem.find(ns("tspan"))
-            if tspan is not None:
-                y = float(tspan.get("y", "0"))
-                texts[eid] = (elem, y)
+            y_str = (tspan.get("y") if tspan is not None else None) or elem.get("y", "0")
+            y = float(y_str)
+            if slot_num not in slots:
+                slots[slot_num] = {}
+            slots[slot_num][part] = (elem, y)
 
-    # Group by suffix (e.g., stat_hr + label_hr)
-    stat_ids = [k for k in texts if k.startswith("stat_")]
     rows = []
-    for sid in stat_ids:
-        suffix = sid[len("stat_"):]
-        lid = f"label_{suffix}"
-        s_elem, s_y = texts[sid]
-        l_elem, l_y = texts.get(lid, (None, s_y))
-        y_center = (s_y + l_y) / 2
-        rows.append(StatRow(sid, lid if lid in texts else None, s_elem, l_elem, y_center))
+    for slot_num in sorted(slots.keys()):
+        parts = slots[slot_num]
+        value_data = parts.get("value")
+        label_data = parts.get("label")
+        unit_data = parts.get("unit")
+        if value_data is None:
+            continue
+        v_elem, v_y = value_data
+        l_elem = label_data[0] if label_data else None
+        l_y = label_data[1] if label_data else v_y
+        u_elem = unit_data[0] if unit_data else None
+        y_center = (v_y + l_y) / 2
+        vid = f"metric_{slot_num}_value"
+        lid = f"metric_{slot_num}_label" if l_elem is not None else None
+        uid = f"metric_{slot_num}_unit" if u_elem is not None else None
+        rows.append(StatRow(vid, lid, uid, v_elem, l_elem, u_elem, y_center))
 
-    rows.sort(key=lambda r: r.y_center)
     return rows
 
 
@@ -277,16 +295,16 @@ def convert_svg(source_path: str, target_ratio: str) -> str:
         for i, row in enumerate(stat_rows):
             row_center_y = zone_top + row_spacing * (i + 0.5)
 
-            # Stat value: larger font, positioned above center
-            orig_stat_fs = float(row.stat_elem.get("font-size", "75"))
+            # Metric value: larger font, positioned above center
+            orig_stat_fs = float(row.value_elem.get("font-size", "75"))
             new_stat_fs = max(24, orig_stat_fs * font_scale)
             stat_y = row_center_y - new_stat_fs * 0.15
-            reposition_text(row.stat_elem, right_edge, stat_y, new_stat_fs)
-            sw = row.stat_elem.get("stroke-width")
+            reposition_text(row.value_elem, right_edge, stat_y, new_stat_fs)
+            sw = row.value_elem.get("stroke-width")
             if sw:
-                row.stat_elem.set("stroke-width", f"{float(sw) * font_scale:.1f}")
+                row.value_elem.set("stroke-width", f"{float(sw) * font_scale:.1f}")
 
-            # Label: smaller font, positioned below stat
+            # Label: smaller font, positioned below value
             if row.label_elem is not None:
                 orig_label_fs = float(row.label_elem.get("font-size", "50"))
                 new_label_fs = max(18, orig_label_fs * font_scale)
@@ -295,6 +313,16 @@ def convert_svg(source_path: str, target_ratio: str) -> str:
                 sw = row.label_elem.get("stroke-width")
                 if sw:
                     row.label_elem.set("stroke-width", f"{float(sw) * font_scale:.1f}")
+
+            # Unit: small font, positioned near value
+            if row.unit_elem is not None:
+                orig_unit_fs = float(row.unit_elem.get("font-size", "30"))
+                new_unit_fs = max(14, orig_unit_fs * font_scale)
+                unit_y = stat_y + new_unit_fs * 0.3
+                reposition_text(row.unit_elem, right_edge, unit_y, new_unit_fs)
+                sw = row.unit_elem.get("stroke-width")
+                if sw:
+                    row.unit_elem.set("stroke-width", f"{float(sw) * font_scale:.1f}")
 
     # ── Process chart and map groups ────────────────────────────────
     for elem in list(overlay_group):

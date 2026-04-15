@@ -51,37 +51,53 @@ app/src/main/assets/templates/
 
 The app identifies elements by their `id` attribute. Wrap everything in a root `<g id="overlay_{ratio}">`.
 
-### Dynamic Text (stat values)
+### Metric Slots (generic positional)
 
-These `<text>` elements are **hidden** in the SVG render and **redrawn natively** with real GPS data using Canvas (fill + stroke outlined text).
+Templates use **generic positional slots** instead of specific metric names. The renderer dynamically maps each slot to a metric based on the sport type and user preferences.
 
-#### Stat Values
-
-| Element ID | Data | Example |
-|---|---|---|
-| `stat_distance` | Distance in km | `10.5` |
-| `stat_elevation` | Elevation gain in meters | `234` |
-| `stat_pace` | Pace in min/km | `5:30` |
-| `stat_hr` | Heart rate in bpm | `160` |
-| `stat_time` | Elapsed time | `1:23:45` |
-| `stat_speed` | Speed in km/h | `15.3` |
-| `stat_grade` | Grade percentage | `3.5` |
-| `title_text` | Activity title | `Morning Run` |
-
-#### Unit Labels
-
-Each stat can have a companion `_unit` element to display its unit separately. Create a second `<text>` layer in Figma, position it next to the value, and give it the `_unit` ID. The app fills these with fixed strings — they are not editable by the user.
-
-| Element ID | Rendered Value |
+| Element ID | Purpose |
 |---|---|
-| `stat_distance_unit` | `km` |
-| `stat_elevation_unit` | `m` |
-| `stat_pace_unit` | `min/km` |
-| `stat_hr_unit` | `bpm` |
-| `stat_speed_unit` | `km/h` |
-| `stat_grade_unit` | `%` |
+| `metric_1_value` | First metric value (e.g. `10.5`) |
+| `metric_1_label` | First metric label (e.g. `DIST`) |
+| `metric_1_unit`  | First metric unit (e.g. `km`) |
+| `metric_2_value` | Second metric value |
+| `metric_2_label` | Second metric label |
+| `metric_2_unit`  | Second metric unit |
+| `metric_3_value` | Third metric value |
+| `metric_3_label` | Third metric label |
+| `metric_3_unit`  | Third metric unit |
+| `metric_4_value` | Fourth metric value |
+| `metric_4_label` | Fourth metric label |
+| `metric_4_unit`  | Fourth metric unit |
+| `title_text` | Activity title (e.g. `Morning Run`) |
 
-> **Tip:** Unit labels are optional. If your design embeds the unit inside a static `label_*` element instead, you don't need the `_unit` fields at all.
+Add more slots (`metric_5_*`, `metric_6_*`, etc.) as needed. The app auto-detects the slot count from the SVG.
+
+#### Available Metrics
+
+| Metric | Label | Unit | Key |
+|---|---|---|---|
+| Distance | DIST | km | `distance` |
+| Elevation | ELEV | m | `elevation` |
+| Pace | PACE | min/km | `pace` |
+| Heart Rate | HR | bpm | `hr` |
+| Time | TIME | — | `time` |
+| Speed | SPEED | km/h | `speed` |
+| Grade | GRADE | % | `grade` |
+
+#### Sport Defaults
+
+| Sport | Slot 1 | Slot 2 | Slot 3 | Slot 4 |
+|---|---|---|---|---|
+| Running | Distance | Pace | HR | Time |
+| Cycling | Distance | Speed | Elevation | HR |
+| Walking | Distance | Time | Elevation | HR |
+
+Users can customize which metrics appear in the Overlay Settings menu.
+
+### Dynamic Text Rendering
+
+All `metric_N_*` and `title_text` elements are `<text>` elements that get **hidden** in the SVG render and **redrawn natively** with real data using Android Canvas (fill + stroke outlined text).
 
 **Supported attributes on `<text>` elements:**
 
@@ -99,7 +115,7 @@ Each stat can have a companion `_unit` element to display its unit separately. C
 
 ### Static Labels
 
-`<text id="label_*">` elements (e.g. `label_hr`, `label_distance`) are rendered directly by the SVG engine using the template's custom font.
+`<text>` elements without a `metric_*` or `title_text` ID are rendered directly by the SVG engine using the template's custom font.
 
 ### Elevation Chart
 
@@ -139,7 +155,7 @@ Same structure as elevation chart. The rect defines the map rendering area.
 ## Figma Export Tips
 
 1. **Outline Text: OFF** — text must stay as `<text>` elements, not outlined paths
-2. **Use semantic IDs** — name layers exactly as documented above
+2. **Use semantic IDs** — name layers exactly as documented above (`metric_1_value`, `metric_2_label`, etc.)
 3. **Figma deduplicates IDs** — if two groups have a `dot` child, Figma renames one to `dot_2`. The app strips `_N` suffixes automatically.
 4. **Invisible elements are dropped** — Figma removes elements with no visible fill/stroke. If `background` rects disappear, the app infers bounds from sibling elements.
 5. **tspan positioning** — Figma puts `x`/`y` on `<tspan>` children instead of `<text>`. The app handles this.
@@ -149,12 +165,12 @@ Same structure as elevation chart. The rect defines the map rendering area.
 1. Place `.ttf`/`.otf` in the template's `fonts/` subdirectory
 2. Reference in `meta.json` `fonts` map: key = CSS `font-family` name, value = relative path
 3. Use the same `font-family` name in your SVG `<text>` elements
-4. The font is used for both native Canvas text rendering (stat values) and SVG label rendering
+4. The font is used for both native Canvas text rendering (metric values) and SVG label rendering
 
 ## How Rendering Works
 
 1. SVG static visuals (cards, scrims, labels) → rendered by AndroidSVG to Canvas
-2. Dynamic text (`stat_*`, `title_text`) → hidden in SVG, drawn natively with fill + stroke
+2. Dynamic text (`metric_N_*`, `title_text`) → hidden in SVG, drawn natively with fill + stroke
 3. Charts/maps → bounds and colors read from SVG groups, real GPS data rendered by ChartRenderer/RouteMapRenderer
 4. All three layers composite onto a single Bitmap
 5. The **same Bitmap render** is used for both preview and export → pixel-perfect parity
@@ -167,5 +183,20 @@ These settings are configured per-project in the app — no template changes nee
 |---|---|
 | **Elevation chart toggle** | Show/hide the elevation chart and its background card |
 | **Route map toggle** | Show/hide the route map and its background card |
+| **Metric selection** | Choose which metrics to display (limited by template slot count) |
 | **Activity title** | Text shown in the `title_text` element |
 | **Sync mode** | Static (final totals), Fast Forward (animated), Live Sync (real-time) |
+
+## Tools
+
+### Convert Template (`tools/convert_template.py`)
+
+Generate all aspect-ratio variants from a single SVG:
+
+```bash
+python3 tools/convert_template.py my_template_9x16.svg --name my_template --out app/src/main/assets/templates/
+```
+
+### Migrate Metric IDs (`tools/migrate_metric_ids.py`)
+
+One-time migration from old `stat_*/label_*` naming to `metric_N_*` slots (already applied to all built-in templates).

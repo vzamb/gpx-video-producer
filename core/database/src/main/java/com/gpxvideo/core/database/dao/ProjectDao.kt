@@ -54,4 +54,7 @@ interface ProjectDao {
 
     @Query("UPDATE projects SET show_route_map = :show WHERE id = :id")
     suspend fun updateShowRouteMap(id: UUID, show: Boolean)
+
+    @Query("UPDATE projects SET metric_config = :config WHERE id = :id")
+    suspend fun updateMetricConfig(id: UUID, config: String?)
 }

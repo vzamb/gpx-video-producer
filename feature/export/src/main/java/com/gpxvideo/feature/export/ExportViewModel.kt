@@ -13,9 +13,11 @@ import com.gpxvideo.core.database.dao.TimelineTrackDao
 import com.gpxvideo.core.model.AudioCodec
 import com.gpxvideo.core.model.ExportFormat
 import com.gpxvideo.core.model.GpxData
+import com.gpxvideo.core.model.MetricType
 import com.gpxvideo.core.model.OutputSettings
 import com.gpxvideo.core.model.Resolution
 import com.gpxvideo.core.model.SocialAspectRatio
+import com.gpxvideo.core.model.SportType
 import com.gpxvideo.core.model.SyncMode
 import com.gpxvideo.core.model.TrackType
 import com.gpxvideo.core.model.Transition
@@ -382,7 +384,26 @@ class ExportViewModel @Inject constructor(
             storyMode = project.storyMode,
             accentColor = project.accentColor,
             showElevationChart = project.showElevationChart,
-            showRouteMap = project.showRouteMap
+            showRouteMap = project.showRouteMap,
+            metricConfig = resolveMetricConfig(project)
         )
+    }
+
+    /** Resolve metric config: use project override if set, otherwise sport defaults. */
+    private fun resolveMetricConfig(project: com.gpxvideo.core.database.entity.ProjectEntity): List<MetricType> {
+        project.metricConfig?.let { json ->
+            try {
+                val names = json.removeSurrounding("[", "]")
+                    .split(",")
+                    .map { it.trim().removeSurrounding("\"") }
+                    .filter { it.isNotBlank() }
+                val types = names.mapNotNull { name ->
+                    try { MetricType.valueOf(name) } catch (_: Exception) { null }
+                }
+                if (types.isNotEmpty()) return types
+            } catch (_: Exception) { }
+        }
+        val sportType = try { SportType.valueOf(project.sportType) } catch (_: Exception) { null }
+        return sportType?.let { MetricType.forSport(it) } ?: MetricType.fallbackMetrics
     }
 }
