@@ -54,11 +54,15 @@ object ChartRenderer {
         val range = (maxElev - minElev).coerceAtLeast(1.0)
         val chartW = right - left
         val chartH = bottom - top
+        val chartDrawH = chartH * 0.85f
         val progressIndex = (progress * (sampled.size - 1)).toInt().coerceIn(0, sampled.size - 1)
+
+        // Draw Y-axis grid lines and elevation labels
+        drawElevationGrid(canvas, left, top, right, bottom, chartDrawH, minElev, maxElev, range, dp, accentColor)
 
         // Compute (x, y) data points
         val xs = FloatArray(sampled.size) { i -> left + (i.toFloat() / (sampled.size - 1)) * chartW }
-        val ys = FloatArray(sampled.size) { i -> bottom - ((sampled[i] - minElev) / range).toFloat() * chartH * 0.85f }
+        val ys = FloatArray(sampled.size) { i -> bottom - ((sampled[i] - minElev) / range).toFloat() * chartDrawH }
 
         // Full path with cubic spline
         val fullPath = buildSplinePath(xs, ys, 0, sampled.size)
@@ -138,6 +142,48 @@ object ChartRenderer {
                 isAntiAlias = true; color = Color.WHITE
                 this.style = Paint.Style.STROKE; strokeWidth = 1.5f * dp
             })
+        }
+    }
+
+    /**
+     * Draws subtle horizontal grid lines and elevation labels along the Y-axis.
+     * Shows min, max, and one or two intermediate values.
+     */
+    private fun drawElevationGrid(
+        canvas: Canvas,
+        left: Float, top: Float, right: Float, bottom: Float,
+        chartDrawH: Float,
+        minElev: Double, maxElev: Double, range: Double,
+        dp: Float,
+        accentColor: Int
+    ) {
+        val gridLineCount = if (range > 200) 3 else 2
+        val gridPaint = Paint().apply {
+            color = Color.argb(30, 255, 255, 255)
+            style = Paint.Style.STROKE
+            strokeWidth = 0.5f * dp
+            isAntiAlias = true
+            pathEffect = android.graphics.DashPathEffect(floatArrayOf(4f * dp, 4f * dp), 0f)
+        }
+        val labelPaint = Paint().apply {
+            color = Color.argb(100, 255, 255, 255)
+            textSize = 8f * dp
+            isAntiAlias = true
+            typeface = android.graphics.Typeface.create("sans-serif-condensed", android.graphics.Typeface.NORMAL)
+        }
+
+        for (i in 0..gridLineCount) {
+            val fraction = i.toFloat() / gridLineCount
+            val elevValue = minElev + fraction * range
+            val y = bottom - fraction * chartDrawH
+
+            // Grid line
+            canvas.drawLine(left, y, right, y, gridPaint)
+
+            // Elevation label (right-aligned, slightly inside the chart)
+            val label = "${elevValue.toInt()}m"
+            val labelWidth = labelPaint.measureText(label)
+            canvas.drawText(label, right - labelWidth - 4f * dp, y - 2f * dp, labelPaint)
         }
     }
 

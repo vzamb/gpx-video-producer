@@ -85,6 +85,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -1000,7 +1001,15 @@ private fun SettingsSwitchRow(
                 color = Color.White
             )
             Spacer(Modifier.weight(1f))
-            Switch(checked = checked, onCheckedChange = onCheckedChange)
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                colors = SwitchDefaults.colors(
+                    uncheckedThumbColor = Color.White.copy(alpha = 0.5f),
+                    uncheckedTrackColor = Color.White.copy(alpha = 0.1f),
+                    uncheckedBorderColor = Color.White.copy(alpha = 0.25f)
+                )
+            )
         }
     }
 }
@@ -1421,9 +1430,11 @@ private fun TemplateOverlayPreview(
                 )
             }
 
+            // Copy bitmap so Compose sees a new reference when keys change
+            // (the renderer reuses an internal bitmap for performance)
             val bitmap = remember(tmpl, widthPx, heightPx, frameData, activityTitle, showElevationChart, showRouteMap, metricConfig) {
                 try {
-                    templateRenderer.render(
+                    val rendered = templateRenderer.render(
                         template = tmpl,
                         width = widthPx,
                         height = heightPx,
@@ -1434,6 +1445,7 @@ private fun TemplateOverlayPreview(
                         showRouteMap = showRouteMap,
                         metricConfig = metricConfig
                     )
+                    rendered.copy(rendered.config ?: android.graphics.Bitmap.Config.ARGB_8888, false)
                 } catch (e: Exception) {
                     android.util.Log.e("OverlayPreview", "Render failed for ${template.id} ${aspectRatio}: ${e.message}", e)
                     android.graphics.Bitmap.createBitmap(widthPx, heightPx, android.graphics.Bitmap.Config.ARGB_8888)
