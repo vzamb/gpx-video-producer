@@ -109,38 +109,44 @@ ZONE_LAYOUTS = {
 
 @dataclass
 class StatRow:
-    """A metric slot row (value + label + optional unit) occupying a row in the stats column."""
+    """A metric slot row (value + label + optional unit + optional card) occupying a row in the stats column."""
     value_id: str
     label_id: Optional[str]
     unit_id: Optional[str]
     value_elem: ET.Element
     label_elem: Optional[ET.Element]
     unit_elem: Optional[ET.Element]
+    card_elem: Optional[ET.Element]
     y_center: float  # average y of the pair in source coords
 
 
 def extract_stat_rows(overlay_group: ET.Element):
-    """Find metric_N_value/label/unit triplets, sorted by slot number."""
+    """Find metric_N_value/label/unit triplets and card_N backgrounds, sorted by slot number."""
     import re
     metric_re = re.compile(r'^metric_(\d+)_(value|label|unit)$')
+    card_re = re.compile(r'^card_(\d+)$')
     slots = {}  # slot_num -> {part: (elem, y)}
+    cards = {}  # slot_num -> rect element
 
     for elem in overlay_group:
         tag = elem.tag.replace(f"{{{SVG_NS}}}", "")
-        if tag != "text":
-            continue
         eid = elem.get("id", "")
-        m = metric_re.match(eid)
-        if m:
-            slot_num = int(m.group(1))
-            part = m.group(2)
-            # Get Y from tspan child or text element itself
-            tspan = elem.find(ns("tspan"))
-            y_str = (tspan.get("y") if tspan is not None else None) or elem.get("y", "0")
-            y = float(y_str)
-            if slot_num not in slots:
-                slots[slot_num] = {}
-            slots[slot_num][part] = (elem, y)
+
+        if tag == "text":
+            m = metric_re.match(eid)
+            if m:
+                slot_num = int(m.group(1))
+                part = m.group(2)
+                tspan = elem.find(ns("tspan"))
+                y_str = (tspan.get("y") if tspan is not None else None) or elem.get("y", "0")
+                y = float(y_str)
+                if slot_num not in slots:
+                    slots[slot_num] = {}
+                slots[slot_num][part] = (elem, y)
+        elif tag == "rect":
+            m = card_re.match(eid)
+            if m:
+                cards[int(m.group(1))] = elem
 
     rows = []
     for slot_num in sorted(slots.keys()):
@@ -158,7 +164,8 @@ def extract_stat_rows(overlay_group: ET.Element):
         vid = f"metric_{slot_num}_value"
         lid = f"metric_{slot_num}_label" if l_elem is not None else None
         uid = f"metric_{slot_num}_unit" if u_elem is not None else None
-        rows.append(StatRow(vid, lid, uid, v_elem, l_elem, u_elem, y_center))
+        card = cards.get(slot_num)
+        rows.append(StatRow(vid, lid, uid, v_elem, l_elem, u_elem, card, y_center))
 
     return rows
 
@@ -174,49 +181,98 @@ def reposition_text(elem: ET.Element, new_x: float, new_y: float, new_font_size:
     elem.set("font-size", f"{new_font_size:.0f}")
 
 
-def reposition_group_rect(group: ET.Element, zone: LayoutZone, tgt_w: int, tgt_h: int):
-    """Reposition all rects/circles/ellipses inside a chart/map group."""
-    x = zone.x * tgt_w
-    y = zone.y * tgt_h
-    w = zone.w * tgt_w
-    h = zone.h * tgt_h
+def reposition_chart_map_group(group: ET.Element, zone: LayoutZone, tgt_w: int, tgt_h: int):
+    """Reposition a chart/map group by updating its transform and scaling children."""
+    new_x = zone.x * tgt_w
+    new_y = zone.y * tgt_h
+    new_w = zone.w * tgt_w
+    new_h = zone.h * tgt_h
 
+    # Find source dimensions from the largest rect in the group
+    src_w = src_h = 0
     for child in group.iter():
+        if child is group:
+            continue
         tag = child.tag.replace(f"{{{SVG_NS}}}", "")
         if tag == "rect":
-            child.set("x", f"{x:.0f}")
-            child.set("y", f"{y:.0f}")
-            child.set("width", f"{w:.0f}")
-            child.set("height", f"{h:.0f}")
-        elif tag == "circle":
-            child.set("cx", f"{x + w * 0.2:.1f}")
-            child.set("cy", f"{y + h * 0.5:.1f}")
-            r = child.get("r")
-            if r:
-                child.set("r", f"{max(2, min(float(r), w * 0.01)):.1f}")
-        elif tag == "ellipse":
-            child.set("cx", f"{x + w * 0.2:.1f}")
-            child.set("cy", f"{y + h * 0.5:.1f}")
-            rx = child.get("rx")
-            ry = child.get("ry")
-            if rx:
-                child.set("rx", f"{max(2, min(float(rx), w * 0.012)):.1f}")
-            if ry:
-                child.set("ry", f"{max(2, min(float(ry), h * 0.02)):.1f}")
+            src_w = max(src_w, float(child.get("width", "0")))
+            src_h = max(src_h, float(child.get("height", "0")))
+
+    if src_w == 0 or src_h == 0:
+        group.set("transform", f"translate({new_x:.0f},{new_y:.0f})")
+        return
+
+    sx, sy = new_w / src_w, new_h / src_h
+    has_transform = "translate" in group.get("transform", "")
+
+    if not has_transform:
+        # Children are at absolute coords — make them relative to (0,0) first
+        min_x = min_y = float('inf')
+        for child in group.iter():
+            if child is group:
+                continue
+            tag = child.tag.replace(f"{{{SVG_NS}}}", "")
+            if tag == "rect":
+                min_x = min(min_x, float(child.get("x", "0")))
+                min_y = min(min_y, float(child.get("y", "0")))
+            elif tag == "line":
+                min_x = min(min_x, float(child.get("x1", "0")))
+                min_y = min(min_y, float(child.get("y1", "0")))
+            elif tag in ("circle", "ellipse"):
+                min_x = min(min_x, float(child.get("cx", "0")))
+                min_y = min(min_y, float(child.get("cy", "0")))
+
+        if min_x != float('inf'):
+            for child in group.iter():
+                if child is group:
+                    continue
+                _offset_shape(child, -min_x, -min_y)
+
+    # Set transform to target position
+    group.set("transform", f"translate({new_x:.0f},{new_y:.0f})")
+
+    # Scale all descendants proportionally
+    for child in group.iter():
+        if child is group:
+            continue
+        _scale_shape(child, sx, sy)
 
 
-def update_filter(defs: ET.Element, filter_id: str, zone: LayoutZone, tgt_w: int, tgt_h: int):
-    """Update a filter element's position to match the new zone."""
-    for filt in defs.iter(ns("filter")):
-        if filt.get("id") == filter_id:
-            x = zone.x * tgt_w - 5
-            y = zone.y * tgt_h - 2
-            w = zone.w * tgt_w + 10
-            h = zone.h * tgt_h + 10
-            filt.set("x", f"{x:.0f}")
-            filt.set("y", f"{y:.0f}")
-            filt.set("width", f"{w:.0f}")
-            filt.set("height", f"{h:.0f}")
+def _offset_shape(elem: ET.Element, dx: float, dy: float):
+    """Shift a shape element's coordinates by (dx, dy)."""
+    tag = elem.tag.replace(f"{{{SVG_NS}}}", "")
+    if tag == "rect":
+        elem.set("x", f"{float(elem.get('x', '0')) + dx:.0f}")
+        elem.set("y", f"{float(elem.get('y', '0')) + dy:.0f}")
+    elif tag == "line":
+        for a in ("x1", "x2"):
+            elem.set(a, f"{float(elem.get(a, '0')) + dx:.1f}")
+        for a in ("y1", "y2"):
+            elem.set(a, f"{float(elem.get(a, '0')) + dy:.1f}")
+    elif tag in ("circle", "ellipse"):
+        elem.set("cx", f"{float(elem.get('cx', '0')) + dx:.1f}")
+        elem.set("cy", f"{float(elem.get('cy', '0')) + dy:.1f}")
+
+
+def _scale_shape(elem: ET.Element, sx: float, sy: float):
+    """Scale a shape element's geometry in-place."""
+    tag = elem.tag.replace(f"{{{SVG_NS}}}", "")
+    if tag == "rect":
+        elem.set("x", f"{float(elem.get('x', '0')) * sx:.0f}")
+        elem.set("y", f"{float(elem.get('y', '0')) * sy:.0f}")
+        elem.set("width", f"{float(elem.get('width', '0')) * sx:.0f}")
+        elem.set("height", f"{float(elem.get('height', '0')) * sy:.0f}")
+    elif tag == "line":
+        for a in ("x1", "x2"):
+            elem.set(a, f"{float(elem.get(a, '0')) * sx:.1f}")
+        for a in ("y1", "y2"):
+            elem.set(a, f"{float(elem.get(a, '0')) * sy:.1f}")
+    elif tag == "circle":
+        elem.set("cx", f"{float(elem.get('cx', '0')) * sx:.1f}")
+        elem.set("cy", f"{float(elem.get('cy', '0')) * sy:.1f}")
+    elif tag == "ellipse":
+        elem.set("cx", f"{float(elem.get('cx', '0')) * sx:.1f}")
+        elem.set("cy", f"{float(elem.get('cy', '0')) * sy:.1f}")
 
 
 # ── Main conversion ────────────────────────────────────────────────────
@@ -233,7 +289,7 @@ def convert_svg(source_path: str, target_ratio: str) -> str:
 
     tgt_w, tgt_h = RATIOS[target_ratio]
 
-    # If source matches target, just update the overlay group id and return
+    # If source matches target, just update the overlay group id (if present) and return
     if src_ratio == target_ratio:
         for g in root.iter(ns("g")):
             gid = g.get("id", "")
@@ -247,7 +303,7 @@ def convert_svg(source_path: str, target_ratio: str) -> str:
     root.set("height", str(tgt_h))
     root.set("viewBox", f"0 0 {tgt_w} {tgt_h}")
 
-    # Find the overlay group and rename it
+    # Find the overlay group (if it exists) or use root as container
     overlay_group = None
     for g in root.iter(ns("g")):
         gid = g.get("id", "")
@@ -256,14 +312,25 @@ def convert_svg(source_path: str, target_ratio: str) -> str:
             overlay_group = g
             break
 
+    # Fall back to root SVG element as the container
     if overlay_group is None:
-        print(f"  Warning: no overlay_* group found, returning scaled SVG")
-        return ET.tostring(root, encoding="unicode", xml_declaration=False)
+        overlay_group = root
 
     zones = ZONE_LAYOUTS[target_ratio]
 
     # Uniform scale factor for font sizes (based on shorter dimension ratio)
     font_scale = min(tgt_w / src_w, tgt_h / src_h)
+
+    # ── Process scrim (background gradient) ──────────────────────────
+    for elem in overlay_group:
+        if elem.get("id") == "scrim":
+            scrim_ratio = float(elem.get("height", "0")) / src_h if src_h else 0.44
+            scrim_y = tgt_h * (1 - scrim_ratio)
+            elem.set("x", "0")
+            elem.set("y", f"{scrim_y:.0f}")
+            elem.set("width", str(tgt_w))
+            elem.set("height", f"{tgt_h * scrim_ratio:.0f}")
+            break
 
     # ── Process title ───────────────────────────────────────────────
     title_zone = zones["title"]
@@ -324,19 +391,30 @@ def convert_svg(source_path: str, target_ratio: str) -> str:
                 if sw:
                     row.unit_elem.set("stroke-width", f"{float(sw) * font_scale:.1f}")
 
+            # Card background: spans the stats zone width at this row
+            if row.card_elem is not None:
+                gap = row_spacing * 0.06
+                pad_x = 16
+                card_x = stats_zone.x * tgt_w - pad_x
+                card_y = zone_top + row_spacing * i + gap
+                card_w = stats_zone.w * tgt_w + 2 * pad_x
+                card_h = row_spacing - 2 * gap
+                src_rx = float(row.card_elem.get("rx", "12"))
+                new_rx = max(6, src_rx * font_scale)
+                row.card_elem.set("x", f"{card_x:.0f}")
+                row.card_elem.set("y", f"{card_y:.0f}")
+                row.card_elem.set("width", f"{card_w:.0f}")
+                row.card_elem.set("height", f"{card_h:.0f}")
+                row.card_elem.set("rx", f"{new_rx:.0f}")
+                row.card_elem.set("ry", f"{new_rx:.0f}")
+
     # ── Process chart and map groups ────────────────────────────────
     for elem in list(overlay_group):
         eid = elem.get("id", "")
         if eid == "elevation_chart":
-            reposition_group_rect(elem, zones["chart"], tgt_w, tgt_h)
+            reposition_chart_map_group(elem, zones["chart"], tgt_w, tgt_h)
         elif eid == "route_map":
-            reposition_group_rect(elem, zones["map"], tgt_w, tgt_h)
-
-    # ── Update filter positions in <defs> ───────────────────────────
-    defs = root.find(ns("defs"))
-    if defs is not None:
-        update_filter(defs, "filter0_d_0_1", zones["chart"], tgt_w, tgt_h)
-        update_filter(defs, "filter1_d_0_1", zones["map"], tgt_w, tgt_h)
+            reposition_chart_map_group(elem, zones["map"], tgt_w, tgt_h)
 
     return ET.tostring(root, encoding="unicode", xml_declaration=False)
 

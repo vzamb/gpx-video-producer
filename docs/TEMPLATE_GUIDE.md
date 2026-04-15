@@ -49,7 +49,7 @@ app/src/main/assets/templates/
 
 ## SVG Element Naming
 
-The app identifies elements by their `id` attribute. Wrap everything in a root `<g id="overlay_{ratio}">`.
+The app identifies elements by their `id` attribute.
 
 ### Metric Slots (generic positional)
 
