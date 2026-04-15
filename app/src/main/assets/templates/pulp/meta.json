@@ -1,12 +1,12 @@
 {
   "name": "pulp",
   "displayName": "Pulp",
-  "description": "Auto-generated from pulp_9x16.svg",
+  "description": "",
   "aspectRatios": {
-    "9x16": "pulp_9x16.svg",
     "16x9": "pulp_16x9.svg",
+    "1x1": "pulp_1x1.svg",
     "4x5": "pulp_4x5.svg",
-    "1x1": "pulp_1x1.svg"
+    "9x16": "pulp_9x16.svg"
   },
   "fonts": {
     "Wendy One": "fonts/WendyOne-Regular.ttf"

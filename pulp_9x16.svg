@@ -1,35 +1,35 @@
 <svg width="1080" height="1920" viewBox="0 0 1080 1920" fill="none" xmlns="http://www.w3.org/2000/svg">
-<g id="pulp_16x9">
+<g id="overlay_9x16">
 <text id="title_text" fill="#FFBE00" stroke="black" style="white-space: pre" stroke-width="5" xml:space="preserve" font-family="Wendy One" font-size="100" letter-spacing="0em"><tspan x="64" y="113.15">Test Run</tspan></text>
 <g id="elevation_chart">
 <g id="glow">
-<ellipse id="Ellipse 1" cx="237.662" cy="1678.69" rx="6.97977" ry="5.34983" fill="#FFBE00" fill-opacity="0.3"/>
+<circle id="Ellipse 1" cx="216.5" cy="1706.5" r="7.5" fill="#FFBE00" fill-opacity="0.3"/>
 </g>
 <g id="dot">
-<ellipse id="Ellipse 1_2" cx="233.939" cy="1675.84" rx="3.25723" ry="2.49659" fill="#FFBE00"/>
+<circle id="Ellipse 1_2" cx="212.5" cy="1702.5" r="3.5" fill="#FFBE00"/>
 </g>
 <g id="full_path">
-<rect id="Rectangle 1" x="53" y="1613" width="964" height="207" stroke="#FFEFBF" stroke-width="2"/>
+<rect id="Rectangle 1" x="18" y="1614" width="1036" height="291" stroke="#FFEFBF" stroke-width="2"/>
 </g>
 <g id="line" filter="url(#filter0_d_0_1)">
-<rect id="Rectangle 1_2" x="53.5" y="1613.5" width="963" height="206" stroke="#FFBE00" stroke-width="3"/>
+<rect id="Rectangle 1_2" x="18.5" y="1614.5" width="1035" height="290" stroke="#FFBE00" stroke-width="3"/>
 </g>
 <g id="area">
-<rect id="Rectangle 1_3" x="52" y="1612" width="966" height="209" fill="#FFBE00" fill-opacity="0.3"/>
+<rect id="Rectangle 1_3" x="17" y="1613" width="1038" height="293" fill="#FFBE00" fill-opacity="0.3"/>
 </g>
 </g>
 <g id="route_map">
 <g id="glow_2">
-<ellipse id="Ellipse 1_3" cx="98.3552" cy="1145.92" rx="4.21411" ry="5.03927" fill="#FFBE00" fill-opacity="0.3"/>
+<ellipse id="Ellipse 1_3" cx="123.509" cy="1127.38" rx="5.77351" ry="6.4267" fill="#FFBE00" fill-opacity="0.3"/>
 </g>
 <g id="dot_2">
-<ellipse id="Ellipse 1_4" cx="96.1077" cy="1143.23" rx="1.96658" ry="2.35166" fill="#FFBE00"/>
+<ellipse id="Ellipse 1_4" cx="120.429" cy="1123.96" rx="2.69431" ry="2.99913" fill="#FFBE00"/>
 </g>
 <g id="full_route" filter="url(#filter1_d_0_1)">
-<rect id="Rectangle 1_4" x="53.5" y="1029.5" width="224" height="382" stroke="#FFEFBF" stroke-width="3"/>
+<rect id="Rectangle 1_4" x="61.5" y="978.5" width="308" height="488" stroke="#FFEFBF" stroke-width="3"/>
 </g>
 <g id="route">
-<rect id="Rectangle 1_5" x="53.5" y="1029.5" width="224" height="382" stroke="#FFBE00" stroke-width="3"/>
+<rect id="Rectangle 1_5" x="61.5" y="978.5" width="308" height="488" stroke="#FFBE00" stroke-width="3"/>
 </g>
 </g>
 <text id="metric_4_label" fill="#FFBE00" stroke="black" style="white-space: pre" stroke-width="4" xml:space="preserve" font-family="Wendy One" font-size="50" letter-spacing="0em"><tspan x="64" y="870.075">PACE</tspan></text>
@@ -42,7 +42,7 @@
 <text id="metric_1_value" fill="white" stroke="black" style="white-space: pre" stroke-width="5" xml:space="preserve" font-family="Wendy One" font-size="75" letter-spacing="0em"><tspan x="64" y="289.362">130</tspan></text>
 </g>
 <defs>
-<filter id="filter0_d_0_1" x="48" y="1612" width="974" height="217" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<filter id="filter0_d_0_1" x="13" y="1613" width="1046" height="301" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
 <feFlood flood-opacity="0" result="BackgroundImageFix"/>
 <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
 <feOffset dy="4"/>
@@ -52,7 +52,7 @@
 <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_0_1"/>
 <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_0_1" result="shape"/>
 </filter>
-<filter id="filter1_d_0_1" x="48" y="1028" width="235" height="393" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<filter id="filter1_d_0_1" x="56" y="977" width="319" height="499" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
 <feFlood flood-opacity="0" result="BackgroundImageFix"/>
 <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
 <feOffset dy="4"/>

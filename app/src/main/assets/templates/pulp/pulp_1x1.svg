@@ -1,67 +1,66 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1080" viewBox="0 0 1080 1080" fill="none">
-<g id="overlay_1x1">
-<rect width="1080" height="1920" fill="white" />
-<text id="title_text" fill="#FFBE00" stroke="black" style="white-space: pre" stroke-width="2.8" xml:space="preserve" font-family="Wendy One" font-size="56" letter-spacing="0em"><tspan x="49.680" y="104.400">Test Run</tspan></text>
-<g id="elevation_chart" transform="translate(16,842)">
+<svg width="1080" height="1080" viewBox="0 0 1080 1080" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="pulp_1x1">
+<text id="title_text" fill="#FFBE00" stroke="black" style="white-space: pre" stroke-width="5" xml:space="preserve" font-family="Wendy One" font-size="100" letter-spacing="0em"><tspan x="52" y="108.15">Test Run</tspan></text>
+<g id="elevation_chart">
 <g id="glow">
-<circle id="Ellipse 1" cx="201.3" cy="68.9" r="7.5" fill="#FFBE00" fill-opacity="0.3" />
+<ellipse id="Ellipse 1" cx="435.337" cy="935.759" rx="5.61416" ry="4.63311" fill="#FFBE00" fill-opacity="0.3"/>
 </g>
 <g id="dot">
-<circle id="Ellipse 1_2" cx="197.3" cy="66.0" r="3.5" fill="#FFBE00" />
+<ellipse id="Ellipse 1_2" cx="432.342" cy="933.288" rx="2.61994" ry="2.16212" fill="#FFBE00"/>
 </g>
 <g id="full_path">
-<rect id="Rectangle 1" x="1" y="1" width="1046" height="215" stroke="#FFEFBF" stroke-width="2" />
+<rect id="Rectangle 1" x="287" y="879" width="775" height="179" stroke="#FFEFBF" stroke-width="2"/>
 </g>
 <g id="line" filter="url(#filter0_d_0_1)">
-<rect id="Rectangle 1_2" x="2" y="1" width="1045" height="214" stroke="#FFBE00" stroke-width="3" />
+<rect id="Rectangle 1_2" x="287.5" y="879.5" width="774" height="178" stroke="#FFBE00" stroke-width="3"/>
 </g>
 <g id="area">
-<rect id="Rectangle 1_3" x="0" y="0" width="1048" height="216" fill="#FFBE00" fill-opacity="0.3" />
+<rect id="Rectangle 1_3" x="286" y="878" width="777" height="181" fill="#FFBE00" fill-opacity="0.3"/>
 </g>
 </g>
-<g id="route_map" transform="translate(43,162)">
+<g id="route_map">
 <g id="glow_2">
-<ellipse id="Ellipse 1_3" cx="104.9" cy="148.2" rx="8.83663" ry="5.82461" fill="#FFBE00" fill-opacity="0.3" />
+<ellipse id="Ellipse 1_3" cx="836.608" cy="111.741" rx="5.32797" ry="3.83508" fill="#FFBE00" fill-opacity="0.3"/>
 </g>
 <g id="dot_2">
-<ellipse id="Ellipse 1_4" cx="99.7" cy="144.8" rx="4.12376" ry="2.71815" fill="#FFBE00" />
+<ellipse id="Ellipse 1_4" cx="833.766" cy="109.695" rx="2.48639" ry="1.7897" fill="#FFBE00"/>
 </g>
 <g id="full_route" filter="url(#filter1_d_0_1)">
-<rect id="Rectangle 1_4" x="0" y="0" width="518" height="486" stroke="#FFEFBF" stroke-width="3" />
+<rect id="Rectangle 1_4" x="779.5" y="23.5" width="284" height="290" stroke="#FFEFBF" stroke-width="3"/>
 </g>
 <g id="route">
-<rect id="Rectangle 1_5" x="0" y="0" width="518" height="486" stroke="#FFBE00" stroke-width="3" />
+<rect id="Rectangle 1_5" x="779.5" y="23.5" width="284" height="290" stroke="#FFBE00" stroke-width="3"/>
 </g>
 </g>
-<text id="metric_4_label" fill="#FFBE00" stroke="black" style="white-space: pre" stroke-width="2.2" xml:space="preserve" font-family="Wendy One" font-size="28" letter-spacing="0em"><tspan x="1047.600" y="665.972">PACE</tspan></text>
-<text id="metric_4_value" fill="white" stroke="black" style="white-space: pre" stroke-width="2.8" xml:space="preserve" font-family="Wendy One" font-size="42" letter-spacing="0em"><tspan x="1047.600" y="632.222">05:00</tspan></text>
-<text id="metric_3_label" fill="#FFBE00" stroke="black" style="white-space: pre" stroke-width="2.2" xml:space="preserve" font-family="Wendy One" font-size="28" letter-spacing="0em"><tspan x="1047.600" y="517.472">TIME</tspan></text>
-<text id="metric_3_value" fill="white" stroke="black" style="white-space: pre" stroke-width="2.8" xml:space="preserve" font-family="Wendy One" font-size="42" letter-spacing="0em"><tspan x="1047.600" y="483.722">1:00:00</tspan></text>
-<text id="metric_2_label" fill="#FFBE00" stroke="black" style="white-space: pre" stroke-width="2.2" xml:space="preserve" font-family="Wendy One" font-size="28" letter-spacing="0em"><tspan x="1047.600" y="368.972">DIST</tspan></text>
-<text id="metric_2_value" fill="white" stroke="black" style="white-space: pre" stroke-width="2.8" xml:space="preserve" font-family="Wendy One" font-size="42" letter-spacing="0em"><tspan x="1047.600" y="335.222">10.0</tspan></text>
-<text id="metric_1_label" fill="#FFBE00" stroke="black" style="white-space: pre" stroke-width="2.2" xml:space="preserve" font-family="Wendy One" font-size="28" letter-spacing="0em"><tspan x="1047.600" y="220.472">HR</tspan></text>
-<text id="metric_1_value" fill="white" stroke="black" style="white-space: pre" stroke-width="2.8" xml:space="preserve" font-family="Wendy One" font-size="42" letter-spacing="0em"><tspan x="1047.600" y="186.722">130</tspan></text>
+<text id="metric_4_label" fill="#FFBE00" stroke="black" style="white-space: pre" stroke-width="4" xml:space="preserve" font-family="Wendy One" font-size="50" letter-spacing="0em"><tspan x="52" y="808.075">PACE</tspan></text>
+<text id="metric_4_value" fill="white" stroke="black" style="white-space: pre" stroke-width="5" xml:space="preserve" font-family="Wendy One" font-size="75" letter-spacing="0em"><tspan x="52" y="749.362">05:00</tspan></text>
+<text id="metric_3_label" fill="#FFBE00" stroke="black" style="white-space: pre" stroke-width="4" xml:space="preserve" font-family="Wendy One" font-size="50" letter-spacing="0em"><tspan x="52" y="634.075">TIME</tspan></text>
+<text id="metric_3_value" fill="white" stroke="black" style="white-space: pre" stroke-width="5" xml:space="preserve" font-family="Wendy One" font-size="75" letter-spacing="0em"><tspan x="52" y="575.362">1:00:00</tspan></text>
+<text id="metric_2_label" fill="#FFBE00" stroke="black" style="white-space: pre" stroke-width="4" xml:space="preserve" font-family="Wendy One" font-size="50" letter-spacing="0em"><tspan x="52" y="454.075">DIST</tspan></text>
+<text id="metric_2_value" fill="white" stroke="black" style="white-space: pre" stroke-width="5" xml:space="preserve" font-family="Wendy One" font-size="75" letter-spacing="0em"><tspan x="52" y="401.362">10.0</tspan></text>
+<text id="metric_1_label" fill="#FFBE00" stroke="black" style="white-space: pre" stroke-width="4" xml:space="preserve" font-family="Wendy One" font-size="50" letter-spacing="0em"><tspan x="52" y="286.075">HR</tspan></text>
+<text id="metric_1_value" fill="white" stroke="black" style="white-space: pre" stroke-width="5" xml:space="preserve" font-family="Wendy One" font-size="75" letter-spacing="0em"><tspan x="52" y="227.362">130</tspan></text>
 </g>
 <defs>
-<filter id="filter0_d_0_1" x="13" y="1613" width="1046" height="301" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
-<feFlood flood-opacity="0" result="BackgroundImageFix" />
-<feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha" />
-<feOffset dy="4" />
-<feGaussianBlur stdDeviation="2" />
-<feComposite in2="hardAlpha" operator="out" />
-<feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0" />
-<feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_0_1" />
-<feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_0_1" result="shape" />
+<filter id="filter0_d_0_1" x="282" y="878" width="785" height="189" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feFlood flood-opacity="0" result="BackgroundImageFix"/>
+<feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+<feOffset dy="4"/>
+<feGaussianBlur stdDeviation="2"/>
+<feComposite in2="hardAlpha" operator="out"/>
+<feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0"/>
+<feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_0_1"/>
+<feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_0_1" result="shape"/>
 </filter>
-<filter id="filter1_d_0_1" x="536" y="228" width="484" height="453" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
-<feFlood flood-opacity="0" result="BackgroundImageFix" />
-<feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha" />
-<feOffset dy="4" />
-<feGaussianBlur stdDeviation="2" />
-<feComposite in2="hardAlpha" operator="out" />
-<feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0" />
-<feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_0_1" />
-<feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_0_1" result="shape" />
+<filter id="filter1_d_0_1" x="774" y="22" width="295" height="301" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feFlood flood-opacity="0" result="BackgroundImageFix"/>
+<feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+<feOffset dy="4"/>
+<feGaussianBlur stdDeviation="2"/>
+<feComposite in2="hardAlpha" operator="out"/>
+<feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0"/>
+<feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_0_1"/>
+<feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_0_1" result="shape"/>
 </filter>
 </defs>
 </svg>
