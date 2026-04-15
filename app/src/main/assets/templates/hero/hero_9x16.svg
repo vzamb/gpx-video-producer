@@ -23,17 +23,17 @@
   <text id="metric_1_unit" x="540" y="941" font-family="sans-serif" font-size="48" font-weight="bold" fill="#FFFFFF" text-anchor="middle">KM</text>
 
   <!-- Elevation Card -->
-  <rect id="card_elevation" x="48" y="1016" width="312" height="180" rx="30" fill="#FFFFFF" fill-opacity="0.08" stroke="#FFFFFF" stroke-opacity="0.3" stroke-width="1.5"/>
+  <rect id="card_2" x="48" y="1016" width="312" height="180" rx="30" fill="#FFFFFF" fill-opacity="0.08" stroke="#FFFFFF" stroke-opacity="0.3" stroke-width="1.5"/>
   <text id="metric_2_label" x="204" y="1064" font-family="sans-serif" font-size="24" fill="#66BB6A" text-anchor="middle">ELEVATION</text>
   <text id="metric_2_value" x="204" y="1136" font-family="sans-serif" font-size="48" font-weight="bold" fill="#FFFFFF" text-anchor="middle">↑ 0</text>
 
   <!-- Time Card -->
-  <rect id="card_time" x="384" y="1016" width="312" height="180" rx="30" fill="#FFFFFF" fill-opacity="0.08" stroke="#FFFFFF" stroke-opacity="0.3" stroke-width="1.5"/>
+  <rect id="card_3" x="384" y="1016" width="312" height="180" rx="30" fill="#FFFFFF" fill-opacity="0.08" stroke="#FFFFFF" stroke-opacity="0.3" stroke-width="1.5"/>
   <text id="metric_3_label" x="540" y="1064" font-family="sans-serif" font-size="24" fill="#26A69A" text-anchor="middle">TIME</text>
   <text id="metric_3_value" x="540" y="1136" font-family="sans-serif" font-size="48" font-weight="bold" fill="#FFFFFF" text-anchor="middle">0:00</text>
 
   <!-- Heart Rate Card -->
-  <rect id="card_hr" x="720" y="1016" width="312" height="180" rx="30" fill="#FFFFFF" fill-opacity="0.08" stroke="#FFFFFF" stroke-opacity="0.3" stroke-width="1.5"/>
+  <rect id="card_4" x="720" y="1016" width="312" height="180" rx="30" fill="#FFFFFF" fill-opacity="0.08" stroke="#FFFFFF" stroke-opacity="0.3" stroke-width="1.5"/>
   <text id="metric_4_label" x="876" y="1064" font-family="sans-serif" font-size="24" fill="#EF5350" text-anchor="middle">HEART RATE</text>
   <text id="metric_4_value" x="876" y="1136" font-family="sans-serif" font-size="48" font-weight="bold" fill="#FFFFFF" text-anchor="middle">—</text>
 

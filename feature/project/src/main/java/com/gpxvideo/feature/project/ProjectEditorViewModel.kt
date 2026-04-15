@@ -204,6 +204,12 @@ class ProjectEditorViewModel @Inject constructor(
                         SvgTemplateConventions.countSlots(it.loaded.rawSvgString)
                     } ?: 4
                     _templateSlotCount.value = slots
+
+                    // Auto-trim metric config when switching to a template with fewer slots
+                    val currentConfig = _metricConfig.value
+                    if (currentConfig.size > slots) {
+                        setMetricConfig(currentConfig.take(slots))
+                    }
                 }
         }
     }

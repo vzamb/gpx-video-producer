@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -57,6 +58,8 @@ import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.Title
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Warning
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.DragHandle
 import androidx.compose.material.icons.outlined.DirectionsBike
 import androidx.compose.material.icons.outlined.DirectionsRun
 import androidx.compose.material.icons.outlined.Hiking
@@ -101,6 +104,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Fill
@@ -704,7 +708,7 @@ private fun StyleTopBar(
     templateSlotCount: Int = 4,
     onMetricConfigChanged: (List<MetricType>) -> Unit = {}
 ) {
-    var showOverlayMenu by remember { mutableStateOf(false) }
+    var showOverlaySheet by remember { mutableStateOf(false) }
     Surface(color = DarkBg, tonalElevation = 0.dp) {
         Row(
             modifier = Modifier
@@ -737,101 +741,9 @@ private fun StyleTopBar(
                 Icon(Icons.Outlined.Title, contentDescription = "Edit Title", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
             }
 
-            // Overlay settings dropdown (graph toggles + metrics)
-            Box {
-                IconButton(onClick = { showOverlayMenu = true }) {
-                    Icon(Icons.Outlined.Tune, contentDescription = "Overlay Settings", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
-                }
-                DropdownMenu(
-                    expanded = showOverlayMenu,
-                    onDismissRequest = { showOverlayMenu = false }
-                ) {
-                    // Graph toggles
-                    DropdownMenuItem(
-                        text = {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("Elevation Chart")
-                                Switch(
-                                    checked = showElevationChart,
-                                    onCheckedChange = onToggleElevation,
-                                    modifier = Modifier.padding(start = 8.dp)
-                                )
-                            }
-                        },
-                        onClick = { onToggleElevation(!showElevationChart) }
-                    )
-                    DropdownMenuItem(
-                        text = {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("Route Map")
-                                Switch(
-                                    checked = showRouteMap,
-                                    onCheckedChange = onToggleRouteMap,
-                                    modifier = Modifier.padding(start = 8.dp)
-                                )
-                            }
-                        },
-                        onClick = { onToggleRouteMap(!showRouteMap) }
-                    )
-
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-
-                    // Metric selection section
-                    Text(
-                        "Metrics ($templateSlotCount slots)",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-                    )
-
-                    val enabledSet = remember(metricConfig) { metricConfig.toSet() }
-                    MetricType.entries.forEach { metric ->
-                        val isEnabled = metric in enabledSet
-                        val atLimit = metricConfig.size >= templateSlotCount && !isEnabled
-                        DropdownMenuItem(
-                            text = {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Checkbox(
-                                        checked = isEnabled,
-                                        onCheckedChange = null,
-                                        enabled = !atLimit,
-                                        colors = CheckboxDefaults.colors(
-                                            checkedColor = MaterialTheme.colorScheme.primary,
-                                            disabledUncheckedColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
-                                        )
-                                    )
-                                    Text(
-                                        metric.displayName,
-                                        modifier = Modifier.padding(start = 4.dp),
-                                        color = if (atLimit) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                                                else MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
-                            },
-                            onClick = {
-                                if (isEnabled) {
-                                    // Remove — always allowed (at least 0 metrics)
-                                    onMetricConfigChanged(metricConfig - metric)
-                                } else if (!atLimit) {
-                                    // Add — only if below slot limit
-                                    onMetricConfigChanged(metricConfig + metric)
-                                }
-                            },
-                            enabled = isEnabled || !atLimit
-                        )
-                    }
-                }
+            // Overlay settings button — opens bottom sheet
+            IconButton(onClick = { showOverlaySheet = true }) {
+                Icon(Icons.Outlined.Tune, contentDescription = "Overlay Settings", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
             }
 
             // Aspect ratio dropdown — always rightmost
@@ -894,9 +806,317 @@ private fun StyleTopBar(
             }
         }
     }
+
+    // Overlay settings bottom sheet
+    if (showOverlaySheet) {
+        OverlaySettingsSheet(
+            showElevationChart = showElevationChart,
+            showRouteMap = showRouteMap,
+            onToggleElevation = onToggleElevation,
+            onToggleRouteMap = onToggleRouteMap,
+            metricConfig = metricConfig,
+            templateSlotCount = templateSlotCount,
+            onMetricConfigChanged = onMetricConfigChanged,
+            onDismiss = { showOverlaySheet = false }
+        )
+    }
 }
 
-// ── Bottom Bar ───────────────────────────────────────────────────────────
+// ── Overlay Settings Bottom Sheet ──────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun OverlaySettingsSheet(
+    showElevationChart: Boolean,
+    showRouteMap: Boolean,
+    onToggleElevation: (Boolean) -> Unit,
+    onToggleRouteMap: (Boolean) -> Unit,
+    metricConfig: List<MetricType>,
+    templateSlotCount: Int,
+    onMetricConfigChanged: (List<MetricType>) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = Color(0xFF1C1C2E),
+        dragHandle = { BottomSheetDefaults.DragHandle(color = Color.White.copy(alpha = 0.3f)) }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(bottom = 16.dp)
+        ) {
+            // Header
+            Text(
+                "Overlay Settings",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            // ── Graph toggles section ──────────────────────────
+            SectionLabel("Graphs")
+
+            SettingsSwitchRow(
+                icon = Icons.Outlined.BarChart,
+                label = "Elevation Chart",
+                checked = showElevationChart,
+                onCheckedChange = onToggleElevation
+            )
+            SettingsSwitchRow(
+                icon = Icons.Outlined.Route,
+                label = "Route Map",
+                checked = showRouteMap,
+                onCheckedChange = onToggleRouteMap
+            )
+
+            HorizontalDivider(
+                color = Color.White.copy(alpha = 0.08f),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+            )
+
+            // ── Metrics section ────────────────────────────────
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                SectionLabel("Active Metrics", Modifier)
+                Text(
+                    "${metricConfig.size}/$templateSlotCount slots",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.4f)
+                )
+            }
+
+            Spacer(Modifier.height(4.dp))
+
+            // Active metrics — reorderable
+            ReorderableMetricList(
+                activeMetrics = metricConfig,
+                templateSlotCount = templateSlotCount,
+                onConfigChanged = onMetricConfigChanged
+            )
+
+            // Available (inactive) metrics
+            val inactiveMetrics = remember(metricConfig) {
+                MetricType.entries.filter { it !in metricConfig }
+            }
+            if (inactiveMetrics.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                SectionLabel("Available")
+
+                inactiveMetrics.forEach { metric ->
+                    val atLimit = metricConfig.size >= templateSlotCount
+                    Surface(
+                        onClick = {
+                            if (!atLimit) onMetricConfigChanged(metricConfig + metric)
+                        },
+                        color = Color.Transparent,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Outlined.Check,
+                                contentDescription = null,
+                                tint = Color.Transparent,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Text(
+                                metric.displayName,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (atLimit) Color.White.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.5f)
+                            )
+                            Spacer(Modifier.weight(1f))
+                            if (!atLimit) {
+                                Text(
+                                    "+ Add",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SectionLabel(text: String, modifier: Modifier = Modifier.padding(horizontal = 20.dp)) {
+    Text(
+        text.uppercase(),
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.SemiBold,
+        color = Color.White.copy(alpha = 0.4f),
+        letterSpacing = 1.sp,
+        modifier = modifier.padding(bottom = 6.dp)
+    )
+}
+
+@Composable
+private fun SettingsSwitchRow(
+    icon: ImageVector,
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Surface(
+        onClick = { onCheckedChange(!checked) },
+        color = Color.Transparent,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = Color.White.copy(alpha = 0.6f),
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(Modifier.width(12.dp))
+            Text(
+                label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White
+            )
+            Spacer(Modifier.weight(1f))
+            Switch(checked = checked, onCheckedChange = onCheckedChange)
+        }
+    }
+}
+
+@Composable
+private fun ReorderableMetricList(
+    activeMetrics: List<MetricType>,
+    templateSlotCount: Int,
+    onConfigChanged: (List<MetricType>) -> Unit
+) {
+    // Local mutable state for drag operations
+    var draggedIndex by remember { mutableStateOf<Int?>(null) }
+    var dragOffset by remember { mutableStateOf(0f) }
+    val itemHeight = 48.dp
+    val density = LocalDensity.current
+    val itemHeightPx = with(density) { itemHeight.toPx() }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        activeMetrics.forEachIndexed { index, metric ->
+            val isDragged = draggedIndex == index
+            val displacement = if (draggedIndex != null && !isDragged) {
+                val dragIdx = draggedIndex!!
+                val targetIdx = (dragIdx + (dragOffset / itemHeightPx).toInt())
+                    .coerceIn(0, activeMetrics.lastIndex)
+                when {
+                    index in (dragIdx + 1)..targetIdx -> -itemHeightPx
+                    index in targetIdx until dragIdx -> itemHeightPx
+                    else -> 0f
+                }
+            } else 0f
+
+            val animatedDisplacement by animateFloatAsState(
+                targetValue = displacement,
+                animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                label = "displacement"
+            )
+
+            val yOffset = if (isDragged) dragOffset else animatedDisplacement
+
+            Surface(
+                color = if (isDragged) Color.White.copy(alpha = 0.08f) else Color.Transparent,
+                shadowElevation = if (isDragged) 8.dp else 0.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(itemHeight)
+                    .graphicsLayer { translationY = yOffset }
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 20.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Drag handle
+                    Icon(
+                        Icons.Outlined.DragHandle,
+                        contentDescription = "Reorder",
+                        tint = Color.White.copy(alpha = 0.3f),
+                        modifier = Modifier
+                            .size(20.dp)
+                            .pointerInput(activeMetrics) {
+                                detectVerticalDragGestures(
+                                    onDragStart = {
+                                        draggedIndex = index
+                                        dragOffset = 0f
+                                    },
+                                    onDragEnd = {
+                                        draggedIndex?.let { fromIdx ->
+                                            val toIdx = (fromIdx + (dragOffset / itemHeightPx).toInt())
+                                                .coerceIn(0, activeMetrics.lastIndex)
+                                            if (fromIdx != toIdx) {
+                                                val reordered = activeMetrics.toMutableList()
+                                                val item = reordered.removeAt(fromIdx)
+                                                reordered.add(toIdx, item)
+                                                onConfigChanged(reordered)
+                                            }
+                                        }
+                                        draggedIndex = null
+                                        dragOffset = 0f
+                                    },
+                                    onDragCancel = {
+                                        draggedIndex = null
+                                        dragOffset = 0f
+                                    },
+                                    onVerticalDrag = { change, amount ->
+                                        change.consume()
+                                        dragOffset += amount
+                                    }
+                                )
+                            }
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        metric.displayName,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.White
+                    )
+                    Spacer(Modifier.weight(1f))
+                    // Remove button
+                    IconButton(
+                        onClick = { onConfigChanged(activeMetrics - metric) },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            Icons.Outlined.Close,
+                            contentDescription = "Remove",
+                            tint = Color.White.copy(alpha = 0.4f),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun StyleBottomBar(onExport: () -> Unit, enabled: Boolean = true, warningMessage: String? = null) {

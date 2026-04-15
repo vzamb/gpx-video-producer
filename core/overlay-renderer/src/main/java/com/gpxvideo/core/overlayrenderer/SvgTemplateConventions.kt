@@ -26,7 +26,7 @@ package com.gpxvideo.core.overlayrenderer
  * - `route_map` → Group (`<g>`) with same sub-elements as above (for route rendering).
  *
  * ## Visual layers
- * - `card_*`  → Background card shapes (rects, rounded rects)
+ * - `card_N`  → Background card shape for metric slot N (rect, rounded rect)
  * - `scrim`   → Semi-transparent gradient overlay
  *
  * ## SVG attributes on metric text elements
@@ -48,6 +48,9 @@ object SvgTemplateConventions {
 
     /** Regex matching generic metric slot IDs: metric_1_value, metric_2_label, etc. */
     private val METRIC_SLOT_REGEX = Regex("""^metric_(\d+)_(value|label|unit)$""")
+
+    /** Regex matching card IDs: card_1, card_2, etc. */
+    private val CARD_SLOT_REGEX = Regex("""^card_(\d+)$""")
 
     // ── Chart / map layer ids ──────────────────────────────────────────
 
@@ -84,6 +87,12 @@ object SvgTemplateConventions {
 
     /** Extract the slot part from a metric id (e.g. "metric_2_value" → "value"), or null. */
     fun metricSlotPart(id: String): String? = METRIC_SLOT_REGEX.matchEntire(id)?.groupValues?.get(2)
+
+    /** Returns true if the id matches `card_N`. */
+    fun isCardSlot(id: String): Boolean = CARD_SLOT_REGEX.matches(id)
+
+    /** Extract the slot number from a card id (e.g. "card_2" → 2), or null. */
+    fun cardSlotNumber(id: String): Int? = CARD_SLOT_REGEX.matchEntire(id)?.groupValues?.get(1)?.toIntOrNull()
 
     /** Returns true if this layer is a chart or map placeholder. */
     fun isChartOrMapLayer(id: String): Boolean =

@@ -95,6 +95,19 @@ Add more slots (`metric_5_*`, `metric_6_*`, etc.) as needed. The app auto-detect
 
 Users can customize which metrics appear in the Overlay Settings menu.
 
+### Card Backgrounds
+
+Each metric slot can have an associated card (background rectangle). Name them `card_N` where N matches the slot number:
+
+```xml
+<rect id="card_1" x="..." y="..." width="..." height="..." rx="12" fill="#000000" fill-opacity="0.4"/>
+<rect id="card_2" ... />
+```
+
+When a metric slot is empty (user disabled that slot), the corresponding `card_N` rect is automatically hidden along with the metric text.
+
+Not all templates need cards — templates like `pulp` and `pulp2` render text directly without background cards.
+
 ### Dynamic Text Rendering
 
 All `metric_N_*` and `title_text` elements are `<text>` elements that get **hidden** in the SVG render and **redrawn natively** with real data using Android Canvas (fill + stroke outlined text).
@@ -184,6 +197,7 @@ These settings are configured per-project in the app — no template changes nee
 | **Elevation chart toggle** | Show/hide the elevation chart and its background card |
 | **Route map toggle** | Show/hide the route map and its background card |
 | **Metric selection** | Choose which metrics to display (limited by template slot count) |
+| **Metric reordering** | Drag to reorder active metrics — changes which slot each metric fills |
 | **Activity title** | Text shown in the `title_text` element |
 | **Sync mode** | Static (final totals), Fast Forward (animated), Live Sync (real-time) |
 

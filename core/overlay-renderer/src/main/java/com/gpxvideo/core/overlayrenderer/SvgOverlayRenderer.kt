@@ -66,7 +66,7 @@ class SvgOverlayRenderer(
         // 1. Hide dynamic text elements by manipulating SVG before render.
         //    We render an SVG copy where stat_* text content is cleared.
         //    AndroidSVG renders SVG → Canvas (scrims, cards, label paths).
-        val cleanedSvg = hideStatTextInSvg(svgString)
+        val cleanedSvg = hideStatTextInSvg(svgString, metricConfig.size)
         try {
             val staticSvg = SVG.getFromString(cleanedSvg)
             if (fontProvider != null) {
@@ -216,9 +216,15 @@ class SvgOverlayRenderer(
     /**
      * Hides dynamic elements from the SVG before AndroidSVG renders it:
      * - metric_N_* and title_text: text content cleared (re-drawn natively with custom fonts)
-     * - elevation_chart and route_map groups: hidden via display:none (rendered by ChartRenderer/RouteMapRenderer)
+     * - elevation_chart and route_map groups: always hidden (rendered natively by ChartRenderer/RouteMapRenderer)
+     * - card_N elements for empty metric slots: hidden via display:none
+     *
+     * @param activeSlotCount how many metric slots are filled — cards beyond this are hidden
      */
-    private fun hideStatTextInSvg(svgString: String): String {
+    private fun hideStatTextInSvg(
+        svgString: String,
+        activeSlotCount: Int
+    ): String {
         // 1. Clear text content from metric_N_*/title_text elements
         //    Handles both direct text content and Figma's <tspan> wrapper
         var result = svgString.replace(
@@ -227,11 +233,35 @@ class SvgOverlayRenderer(
             "${match.groupValues[1]}${match.groupValues[3]}"
         }
 
-        // 2. Hide chart/map groups — add display:none so AndroidSVG skips them
+        // 2. Hide chart/map groups — always hidden, rendered natively by ChartRenderer/RouteMapRenderer
         result = result.replace(
             Regex("""(<g\s[^>]*id\s*=\s*"(?:elevation_chart|route_map)")""")
         ) { match ->
             """${match.groupValues[1]} display="none""""
+        }
+
+        // 3. Hide card_N elements for empty slots (N > activeSlotCount)
+        result = result.replace(
+            Regex("""(<rect\s[^>]*id\s*=\s*"card_(\d+)")""")
+        ) { match ->
+            val slotNum = match.groupValues[2].toIntOrNull() ?: 0
+            if (slotNum > activeSlotCount) {
+                """${match.groupValues[1]} display="none""""
+            } else {
+                match.value
+            }
+        }
+
+        // 4. Hide metric text for empty slots too (N > activeSlotCount)
+        result = result.replace(
+            Regex("""(<text\s[^>]*id\s*=\s*"metric_(\d+)_(?:value|label|unit)")""")
+        ) { match ->
+            val slotNum = match.groupValues[2].toIntOrNull() ?: 0
+            if (slotNum > activeSlotCount) {
+                """${match.groupValues[1]} display="none""""
+            } else {
+                match.value
+            }
         }
 
         return result
