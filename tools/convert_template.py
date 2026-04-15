@@ -430,7 +430,8 @@ def extract_fonts_from_svg(svg_path: str) -> set:
     return fonts
 
 
-def build_template_dir(source_svg: str, template_name: str, output_dir: str):
+def build_template_dir(source_svg: str, template_name: str, output_dir: str,
+                       font_files: Optional[list] = None):
     """Create the full template directory with all ratio variants."""
 
     tree = ET.parse(source_svg)
@@ -450,9 +451,16 @@ def build_template_dir(source_svg: str, template_name: str, output_dir: str):
     fonts_dir = os.path.join(tpl_dir, "fonts")
     os.makedirs(fonts_dir, exist_ok=True)
 
-    # Extract fonts used
+    # Extract fonts used in the SVG
     font_families = extract_fonts_from_svg(source_svg)
     print(f"Fonts detected: {font_families}")
+
+    # Build lookup from explicitly provided --font files
+    explicit_fonts = {}  # normalized_name -> (src_path, filename)
+    for fp in (font_files or []):
+        fname = os.path.basename(fp)
+        norm = os.path.splitext(fname)[0].lower().replace("-", "").replace("_", "")
+        explicit_fonts[norm] = (fp, fname)
 
     # Try to find font files in known locations
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -471,27 +479,40 @@ def build_template_dir(source_svg: str, template_name: str, output_dir: str):
     for family in font_families:
         found = False
         normalized = family.replace(" ", "").lower()
-        for candidate_dir in candidate_dirs:
-            if not os.path.isdir(candidate_dir):
-                continue
-            for f in os.listdir(candidate_dir):
-                if f.endswith((".ttf", ".otf")):
-                    # Fuzzy match: "Climate Crisis" → "ClimeCrisis" or "ClimateCrisis"
-                    normalized = family.replace(" ", "").lower()
-                    fname_norm = os.path.splitext(f)[0].lower().replace("-", "").replace("_", "")
-                    if normalized in fname_norm or fname_norm.startswith(normalized[:8]):
-                        src_font = os.path.join(candidate_dir, f)
-                        dst_font = os.path.join(fonts_dir, f)
-                        if not os.path.exists(dst_font):
-                            shutil.copy2(src_font, dst_font)
-                        font_map[family] = f"fonts/{f}"
-                        print(f"  Linked font: '{family}' → {f}")
-                        found = True
-                        break
-            if found:
+
+        # 1) Check explicitly provided font files first
+        for norm_key, (src_path, fname) in explicit_fonts.items():
+            if normalized in norm_key or norm_key.startswith(normalized[:8]):
+                dst_font = os.path.join(fonts_dir, fname)
+                if not os.path.exists(dst_font):
+                    shutil.copy2(src_path, dst_font)
+                font_map[family] = f"fonts/{fname}"
+                print(f"  Linked font: '{family}' → {fname} (from --font)")
+                found = True
                 break
+
+        # 2) Search candidate directories
         if not found:
-            print(f"  ⚠ Font '{family}' not found in assets — add it manually to {fonts_dir}/")
+            for candidate_dir in candidate_dirs:
+                if not os.path.isdir(candidate_dir):
+                    continue
+                for f in os.listdir(candidate_dir):
+                    if f.endswith((".ttf", ".otf")):
+                        fname_norm = os.path.splitext(f)[0].lower().replace("-", "").replace("_", "")
+                        if normalized in fname_norm or fname_norm.startswith(normalized[:8]):
+                            src_font = os.path.join(candidate_dir, f)
+                            dst_font = os.path.join(fonts_dir, f)
+                            if not os.path.exists(dst_font):
+                                shutil.copy2(src_font, dst_font)
+                            font_map[family] = f"fonts/{f}"
+                            print(f"  Linked font: '{family}' → {f}")
+                            found = True
+                            break
+                if found:
+                    break
+
+        if not found:
+            print(f"  ⚠ Font '{family}' not found — provide it with --font or add to {fonts_dir}/")
 
     # Generate all four ratio variants
     aspect_files = {}
@@ -540,6 +561,11 @@ def main():
         "--out", default=None,
         help="Output directory (default: app/src/main/assets/templates)"
     )
+    parser.add_argument(
+        "--font", action="append", default=None, metavar="FILE",
+        help="Font file (.ttf/.otf) to bundle. Repeatable for multiple fonts. "
+             "Auto-matched to font-family names in the SVG."
+    )
 
     args = parser.parse_args()
 
@@ -567,7 +593,18 @@ def main():
         repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         out_dir = os.path.join(repo_root, "app", "src", "main", "assets", "templates")
 
-    build_template_dir(args.source, name, out_dir)
+    # Validate font files
+    font_files = []
+    for fp in (args.font or []):
+        if not os.path.isfile(fp):
+            print(f"Error: font file not found: {fp}", file=sys.stderr)
+            sys.exit(1)
+        if not fp.lower().endswith((".ttf", ".otf")):
+            print(f"Error: font must be .ttf or .otf: {fp}", file=sys.stderr)
+            sys.exit(1)
+        font_files.append(fp)
+
+    build_template_dir(args.source, name, out_dir, font_files=font_files or None)
 
 
 if __name__ == "__main__":
