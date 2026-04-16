@@ -1,0 +1,14 @@
+{
+  "name": "horizon",
+  "displayName": "Horizon",
+  "description": "",
+  "aspectRatios": {
+    "16x9": "horizon_16x9.svg",
+    "1x1": "horizon_1x1.svg",
+    "4x5": "horizon_4x5.svg",
+    "9x16": "horizon_9x16.svg"
+  },
+  "fonts": {
+    "Montserrat": "fonts/Montserrat-Bold.ttf"
+  }
+}

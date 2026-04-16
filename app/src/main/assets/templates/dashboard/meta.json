@@ -1,0 +1,14 @@
+{
+  "name": "dashboard",
+  "displayName": "Dashboard",
+  "description": "",
+  "aspectRatios": {
+    "16x9": "dashboard_16x9.svg",
+    "1x1": "dashboard_1x1.svg",
+    "4x5": "dashboard_4x5.svg",
+    "9x16": "dashboard_9x16.svg"
+  },
+  "fonts": {
+    "Inter": "fonts/Inter-Bold.ttf"
+  }
+}

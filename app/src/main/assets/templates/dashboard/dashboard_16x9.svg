@@ -1,0 +1,34 @@
+<svg width="1920" height="1080" viewBox="0 0 1920 1080" fill="none" xmlns="http://www.w3.org/2000/svg">
+<defs>
+  <linearGradient id="db_scrim" x1="0" y1="1" x2="0" y2="0">
+    <stop offset="0" stop-color="#000000" stop-opacity="0.85"/>
+    <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+  </linearGradient>
+</defs>
+<rect x="0" y="486" width="1920" height="594" fill="url(#db_scrim)"/>
+<text id="title_text" x="86" y="440" fill="#FFFFFF" font-family="Inter" font-size="30" font-weight="700" text-anchor="start" letter-spacing="-0.01em">Morning Run</text>
+<rect x="86" y="450" width="48" height="4" fill="#1FD1A7" opacity="1"/>
+<rect x="86.0" y="480" width="855.0" height="110" fill="#14161A" stroke="#262931" stroke-width="1" opacity="1" rx="14"/>
+<rect x="106.0" y="500" width="3" height="70" fill="#1FD1A7" opacity="1"/>
+<text id="metric_1_label" x="126.0" y="518" fill="#9AA0A6" font-family="Inter" font-size="18" font-weight="600" text-anchor="start" letter-spacing="0.2em">DISTANCE</text>
+<text id="metric_1_value" x="126.0" y="562" fill="#FFFFFF" font-family="Inter" font-size="50" font-weight="700" text-anchor="start" letter-spacing="-0.02em">10.0</text>
+<rect x="979.0" y="480" width="855.0" height="110" fill="#14161A" stroke="#262931" stroke-width="1" opacity="1" rx="14"/>
+<rect x="999.0" y="500" width="3" height="70" fill="#1FD1A7" opacity="1"/>
+<text id="metric_2_label" x="1019.0" y="518" fill="#9AA0A6" font-family="Inter" font-size="18" font-weight="600" text-anchor="start" letter-spacing="0.2em">TIME</text>
+<text id="metric_2_value" x="1019.0" y="562" fill="#FFFFFF" font-family="Inter" font-size="50" font-weight="700" text-anchor="start" letter-spacing="-0.02em">1:00:00</text>
+<rect x="86.0" y="628" width="855.0" height="110" fill="#14161A" stroke="#262931" stroke-width="1" opacity="1" rx="14"/>
+<rect x="106.0" y="648" width="3" height="70" fill="#1FD1A7" opacity="1"/>
+<text id="metric_3_label" x="126.0" y="666" fill="#9AA0A6" font-family="Inter" font-size="18" font-weight="600" text-anchor="start" letter-spacing="0.2em">PACE</text>
+<text id="metric_3_value" x="126.0" y="710" fill="#FFFFFF" font-family="Inter" font-size="50" font-weight="700" text-anchor="start" letter-spacing="-0.02em">05:00</text>
+<rect x="979.0" y="628" width="855.0" height="110" fill="#14161A" stroke="#262931" stroke-width="1" opacity="1" rx="14"/>
+<rect x="999.0" y="648" width="3" height="70" fill="#1FD1A7" opacity="1"/>
+<text id="metric_4_label" x="1019.0" y="666" fill="#9AA0A6" font-family="Inter" font-size="18" font-weight="600" text-anchor="start" letter-spacing="0.2em">HEART</text>
+<text id="metric_4_value" x="1019.0" y="710" fill="#FFFFFF" font-family="Inter" font-size="50" font-weight="700" text-anchor="start" letter-spacing="-0.02em">145</text>
+<g id="elevation_chart">
+  <g id="area"><rect x="86" y="820" width="1748" height="100" fill="#1FD1A7" opacity="0.25"/></g>
+  <g id="full_path"><rect x="86" y="820" width="1748" height="100" stroke="#FFFFFF" stroke-width="2" opacity="0.12" fill="none"/></g>
+  <g id="line"><rect x="86" y="820" width="1748" height="100" stroke="#1FD1A7" stroke-width="3" fill="none"/></g>
+  <g id="glow"><ellipse cx="1397.0" cy="865.0" rx="10" ry="10" fill="#1FD1A7" opacity="0.35"/></g>
+  <g id="dot"><ellipse cx="1397.0" cy="865.0" rx="5" ry="5" fill="#1FD1A7"/></g>
+</g>
+</svg>

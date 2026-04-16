@@ -1,0 +1,26 @@
+<svg width="1920" height="1080" viewBox="0 0 1920 1080" fill="none" xmlns="http://www.w3.org/2000/svg">
+<defs>
+  <linearGradient id="ex_scrim" x1="0" y1="1" x2="0" y2="0">
+    <stop offset="0" stop-color="#000000" stop-opacity="0.75"/>
+    <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+  </linearGradient>
+</defs>
+<rect x="0" y="0" width="1920" height="378" transform="translate(0,702)" fill="url(#ex_scrim)"/>
+<text id="title_text" x="105" y="110" fill="#FFFFFF" font-family="Bebas Neue" font-size="64" font-weight="400" text-anchor="start" letter-spacing="0.02em">MILAN RUNNING</text>
+<line x1="105" y1="135" x2="345" y2="135" stroke="#FF5A1F" stroke-width="4" opacity="1"/>
+<g id="route_map">
+  <g id="full_route"><rect x="680" y="200" width="560" height="560" stroke="#FFFFFF" stroke-width="2" opacity="0.3" fill="none"/></g>
+  <g id="route"><rect x="680" y="200" width="560" height="560" stroke="#FF5A1F" stroke-width="3" fill="none"/></g>
+  <g id="glow"><ellipse cx="960.0" cy="480.0" rx="10" ry="10" fill="#FF5A1F" opacity="0.35"/></g>
+  <g id="dot"><ellipse cx="960.0" cy="480.0" rx="5" ry="5" fill="#FF5A1F"/></g>
+</g>
+<line x1="105" y1="356" x2="127" y2="332" stroke="#FF5A1F" stroke-width="3" opacity="1"/>
+<text id="metric_1_label" x="145" y="358" fill="#BDBDBD" font-family="Inter" font-size="18" font-weight="600" text-anchor="start" letter-spacing="0.3em">DISTANCE</text>
+<text id="metric_1_value" x="145" y="400" fill="#FFFFFF" font-family="Bebas Neue" font-size="50" font-weight="400" text-anchor="start" letter-spacing="0.02em">10.0</text>
+<line x1="105" y1="441" x2="127" y2="417" stroke="#FF5A1F" stroke-width="3" opacity="1"/>
+<text id="metric_2_label" x="145" y="443" fill="#BDBDBD" font-family="Inter" font-size="18" font-weight="600" text-anchor="start" letter-spacing="0.3em">TIME</text>
+<text id="metric_2_value" x="145" y="485" fill="#FFFFFF" font-family="Bebas Neue" font-size="50" font-weight="400" text-anchor="start" letter-spacing="0.02em">1:00:00</text>
+<line x1="105" y1="526" x2="127" y2="502" stroke="#FF5A1F" stroke-width="3" opacity="1"/>
+<text id="metric_3_label" x="145" y="528" fill="#BDBDBD" font-family="Inter" font-size="18" font-weight="600" text-anchor="start" letter-spacing="0.3em">PACE</text>
+<text id="metric_3_value" x="145" y="570" fill="#FFFFFF" font-family="Bebas Neue" font-size="50" font-weight="400" text-anchor="start" letter-spacing="0.02em">05:00</text>
+</svg>

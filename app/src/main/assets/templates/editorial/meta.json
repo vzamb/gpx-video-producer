@@ -1,0 +1,15 @@
+{
+  "name": "editorial",
+  "displayName": "Editorial",
+  "description": "",
+  "aspectRatios": {
+    "16x9": "editorial_16x9.svg",
+    "1x1": "editorial_1x1.svg",
+    "4x5": "editorial_4x5.svg",
+    "9x16": "editorial_9x16.svg"
+  },
+  "fonts": {
+    "Inter": "fonts/Inter-Bold.ttf",
+    "Playfair Display": "fonts/PlayfairDisplay-Bold.ttf"
+  }
+}

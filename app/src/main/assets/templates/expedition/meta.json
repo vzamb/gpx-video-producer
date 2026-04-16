@@ -1,0 +1,15 @@
+{
+  "name": "expedition",
+  "displayName": "Expedition",
+  "description": "",
+  "aspectRatios": {
+    "16x9": "expedition_16x9.svg",
+    "1x1": "expedition_1x1.svg",
+    "4x5": "expedition_4x5.svg",
+    "9x16": "expedition_9x16.svg"
+  },
+  "fonts": {
+    "Bebas Neue": "fonts/BebasNeue-Regular.ttf",
+    "Inter": "fonts/Inter-Bold.ttf"
+  }
+}

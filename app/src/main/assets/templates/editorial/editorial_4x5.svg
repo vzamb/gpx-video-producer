@@ -1,0 +1,19 @@
+<svg width="1080" height="1350" viewBox="0 0 1080 1350" fill="none" xmlns="http://www.w3.org/2000/svg">
+<defs>
+  <linearGradient id="ed_scrim" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#000000" stop-opacity="0"/>
+    <stop offset="1" stop-color="#000000" stop-opacity="0.55"/>
+  </linearGradient>
+</defs>
+<rect x="0" y="540" width="1080" height="810" fill="url(#ed_scrim)"/>
+<text id="brand" x="1021" y="120" fill="#F4EFE6" font-family="Inter" font-size="22" font-weight="700" text-anchor="end" letter-spacing="0.35em">RUNNING</text>
+<line x1="881" y1="132" x2="1021" y2="132" stroke="#F4EFE6" stroke-width="1.5" opacity="0.6"/>
+<text id="title_text" x="59" y="1050" fill="#F4EFE6" font-family="Playfair Display" font-size="83" font-weight="700" text-anchor="start" letter-spacing="-0.01em">Morning Run</text>
+<line x1="59" y1="1160" x2="1021" y2="1160" stroke="#F4EFE6" stroke-width="1" opacity="0.35"/>
+<text id="metric_1_value" x="59.0" y="1220" fill="#F4EFE6" font-family="Playfair Display" font-size="37" font-weight="700" text-anchor="start" letter-spacing="-0.01em">10.0</text>
+<text id="metric_1_label" x="59.0" y="1248" fill="#A09A8E" font-family="Inter" font-size="16" font-weight="600" text-anchor="start" letter-spacing="0.3em">DISTANCE</text>
+<text id="metric_2_value" x="379.6666666666667" y="1220" fill="#F4EFE6" font-family="Playfair Display" font-size="37" font-weight="700" text-anchor="start" letter-spacing="-0.01em">1:00:00</text>
+<text id="metric_2_label" x="379.6666666666667" y="1248" fill="#A09A8E" font-family="Inter" font-size="16" font-weight="600" text-anchor="start" letter-spacing="0.3em">TIME</text>
+<text id="metric_3_value" x="700.3333333333334" y="1220" fill="#F4EFE6" font-family="Playfair Display" font-size="37" font-weight="700" text-anchor="start" letter-spacing="-0.01em">05:00</text>
+<text id="metric_3_label" x="700.3333333333334" y="1248" fill="#A09A8E" font-family="Inter" font-size="16" font-weight="600" text-anchor="start" letter-spacing="0.3em">PACE</text>
+</svg>

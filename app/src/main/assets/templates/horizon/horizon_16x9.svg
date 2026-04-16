@@ -1,0 +1,28 @@
+<svg width="1920" height="1080" viewBox="0 0 1920 1080" fill="none" xmlns="http://www.w3.org/2000/svg">
+<defs>
+  <linearGradient id="scrim" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#000000" stop-opacity="0"/>
+    <stop offset="1" stop-color="#000000" stop-opacity="0.75"/>
+  </linearGradient>
+</defs>
+<rect x="0" y="627" width="1920" height="453" fill="url(#scrim)"/>
+<text id="title_text" x="96" y="770" fill="#FFFFFF" font-family="Montserrat" font-size="54" font-weight="800" text-anchor="start" letter-spacing="-0.02em">Morning Run</text>
+<g id="elevation_chart">
+  <g id="area"><rect x="96" y="830" width="1728" height="40" fill="#FFFFFF" opacity="0.25"/></g>
+  <g id="full_path"><rect x="96" y="830" width="1728" height="40" stroke="#FFFFFF" stroke-width="2" opacity="0.08" fill="none"/></g>
+  <g id="line"><rect x="96" y="830" width="1728" height="40" stroke="#FFFFFF" stroke-width="3" fill="none"/></g>
+  <g id="glow"><ellipse cx="1392.0" cy="848.0" rx="10" ry="10" fill="#FFFFFF" opacity="0.35"/></g>
+  <g id="dot"><ellipse cx="1392.0" cy="848.0" rx="5" ry="5" fill="#FFFFFF"/></g>
+</g>
+<text id="metric_1_value" x="312.0" y="985" fill="#FFFFFF" font-family="Montserrat" font-size="46" font-weight="800" text-anchor="middle" letter-spacing="-0.02em">10.0</text>
+<text id="metric_1_label" x="312.0" y="1015" fill="#B8B8BE" font-family="Montserrat" font-size="16" font-weight="600" text-anchor="middle" letter-spacing="0.15em">DISTANCE</text>
+<line x1="528.0" y1="939" x2="528.0" y2="1021" stroke="#FFFFFF" stroke-width="1" opacity="0.35"/>
+<text id="metric_2_value" x="744.0" y="985" fill="#FFFFFF" font-family="Montserrat" font-size="46" font-weight="800" text-anchor="middle" letter-spacing="-0.02em">1:00:00</text>
+<text id="metric_2_label" x="744.0" y="1015" fill="#B8B8BE" font-family="Montserrat" font-size="16" font-weight="600" text-anchor="middle" letter-spacing="0.15em">TIME</text>
+<line x1="960.0" y1="939" x2="960.0" y2="1021" stroke="#FFFFFF" stroke-width="1" opacity="0.35"/>
+<text id="metric_3_value" x="1176.0" y="985" fill="#FFFFFF" font-family="Montserrat" font-size="46" font-weight="800" text-anchor="middle" letter-spacing="-0.02em">05:00</text>
+<text id="metric_3_label" x="1176.0" y="1015" fill="#B8B8BE" font-family="Montserrat" font-size="16" font-weight="600" text-anchor="middle" letter-spacing="0.15em">PACE</text>
+<line x1="1392.0" y1="939" x2="1392.0" y2="1021" stroke="#FFFFFF" stroke-width="1" opacity="0.35"/>
+<text id="metric_4_value" x="1608.0" y="985" fill="#FFFFFF" font-family="Montserrat" font-size="46" font-weight="800" text-anchor="middle" letter-spacing="-0.02em">145</text>
+<text id="metric_4_label" x="1608.0" y="1015" fill="#B8B8BE" font-family="Montserrat" font-size="16" font-weight="600" text-anchor="middle" letter-spacing="0.15em">HEART</text>
+</svg>

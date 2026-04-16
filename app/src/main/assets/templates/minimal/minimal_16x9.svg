@@ -1,0 +1,11 @@
+<svg width="1920" height="1080" viewBox="0 0 1920 1080" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect x="0" y="778" width="1920" height="302" fill="#F6F5F0" opacity="1"/>
+<text id="title_text" x="115" y="823" fill="#0A0A0A" font-family="Inter" font-size="26" font-weight="700" text-anchor="start" letter-spacing="0.3em">MORNING RUN</text>
+<line x1="115" y1="841" x2="1805" y2="841" stroke="#0A0A0A" stroke-width="1" opacity="0.2"/>
+<text id="metric_1_value" x="115.0" y="923" fill="#0A0A0A" font-family="Oswald" font-size="56" font-weight="500" text-anchor="start" letter-spacing="0em">10.0</text>
+<text id="metric_1_label" x="115.0" y="951" fill="#7A7A7A" font-family="Inter" font-size="15" font-weight="600" text-anchor="start" letter-spacing="0.25em">DIST</text>
+<text id="metric_2_value" x="678.3333333333334" y="923" fill="#0A0A0A" font-family="Oswald" font-size="56" font-weight="500" text-anchor="start" letter-spacing="0em">1:00:00</text>
+<text id="metric_2_label" x="678.3333333333334" y="951" fill="#7A7A7A" font-family="Inter" font-size="15" font-weight="600" text-anchor="start" letter-spacing="0.25em">TIME</text>
+<text id="metric_3_value" x="1241.6666666666667" y="923" fill="#0A0A0A" font-family="Oswald" font-size="56" font-weight="500" text-anchor="start" letter-spacing="0em">05:00</text>
+<text id="metric_3_label" x="1241.6666666666667" y="951" fill="#7A7A7A" font-family="Inter" font-size="15" font-weight="600" text-anchor="start" letter-spacing="0.25em">PACE</text>
+</svg>
