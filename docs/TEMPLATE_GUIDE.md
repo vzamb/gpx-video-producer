@@ -59,19 +59,23 @@ Templates use **generic positional slots** instead of specific metric names. The
 |---|---|
 | `metric_1_value` | First metric value (e.g. `10.5`) |
 | `metric_1_label` | First metric label (e.g. `DIST`) |
-| `metric_1_unit`  | First metric unit (e.g. `km`) |
 | `metric_2_value` | Second metric value |
 | `metric_2_label` | Second metric label |
-| `metric_2_unit`  | Second metric unit |
 | `metric_3_value` | Third metric value |
 | `metric_3_label` | Third metric label |
-| `metric_3_unit`  | Third metric unit |
 | `metric_4_value` | Fourth metric value |
 | `metric_4_label` | Fourth metric label |
-| `metric_4_unit`  | Fourth metric unit |
 | `title_text` | Activity title (e.g. `Morning Run`) |
 
 Add more slots (`metric_5_*`, `metric_6_*`, etc.) as needed. The app auto-detects the slot count from the SVG.
+
+#### Unit Display
+
+The measurement unit (e.g. `BPM`, `KM`) is **automatically appended** to the label text as a styled suffix — smaller font size (65%) and reduced opacity (55%). This keeps the unit visually subordinate to the label without requiring a separate SVG element.
+
+Example rendering: **DIST** · <small style="opacity:0.55">KM</small>
+
+No `metric_N_unit` element is needed in the template. The renderer handles it automatically based on which metric the user assigns to each slot.
 
 #### Available Metrics
 

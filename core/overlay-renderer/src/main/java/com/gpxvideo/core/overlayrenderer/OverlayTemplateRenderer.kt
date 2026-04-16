@@ -2,6 +2,7 @@ package com.gpxvideo.core.overlayrenderer
 
 import android.content.Context
 import android.graphics.Bitmap
+import com.gpxvideo.core.model.ChartType
 import com.gpxvideo.core.model.GpxData
 import com.gpxvideo.core.model.MetricType
 
@@ -75,7 +76,7 @@ class OverlayTemplateRenderer(private val context: Context) {
         frameData: OverlayFrameData,
         gpxData: GpxData?,
         activityTitle: String = "",
-        showElevationChart: Boolean = true,
+        chartType: ChartType? = ChartType.ELEVATION,
         showRouteMap: Boolean = true,
         metricConfig: List<MetricType> = MetricType.fallbackMetrics
     ): Bitmap {
@@ -87,7 +88,7 @@ class OverlayTemplateRenderer(private val context: Context) {
             frameData = frameData,
             gpxData = gpxData,
             activityTitle = activityTitle,
-            showElevationChart = showElevationChart,
+            chartType = chartType,
             showRouteMap = showRouteMap,
             metricConfig = metricConfig
         )

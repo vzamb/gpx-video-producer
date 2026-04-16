@@ -125,6 +125,7 @@ import androidx.compose.runtime.collectAsState
 import com.gpxvideo.core.model.ClipSyncPoint
 import com.gpxvideo.core.model.GpxData
 import com.gpxvideo.core.model.GpxPoint
+import com.gpxvideo.core.model.ChartType
 import com.gpxvideo.core.model.MetricType
 import com.gpxvideo.core.model.SocialAspectRatio
 import com.gpxvideo.core.model.StoryMode
@@ -237,9 +238,9 @@ fun StyleTelemetryScreen(
                 onTitleClick = { showTitleEditor = true },
                 onReplaceGpx = { showGpxSourcePicker = true },
                 hasGpxData = uiState.gpxData != null,
-                showElevationChart = uiState.showElevationChart,
+                chartType = uiState.chartType,
                 showRouteMap = uiState.showRouteMap,
-                onToggleElevation = viewModel::setShowElevationChart,
+                onChartTypeChanged = viewModel::setChartType,
                 onToggleRouteMap = viewModel::setShowRouteMap,
                 metricConfig = uiState.metricConfig,
                 templateSlotCount = uiState.templateSlotCount,
@@ -277,7 +278,7 @@ fun StyleTelemetryScreen(
                 liveGpxValues = liveGpxValues,
                 storyMode = uiState.storyMode,
                 isRunning = isRunning,
-                showElevationChart = uiState.showElevationChart,
+                chartType = uiState.chartType,
                 showRouteMap = uiState.showRouteMap,
                 metricConfig = uiState.metricConfig,
                 modifier = Modifier
@@ -701,9 +702,9 @@ private fun StyleTopBar(
     onTitleClick: () -> Unit,
     onReplaceGpx: () -> Unit,
     hasGpxData: Boolean,
-    showElevationChart: Boolean = true,
+    chartType: ChartType? = ChartType.ELEVATION,
     showRouteMap: Boolean = true,
-    onToggleElevation: (Boolean) -> Unit = {},
+    onChartTypeChanged: (ChartType?) -> Unit = {},
     onToggleRouteMap: (Boolean) -> Unit = {},
     metricConfig: List<MetricType> = MetricType.fallbackMetrics,
     templateSlotCount: Int = 4,
@@ -811,9 +812,9 @@ private fun StyleTopBar(
     // Overlay settings bottom sheet
     if (showOverlaySheet) {
         OverlaySettingsSheet(
-            showElevationChart = showElevationChart,
+            chartType = chartType,
             showRouteMap = showRouteMap,
-            onToggleElevation = onToggleElevation,
+            onChartTypeChanged = onChartTypeChanged,
             onToggleRouteMap = onToggleRouteMap,
             metricConfig = metricConfig,
             templateSlotCount = templateSlotCount,
@@ -828,9 +829,9 @@ private fun StyleTopBar(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun OverlaySettingsSheet(
-    showElevationChart: Boolean,
+    chartType: ChartType?,
     showRouteMap: Boolean,
-    onToggleElevation: (Boolean) -> Unit,
+    onChartTypeChanged: (ChartType?) -> Unit,
     onToggleRouteMap: (Boolean) -> Unit,
     metricConfig: List<MetricType>,
     templateSlotCount: Int,
@@ -861,15 +862,17 @@ private fun OverlaySettingsSheet(
 
             Spacer(Modifier.height(12.dp))
 
-            // ── Graph toggles section ──────────────────────────
-            SectionLabel("Graphs")
+            // ── Chart type section ─────────────────────────────
+            SectionLabel("Chart")
 
-            SettingsSwitchRow(
-                icon = Icons.Outlined.BarChart,
-                label = "Elevation Chart",
-                checked = showElevationChart,
-                onCheckedChange = onToggleElevation
+            ChartTypePicker(
+                selectedType = chartType,
+                onTypeSelected = onChartTypeChanged
             )
+
+            Spacer(Modifier.height(4.dp))
+
+            // ── Route map toggle ───────────────────────────────
             SettingsSwitchRow(
                 icon = Icons.Outlined.Route,
                 label = "Route Map",
@@ -1010,6 +1013,55 @@ private fun SettingsSwitchRow(
                     uncheckedBorderColor = Color.White.copy(alpha = 0.25f)
                 )
             )
+        }
+    }
+}
+
+/**
+ * Segmented button row for selecting chart type (Off, Elevation, Pace, HR, Power).
+ */
+@Composable
+private fun ChartTypePicker(
+    selectedType: ChartType?,
+    onTypeSelected: (ChartType?) -> Unit
+) {
+    val options: List<Pair<ChartType?, String>> = listOf(
+        null to "Off",
+        ChartType.ELEVATION to "Elev",
+        ChartType.PACE to "Pace",
+        ChartType.HEART_RATE to "HR",
+        ChartType.POWER to "Power"
+    )
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        options.forEach { (type, label) ->
+            val isSelected = selectedType == type
+            Surface(
+                onClick = { onTypeSelected(type) },
+                shape = RoundedCornerShape(8.dp),
+                color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+                        else Color.White.copy(alpha = 0.06f),
+                border = BorderStroke(
+                    1.dp,
+                    if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                    else Color.White.copy(alpha = 0.1f)
+                ),
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                    color = if (isSelected) Color.White else Color.White.copy(alpha = 0.5f),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp)
+                )
+            }
         }
     }
 }
@@ -1180,7 +1232,7 @@ private fun TemplatePreviewSection(
     liveGpxValues: LiveGpxValues,
     storyMode: String,
     isRunning: Boolean,
-    showElevationChart: Boolean = true,
+    chartType: ChartType? = ChartType.ELEVATION,
     showRouteMap: Boolean = true,
     metricConfig: List<MetricType> = MetricType.fallbackMetrics,
     modifier: Modifier = Modifier
@@ -1226,7 +1278,7 @@ private fun TemplatePreviewSection(
                     liveGpxValues = liveGpxValues,
                     storyMode = storyMode,
                     isRunning = isRunning,
-                    showElevationChart = showElevationChart,
+                    chartType = chartType,
                     showRouteMap = showRouteMap,
                     metricConfig = metricConfig
                 )
@@ -1275,7 +1327,7 @@ private fun StyleTemplateCard(
     liveGpxValues: LiveGpxValues,
     storyMode: String,
     isRunning: Boolean,
-    showElevationChart: Boolean = true,
+    chartType: ChartType? = ChartType.ELEVATION,
     showRouteMap: Boolean = true,
     metricConfig: List<MetricType> = MetricType.fallbackMetrics
 ) {
@@ -1319,7 +1371,7 @@ private fun StyleTemplateCard(
                 liveValues = liveGpxValues,
                 isRunning = isRunning,
                 onTitleClick = onTitleClick,
-                showElevationChart = showElevationChart,
+                chartType = chartType,
                 showRouteMap = showRouteMap,
                 metricConfig = metricConfig
             )
@@ -1386,7 +1438,7 @@ private fun TemplateOverlayPreview(
     liveValues: LiveGpxValues,
     isRunning: Boolean,
     onTitleClick: () -> Unit,
-    showElevationChart: Boolean = true,
+    chartType: ChartType? = ChartType.ELEVATION,
     showRouteMap: Boolean = true,
     metricConfig: List<MetricType> = MetricType.fallbackMetrics,
     modifier: Modifier = Modifier
@@ -1432,7 +1484,7 @@ private fun TemplateOverlayPreview(
 
             // Copy bitmap so Compose sees a new reference when keys change
             // (the renderer reuses an internal bitmap for performance)
-            val bitmap = remember(tmpl, widthPx, heightPx, frameData, activityTitle, showElevationChart, showRouteMap, metricConfig) {
+            val bitmap = remember(tmpl, widthPx, heightPx, frameData, activityTitle, chartType, showRouteMap, metricConfig) {
                 try {
                     val rendered = templateRenderer.render(
                         template = tmpl,
@@ -1441,7 +1493,7 @@ private fun TemplateOverlayPreview(
                         frameData = frameData,
                         gpxData = gpxData,
                         activityTitle = activityTitle,
-                        showElevationChart = showElevationChart,
+                        chartType = chartType,
                         showRouteMap = showRouteMap,
                         metricConfig = metricConfig
                     )

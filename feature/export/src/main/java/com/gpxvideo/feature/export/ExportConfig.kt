@@ -1,5 +1,6 @@
 package com.gpxvideo.feature.export
 
+import com.gpxvideo.core.model.ChartType
 import com.gpxvideo.core.model.ExportFormat
 import com.gpxvideo.core.model.GpxData
 import com.gpxvideo.core.model.MetricType
@@ -25,7 +26,7 @@ data class ExportConfig(
     val activityTitle: String = "",
     val storyMode: String = "FAST_FORWARD",
     val accentColor: Int = 0xFF448AFF.toInt(),
-    val showElevationChart: Boolean = true,
+    val chartType: ChartType? = ChartType.ELEVATION,
     val showRouteMap: Boolean = true,
     val metricConfig: List<MetricType> = MetricType.fallbackMetrics
 )

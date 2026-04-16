@@ -17,6 +17,7 @@ import com.gpxvideo.core.database.entity.GpxFileEntity
 import com.gpxvideo.core.database.entity.MediaItemEntity
 import com.gpxvideo.core.database.entity.ProjectEntity
 import com.gpxvideo.core.model.ClipSyncPoint
+import com.gpxvideo.core.model.ChartType
 import com.gpxvideo.core.model.GpxData
 import com.gpxvideo.core.model.MetricType
 import com.gpxvideo.core.model.SocialAspectRatio
@@ -67,7 +68,7 @@ data class ProjectEditorUiState(
     val activityTitle: String = "",
     val clipSyncPoints: Map<UUID, ClipSyncPoint> = emptyMap(),
     val autoSyncedClipIds: Set<UUID> = emptySet(),
-    val showElevationChart: Boolean = true,
+    val chartType: ChartType? = ChartType.ELEVATION,
     val showRouteMap: Boolean = true,
     val metricConfig: List<MetricType> = MetricType.fallbackMetrics,
     val templateSlotCount: Int = 4
@@ -114,7 +115,7 @@ class ProjectEditorViewModel @Inject constructor(
     private val _clipSyncPoints = MutableStateFlow<Map<UUID, ClipSyncPoint>>(emptyMap())
     /** Clip IDs that were auto-synced because their video creation date matched the GPX timespan. */
     private val _autoSyncedClipIds = MutableStateFlow<Set<UUID>>(emptySet())
-    private val _showElevationChart = MutableStateFlow(true)
+    private val _chartType = MutableStateFlow<ChartType?>(ChartType.ELEVATION)
     private val _showRouteMap = MutableStateFlow(true)
     private val _metricConfig = MutableStateFlow(MetricType.fallbackMetrics)
     private val _templateSlotCount = MutableStateFlow(4)
@@ -138,7 +139,7 @@ class ProjectEditorViewModel @Inject constructor(
                     _selectedAspectRatio.value = savedRatio
                     _activityTitle.value = it.activityTitle
                     _accentColor.value = it.accentColor
-                    _showElevationChart.value = it.showElevationChart
+                    _chartType.value = ChartType.fromName(it.chartType)
                     _showRouteMap.value = it.showRouteMap
                     _metricConfig.value = resolveMetricConfig(it)
                 }
@@ -253,7 +254,7 @@ class ProjectEditorViewModel @Inject constructor(
                         frameData = frameData,
                         gpxData = _gpxData.value,
                         activityTitle = _activityTitle.value,
-                        showElevationChart = _showElevationChart.value,
+                        chartType = _chartType.value,
                         showRouteMap = _showRouteMap.value,
                         metricConfig = _metricConfig.value
                     )
@@ -419,11 +420,11 @@ class ProjectEditorViewModel @Inject constructor(
         _storyTemplate,
         combine(
             combine(_selectedAspectRatio, _accentColor, _activityTitle, _clipSyncPoints, _autoSyncedClipIds) { ar, ac, at, cs, autoIds -> arrayOf(ar, ac, at, cs, autoIds) },
-            _showElevationChart,
+            _chartType,
             _showRouteMap,
             _metricConfig,
             _templateSlotCount
-        ) { extra, sec, srm, mc, tsc -> arrayOf(*extra, sec, srm, mc, tsc) }
+        ) { extra, ct, srm, mc, tsc -> arrayOf(*extra, ct, srm, mc, tsc) }
     ) { values ->
         val project = values[0] as ProjectEntity?
         val mediaItems = @Suppress("UNCHECKED_CAST") (values[1] as List<MediaItemEntity>)
@@ -443,7 +444,7 @@ class ProjectEditorViewModel @Inject constructor(
         val clipSyncPoints = extra[3] as Map<UUID, ClipSyncPoint>
         @Suppress("UNCHECKED_CAST")
         val autoSyncedClipIds = extra[4] as Set<UUID>
-        val showElevationChart = extra[5] as Boolean
+        val chartType = extra[5] as ChartType?
         val showRouteMap = extra[6] as Boolean
         @Suppress("UNCHECKED_CAST")
         val metricConfig = extra[7] as List<MetricType>
@@ -464,7 +465,7 @@ class ProjectEditorViewModel @Inject constructor(
             activityTitle = activityTitle,
             clipSyncPoints = clipSyncPoints,
             autoSyncedClipIds = autoSyncedClipIds,
-            showElevationChart = showElevationChart,
+            chartType = chartType,
             showRouteMap = showRouteMap,
             metricConfig = metricConfig,
             templateSlotCount = templateSlotCount
@@ -710,10 +711,10 @@ class ProjectEditorViewModel @Inject constructor(
         }
     }
 
-    fun setShowElevationChart(show: Boolean) {
-        _showElevationChart.value = show
+    fun setChartType(chartType: ChartType?) {
+        _chartType.value = chartType
         viewModelScope.launch(Dispatchers.IO) {
-            projectDao.updateShowElevationChart(projectId, show)
+            projectDao.updateChartType(projectId, chartType?.name)
         }
     }
 

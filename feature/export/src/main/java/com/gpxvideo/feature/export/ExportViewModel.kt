@@ -383,7 +383,7 @@ class ExportViewModel @Inject constructor(
             activityTitle = project.activityTitle,
             storyMode = project.storyMode,
             accentColor = project.accentColor,
-            showElevationChart = project.showElevationChart,
+            chartType = com.gpxvideo.core.model.ChartType.fromName(project.chartType),
             showRouteMap = project.showRouteMap,
             metricConfig = resolveMetricConfig(project)
         )

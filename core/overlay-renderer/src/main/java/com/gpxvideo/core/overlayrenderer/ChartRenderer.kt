@@ -7,10 +7,13 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RadialGradient
 import android.graphics.Shader
+import com.gpxvideo.core.model.ChartType
 import com.gpxvideo.core.model.GpxData
+import com.gpxvideo.core.model.GpxPoint
+import java.time.Duration
 
 /**
- * Renders an elevation profile chart onto a Canvas region.
+ * Renders a data chart (elevation, pace, heart rate, or power) onto a Canvas region.
  *
  * Uses monotone cubic Hermite spline interpolation for smooth, natural-looking
  * curves that never overshoot the data. Supports multi-stop area gradients,
@@ -21,14 +24,18 @@ object ChartRenderer {
     fun render(
         canvas: Canvas,
         gpxData: GpxData?,
+        chartType: ChartType,
         left: Float, top: Float, right: Float, bottom: Float,
         dp: Float,
         progress: Float,
         style: PlaceholderStyle
     ) {
-        val elevations = gpxData?.tracks?.flatMap { it.segments }?.flatMap { it.points }
-            ?.mapNotNull { it.elevation } ?: return
-        if (elevations.size < 2) return
+        val points = gpxData?.tracks?.flatMap { it.segments }?.flatMap { it.points }
+            ?: return
+        if (points.size < 2) return
+
+        val dataSeries = extractSeries(points, chartType)
+        if (dataSeries.size < 2) return
 
         val accentColor = style.accentColor
 
@@ -47,22 +54,22 @@ object ChartRenderer {
             }
         }
 
-        val step = (elevations.size / 80).coerceAtLeast(1)
-        val sampled = elevations.filterIndexed { i, _ -> i % step == 0 }
-        val minElev = sampled.min()
-        val maxElev = sampled.max()
-        val range = (maxElev - minElev).coerceAtLeast(1.0)
+        val step = (dataSeries.size / 80).coerceAtLeast(1)
+        val sampled = dataSeries.filterIndexed { i, _ -> i % step == 0 }
+        val minVal = sampled.min()
+        val maxVal = sampled.max()
+        val range = (maxVal - minVal).coerceAtLeast(0.01)
         val chartW = right - left
         val chartH = bottom - top
         val chartDrawH = chartH * 0.85f
         val progressIndex = (progress * (sampled.size - 1)).toInt().coerceIn(0, sampled.size - 1)
 
-        // Draw Y-axis grid lines and elevation labels
-        drawElevationGrid(canvas, left, top, right, bottom, chartDrawH, minElev, maxElev, range, dp, accentColor)
+        // Draw Y-axis grid lines and labels
+        drawGrid(canvas, left, top, right, bottom, chartDrawH, minVal, maxVal, range, dp, accentColor, chartType)
 
         // Compute (x, y) data points
         val xs = FloatArray(sampled.size) { i -> left + (i.toFloat() / (sampled.size - 1)) * chartW }
-        val ys = FloatArray(sampled.size) { i -> bottom - ((sampled[i] - minElev) / range).toFloat() * chartDrawH }
+        val ys = FloatArray(sampled.size) { i -> bottom - ((sampled[i] - minVal) / range).toFloat() * chartDrawH }
 
         // Full path with cubic spline
         val fullPath = buildSplinePath(xs, ys, 0, sampled.size)
@@ -146,18 +153,68 @@ object ChartRenderer {
     }
 
     /**
-     * Draws subtle horizontal grid lines and elevation labels along the Y-axis.
-     * Shows min, max, and one or two intermediate values.
+     * Extract the data series for the given chart type from the GPX points.
+     * Returns empty list if the data is not available.
      */
-    private fun drawElevationGrid(
+    private fun extractSeries(points: List<GpxPoint>, chartType: ChartType): List<Double> {
+        return when (chartType) {
+            ChartType.ELEVATION -> points.mapNotNull { it.elevation }
+            ChartType.HEART_RATE -> points.mapNotNull { it.heartRate?.toDouble() }
+            ChartType.POWER -> points.mapNotNull { it.power?.toDouble() }
+            ChartType.PACE -> extractPaceSeries(points)
+        }
+    }
+
+    /**
+     * Compute pace (min/km) from consecutive points.
+     * Uses distance/time deltas, smoothed with a rolling window.
+     */
+    private fun extractPaceSeries(points: List<GpxPoint>): List<Double> {
+        if (points.size < 2) return emptyList()
+        val paces = mutableListOf<Double>()
+        for (i in 1 until points.size) {
+            val prev = points[i - 1]
+            val curr = points[i]
+            val timeSec = if (prev.time != null && curr.time != null)
+                Duration.between(prev.time, curr.time).seconds.toDouble() else 0.0
+            val distM = haversineDistance(prev.latitude, prev.longitude, curr.latitude, curr.longitude)
+            val paceMinPerKm = if (distM > 1.0 && timeSec > 0) (timeSec / 60.0) / (distM / 1000.0) else 0.0
+            // Clamp to reasonable range (1 to 20 min/km)
+            paces.add(paceMinPerKm.coerceIn(1.0, 20.0))
+        }
+        // Smooth with simple rolling average (window = 5)
+        val windowSize = 5
+        return paces.mapIndexed { i, _ ->
+            val start = (i - windowSize / 2).coerceAtLeast(0)
+            val end = (i + windowSize / 2).coerceAtMost(paces.size - 1)
+            paces.subList(start, end + 1).average()
+        }
+    }
+
+    private fun haversineDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+        val R = 6371000.0
+        val dLat = Math.toRadians(lat2 - lat1)
+        val dLon = Math.toRadians(lon2 - lon1)
+        val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2)
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+    }
+
+    /**
+     * Draws horizontal grid lines and value labels along the Y-axis.
+     * Adapts label formatting based on chart type.
+     */
+    private fun drawGrid(
         canvas: Canvas,
         left: Float, top: Float, right: Float, bottom: Float,
         chartDrawH: Float,
-        minElev: Double, maxElev: Double, range: Double,
+        minVal: Double, maxVal: Double, range: Double,
         dp: Float,
-        accentColor: Int
+        accentColor: Int,
+        chartType: ChartType
     ) {
-        val gridLineCount = if (range > 200) 3 else 2
+        val gridLineCount = if (range > 200 || chartType != ChartType.ELEVATION) 3 else 2
         val gridPaint = Paint().apply {
             color = Color.argb(30, 255, 255, 255)
             style = Paint.Style.STROKE
@@ -174,16 +231,27 @@ object ChartRenderer {
 
         for (i in 0..gridLineCount) {
             val fraction = i.toFloat() / gridLineCount
-            val elevValue = minElev + fraction * range
+            val value = minVal + fraction * range
             val y = bottom - fraction * chartDrawH
 
-            // Grid line
             canvas.drawLine(left, y, right, y, gridPaint)
 
-            // Elevation label (right-aligned, slightly inside the chart)
-            val label = "${elevValue.toInt()}m"
+            val label = formatGridLabel(value, chartType)
             val labelWidth = labelPaint.measureText(label)
             canvas.drawText(label, right - labelWidth - 4f * dp, y - 2f * dp, labelPaint)
+        }
+    }
+
+    /** Format a grid label value based on the chart type. */
+    private fun formatGridLabel(value: Double, chartType: ChartType): String = when (chartType) {
+        ChartType.ELEVATION -> "${value.toInt()}m"
+        ChartType.HEART_RATE -> "${value.toInt()}bpm"
+        ChartType.POWER -> "${value.toInt()}W"
+        ChartType.PACE -> {
+            val totalMin = value
+            val min = totalMin.toInt()
+            val sec = ((totalMin - min) * 60).toInt()
+            "$min:%02d".format(sec)
         }
     }
 

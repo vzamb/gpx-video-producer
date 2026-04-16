@@ -49,8 +49,8 @@ interface ProjectDao {
     @Query("UPDATE projects SET accent_color = :color WHERE id = :id")
     suspend fun updateAccentColor(id: UUID, color: Int)
 
-    @Query("UPDATE projects SET show_elevation_chart = :show WHERE id = :id")
-    suspend fun updateShowElevationChart(id: UUID, show: Boolean)
+    @Query("UPDATE projects SET chart_type = :chartType WHERE id = :id")
+    suspend fun updateChartType(id: UUID, chartType: String?)
 
     @Query("UPDATE projects SET show_route_map = :show WHERE id = :id")
     suspend fun updateShowRouteMap(id: UUID, show: Boolean)

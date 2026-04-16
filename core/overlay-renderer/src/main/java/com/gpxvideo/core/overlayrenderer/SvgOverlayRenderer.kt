@@ -6,6 +6,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.PorterDuff
 import com.caverock.androidsvg.SVG
+import com.gpxvideo.core.model.ChartType
 import com.gpxvideo.core.model.MetricType
 import com.gpxvideo.core.model.GpxData
 
@@ -45,6 +46,7 @@ class SvgOverlayRenderer(
      * @param accentColor   theme accent color
      * @param activityTitle user-supplied activity title
      * @param metricConfig  ordered list of metrics to fill template slots (packed, no gaps)
+     * @param chartType     chart type to display (null = hidden)
      */
     fun render(
         svg: SVG,
@@ -55,7 +57,7 @@ class SvgOverlayRenderer(
         gpxData: GpxData?,
         accentColor: Int = Color.argb(204, 68, 138, 255),
         activityTitle: String = "",
-        showElevationChart: Boolean = true,
+        chartType: ChartType? = ChartType.ELEVATION,
         showRouteMap: Boolean = true,
         metricConfig: List<MetricType> = MetricType.fallbackMetrics
     ): Bitmap {
@@ -100,20 +102,22 @@ class SvgOverlayRenderer(
 
         // 3. Draw dynamic text natively on Canvas (fill + stroke for outlined effect)
         val textValues = buildTextValues(frameData, activityTitle, metricConfig)
+        val unitSuffixes = buildUnitSuffixes(metricConfig)
         for ((name, info) in textLayers) {
             val text = textValues[name] ?: continue
             if (text.isBlank()) continue
-            drawOutlinedText(canvas, text, info, name, width)
+            val unitSuffix = unitSuffixes[name]
+            drawOutlinedText(canvas, text, info, name, width, unitSuffix)
         }
 
         // 4. Draw chart and map overlays (colors come from SVG sub-elements)
         val placeholders = cachedPlaceholders ?: emptyMap()
         val dp = width / 360f
 
-        if (showElevationChart) {
+        if (chartType != null) {
             placeholders[SvgTemplateConventions.ELEVATION_CHART]?.let { info ->
                 ChartRenderer.render(
-                    canvas, gpxData,
+                    canvas, gpxData, chartType,
                     info.bounds.left, info.bounds.top, info.bounds.right, info.bounds.bottom,
                     dp, frameData.progress, info.style
                 )
@@ -138,7 +142,8 @@ class SvgOverlayRenderer(
         text: String,
         info: TextLayerInfo,
         layerName: String,
-        canvasWidth: Int
+        canvasWidth: Int,
+        unitSuffix: String? = null
     ) {
         val typeface = fontProvider?.getTypeface(
             info.fontFamily ?: "sans-serif",
@@ -211,6 +216,40 @@ class SvgOverlayRenderer(
             color = info.color
         }
         canvas.drawText(text, drawX, info.y, textPaint)
+
+        // Unit suffix — smaller, semi-transparent, drawn right after the label text
+        if (!unitSuffix.isNullOrBlank()) {
+            val mainWidth = textPaint.measureText(text)
+            val suffixX = when (align) {
+                Paint.Align.LEFT -> drawX + mainWidth
+                Paint.Align.CENTER -> drawX + mainWidth / 2f
+                Paint.Align.RIGHT -> drawX  // right-aligned: label ends at drawX
+                else -> drawX + mainWidth
+            }
+            val unitFontSize = fontSize * UNIT_SUFFIX_SCALE
+            val separatorUnit = " · $unitSuffix"
+
+            // Stroke pass for unit suffix
+            if (info.strokeWidth > 0 && info.strokeColor != Color.TRANSPARENT) {
+                strokePaint.apply {
+                    textSize = unitFontSize
+                    textAlign = Paint.Align.LEFT
+                    alpha = (Color.alpha(info.strokeColor) * UNIT_SUFFIX_OPACITY).toInt()
+                }
+                canvas.drawText(separatorUnit, suffixX, info.y, strokePaint)
+            }
+
+            // Fill pass for unit suffix
+            textPaint.apply {
+                textSize = unitFontSize
+                textAlign = Paint.Align.LEFT
+                alpha = (255 * UNIT_SUFFIX_OPACITY).toInt()
+            }
+            canvas.drawText(separatorUnit, suffixX, info.y, textPaint)
+
+            // Restore full alpha
+            textPaint.alpha = 255
+        }
     }
 
     /**
@@ -270,7 +309,7 @@ class SvgOverlayRenderer(
     /**
      * Build the text value map for all metric slots + title.
      *
-     * Maps generic slot IDs (metric_1_value, metric_1_label, metric_1_unit, ...)
+     * Maps generic slot IDs (metric_1_value, metric_1_label, ...)
      * to actual values based on the resolved [metricConfig].
      */
     private fun buildTextValues(
@@ -285,9 +324,22 @@ class SvgOverlayRenderer(
             val slot = index + 1
             map["metric_${slot}_value"] = extractValue(metric, frameData)
             map["metric_${slot}_label"] = metric.labelText
-            map["metric_${slot}_unit"] = metric.unitText
         }
 
+        return map
+    }
+
+    /**
+     * Build a map of unit suffixes keyed by label layer ID.
+     * Only label layers get a unit suffix (e.g. metric_1_label → "BPM").
+     */
+    private fun buildUnitSuffixes(metricConfig: List<MetricType>): Map<String, String> {
+        val map = mutableMapOf<String, String>()
+        for ((index, metric) in metricConfig.withIndex()) {
+            if (metric.unitText.isNotBlank()) {
+                map["metric_${index + 1}_label"] = metric.unitText.uppercase()
+            }
+        }
         return map
     }
 
@@ -322,5 +374,9 @@ class SvgOverlayRenderer(
 
     companion object {
         private const val TAG = "SvgOverlayRenderer"
+        /** Unit suffix font size as a fraction of the label font size. */
+        private const val UNIT_SUFFIX_SCALE = 0.65f
+        /** Unit suffix opacity (0.0–1.0). */
+        private const val UNIT_SUFFIX_OPACITY = 0.55f
     }
 }
