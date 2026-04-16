@@ -39,7 +39,6 @@ include(":feature:gpx")
 include(":feature:overlays")
 include(":feature:templates")
 
-include(":lib:ffmpeg")
 include(":lib:gpx-parser")
 include(":lib:media-utils")
 include(":lib:strava")

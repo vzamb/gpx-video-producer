@@ -55,7 +55,6 @@ dependencies {
     implementation(project(":feature:gpx"))
     implementation(project(":feature:overlays"))
     implementation(project(":feature:templates"))
-    implementation(project(":lib:ffmpeg"))
     implementation(project(":lib:gpx-parser"))
     implementation(project(":lib:media-utils"))
     implementation(project(":lib:strava"))

@@ -24,7 +24,6 @@ import com.gpxvideo.core.model.Transition
 import com.gpxvideo.core.model.TransitionType
 import com.gpxvideo.feature.overlays.GpxTimeSyncEngine
 import com.gpxvideo.feature.overlays.OverlayRepository
-import com.gpxvideo.lib.ffmpeg.FfmpegResult
 import com.gpxvideo.lib.gpxparser.GpxParser
 import com.gpxvideo.lib.gpxparser.GpxStatistics
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -169,7 +168,7 @@ class ExportViewModel @Inject constructor(
                 )
 
                 when (result) {
-                    is FfmpegResult.Success -> {
+                    is ExportTaskResult.Success -> {
                         val file = File(result.outputPath)
                         _uiState.update {
                             it.copy(
@@ -180,12 +179,12 @@ class ExportViewModel @Inject constructor(
                             )
                         }
                     }
-                    is FfmpegResult.Error -> {
+                    is ExportTaskResult.Error -> {
                         _uiState.update {
                             it.copy(exportState = ExportState.Error(result.message))
                         }
                     }
-                    is FfmpegResult.Cancelled -> {
+                    is ExportTaskResult.Cancelled -> {
                         _uiState.update { it.copy(exportState = ExportState.Idle) }
                     }
                 }

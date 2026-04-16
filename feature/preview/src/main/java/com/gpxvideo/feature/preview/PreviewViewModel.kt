@@ -27,8 +27,7 @@ import java.util.UUID
 data class PreviewUiState(
     val isLoading: Boolean = true,
     val playbackSpeed: Float = 1f,
-    val showControls: Boolean = true,
-    val overlays: List<OverlayRenderData> = emptyList()
+    val showControls: Boolean = true
 )
 
 @HiltViewModel(assistedFactory = PreviewViewModel.Factory::class)

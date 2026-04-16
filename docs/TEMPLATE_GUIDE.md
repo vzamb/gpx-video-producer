@@ -209,10 +209,31 @@ These settings are configured per-project in the app — no template changes nee
 
 ### Convert Template (`tools/convert_template.py`)
 
-Generate all aspect-ratio variants from a single SVG:
+Generate all aspect-ratio variants from a single 9:16 SVG. Optionally bundle a custom font:
 
 ```bash
-python3 tools/convert_template.py my_template_9x16.svg --name my_template --out app/src/main/assets/templates/
+python3 tools/convert_template.py my_template_9x16.svg \
+    --name my_template \
+    --out app/src/main/assets/templates/ \
+    --font /path/to/MyFont.ttf
+```
+
+`--font` copies the `.ttf`/`.otf` into the template's `fonts/` folder and wires it into `meta.json`.
+
+### Finalize Hand-Authored Templates (`tools/finalize_template.py`)
+
+When you've already produced all four aspect-ratio SVGs by hand (and optionally a font), this script writes the `meta.json`, wires fonts, and validates the folder layout:
+
+```bash
+python3 tools/finalize_template.py app/src/main/assets/templates/my_template
+```
+
+### Generate Premium Templates (`tools/generate_premium_templates.py`)
+
+Regenerates the five built-in premium templates (Horizon, Editorial, Expedition, Minimal, Dashboard) from code. Useful when tweaking sizes, stroke widths, or colors across the whole set.
+
+```bash
+python3 tools/generate_premium_templates.py
 ```
 
 ### Migrate Metric IDs (`tools/migrate_metric_ids.py`)

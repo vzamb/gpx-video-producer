@@ -34,20 +34,4 @@ fun Long.formatDuration(): String {
     }
 }
 
-fun Double.formatDistance(): String {
-    return if (this >= 1000) {
-        "%.1f km".format(this / 1000)
-    } else {
-        "%.0f m".format(this)
-    }
-}
 
-fun Double.formatSpeed(): String = "%.1f km/h".format(this)
-
-fun Double.formatPace(): String {
-    if (this <= 0) return "--:-- min/km"
-    val paceMinPerKm = 60.0 / this
-    val minutes = paceMinPerKm.toInt()
-    val seconds = ((paceMinPerKm - minutes) * 60).toInt()
-    return "%d:%02d min/km".format(minutes, seconds)
-}

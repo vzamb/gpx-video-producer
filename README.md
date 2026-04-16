@@ -22,8 +22,9 @@ An Android app for endurance athletes to create professional social media videos
 - **Aspect ratio selector** — switch canvas format (9:16, 16:9, 4:5, 1:1) at any time; preview updates instantly
 
 ### Style & Telemetry ("The Magic")
-- **SVG overlay templates** — designed in Figma, exported as SVG with per-template custom fonts
-- **Predefined templates** — swipe between *Cinematic*, *Hero*, *Pro Dashboard*, *Pulp*, and more
+- **SVG overlay templates** — designed in Figma (or any SVG editor), exported as SVG with per-template custom fonts and stroked text for readability on any footage
+- **Predefined templates** — swipe between *Horizon*, *Editorial*, *Expedition*, *Minimal*, *Dashboard*, and *Pulp*
+- **Capability-aware settings** — chart and route-map toggles auto-disable on templates that do not declare those slots
 - **Two sync modes:**
   - **Summary** — proportionally maps the entire GPX track across your video duration; works with any footage, even clips without timestamps
   - **Live** — real-time sync using GPS timestamps for exact telemetry at each frame; supports spatial alignment via an interactive elevation chart
@@ -72,7 +73,7 @@ gpx-video-producer/
 │   └── templates/          # Built-in & user-saved overlay templates
 ├── lib/
 │   ├── gpx-parser/         # XML pull parser for GPX/TCX with statistics computation
-│   ├── ffmpeg/             # FFmpeg command builder (legacy, transitioning to Media3)
+│   ├── strava/             # Strava OAuth + activity import
 │   └── media-utils/        # Video metadata probing, thumbnail generation
 └── gradle/
     └── libs.versions.toml  # Version catalog

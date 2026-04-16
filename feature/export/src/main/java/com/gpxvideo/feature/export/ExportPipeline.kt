@@ -31,7 +31,6 @@ import com.gpxvideo.core.model.OverlayConfig
 import com.gpxvideo.core.overlayrenderer.OverlayTemplateRenderer
 import com.gpxvideo.core.overlayrenderer.UnifiedTemplate
 import com.gpxvideo.core.overlayrenderer.OverlayFrameData
-import com.gpxvideo.lib.ffmpeg.FfmpegResult
 import com.gpxvideo.lib.gpxparser.GpxStats
 import com.google.common.collect.ImmutableList
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -62,7 +61,7 @@ class ExportPipeline @Inject constructor(
         config: ExportConfig,
         onPhaseChanged: (ExportPhase) -> Unit,
         onProgress: (Float) -> Unit
-    ): FfmpegResult {
+    ): ExportTaskResult {
 
         onPhaseChanged(ExportPhase.PREPARING)
         onProgress(0f)
@@ -71,7 +70,7 @@ class ExportPipeline @Inject constructor(
         tempDir.mkdirs()
 
         if (config.clips.isEmpty()) {
-            return FfmpegResult.Error("No clips to export", -1, "")
+            return ExportTaskResult.Error("No clips to export", -1, "")
         }
 
         // Phase 1: Pre-render overlays
@@ -157,7 +156,7 @@ class ExportPipeline @Inject constructor(
         totalDurationMs: Long,
         encodingBase: Float,
         onProgress: (Float) -> Unit
-    ): FfmpegResult = suspendCancellableCoroutine { cont ->
+    ): ExportTaskResult = suspendCancellableCoroutine { cont ->
         val width = config.projectWidth
         val height = config.projectHeight
 
@@ -308,14 +307,14 @@ class ExportPipeline @Inject constructor(
                     val outputFile = File(config.outputPath)
                     if (outputFile.exists()) {
                         cont.resume(
-                            FfmpegResult.Success(
+                            ExportTaskResult.Success(
                                 outputPath = config.outputPath,
                                 durationMs = exportResult.durationMs
                             )
                         )
                     } else {
                         cont.resume(
-                            FfmpegResult.Error("Output file not found", -1, "")
+                            ExportTaskResult.Error("Output file not found", -1, "")
                         )
                     }
                 }
@@ -328,7 +327,7 @@ class ExportPipeline @Inject constructor(
                     activeTransformer = null
                     Log.e(TAG, "Export error", exportException)
                     cont.resume(
-                        FfmpegResult.Error(
+                        ExportTaskResult.Error(
                             exportException.message ?: "Export failed",
                             exportException.errorCode,
                             exportException.stackTraceToString()
