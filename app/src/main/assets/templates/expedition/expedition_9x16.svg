@@ -1,26 +1,31 @@
 <svg width="1080" height="1920" viewBox="0 0 1080 1920" fill="none" xmlns="http://www.w3.org/2000/svg">
 <defs>
-  <linearGradient id="ex_scrim" x1="0" y1="1" x2="0" y2="0">
-    <stop offset="0" stop-color="#000000" stop-opacity="0.75"/>
+  <linearGradient id="exsc" x1="0" y1="1" x2="0" y2="0">
+    <stop offset="0" stop-color="#000000" stop-opacity="0.7"/>
+    <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+  </linearGradient>
+  <linearGradient id="exsc_top" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#000000" stop-opacity="0.5"/>
     <stop offset="1" stop-color="#000000" stop-opacity="0"/>
   </linearGradient>
 </defs>
-<rect x="0" y="0" width="1080" height="672" transform="translate(0,1248)" fill="url(#ex_scrim)"/>
-<text id="title_text" x="59" y="180" fill="#FFFFFF" font-family="Bebas Neue" font-size="115" font-weight="400" text-anchor="start" letter-spacing="0.02em">MILAN RUNNING</text>
-<line x1="59" y1="205" x2="299" y2="205" stroke="#FF5A1F" stroke-width="4" opacity="1"/>
+<rect x="0" y="0" width="1080" height="422" fill="url(#exsc_top)"/>
+<rect x="0" y="960" width="1080" height="960" fill="url(#exsc)"/>
+<text id="title_text" x="64" y="230" fill="#FFFFFF" stroke="#000000" stroke-width="9" stroke-linejoin="round" paint-order="stroke fill" font-family="Bebas Neue" font-size="134" font-weight="400" text-anchor="start" letter-spacing="0.03em">MILAN RUNNING</text>
+<line x1="64" y1="252" x2="364" y2="252" stroke="#FF5A1F" stroke-width="6" opacity="1" stroke-linecap="round"/>
 <g id="route_map">
-  <g id="full_route"><rect x="81" y="422" width="918" height="480" stroke="#FFFFFF" stroke-width="2" opacity="0.3" fill="none"/></g>
-  <g id="route"><rect x="81" y="422" width="918" height="480" stroke="#FF5A1F" stroke-width="3" fill="none"/></g>
-  <g id="glow"><ellipse cx="540.0" cy="662.0" rx="10" ry="10" fill="#FF5A1F" opacity="0.35"/></g>
-  <g id="dot"><ellipse cx="540.0" cy="662.0" rx="5" ry="5" fill="#FF5A1F"/></g>
+  <g id="full_route"><rect x="65" y="460" width="950" height="537" stroke="#FFFFFF" stroke-width="3" opacity="0.4" fill="none"/></g>
+  <g id="route"><rect x="65" y="460" width="950" height="537" stroke="#FF5A1F" stroke-width="5" fill="none"/></g>
+  <g id="glow"><ellipse cx="540.0" cy="728.5" rx="16" ry="16" fill="#FF5A1F" opacity="0.35"/></g>
+  <g id="dot"><ellipse cx="540.0" cy="728.5" rx="8" ry="8" fill="#FF5A1F" stroke="#000000" stroke-width="2"/></g>
 </g>
-<line x1="59" y1="986" x2="81" y2="962" stroke="#FF5A1F" stroke-width="3" opacity="1"/>
-<text id="metric_1_label" x="99" y="988" fill="#BDBDBD" font-family="Inter" font-size="20" font-weight="600" text-anchor="start" letter-spacing="0.3em">DISTANCE</text>
-<text id="metric_1_value" x="99" y="1056" fill="#FFFFFF" font-family="Bebas Neue" font-size="76" font-weight="400" text-anchor="start" letter-spacing="0.02em">10.0</text>
-<line x1="59" y1="1120" x2="81" y2="1096" stroke="#FF5A1F" stroke-width="3" opacity="1"/>
-<text id="metric_2_label" x="99" y="1122" fill="#BDBDBD" font-family="Inter" font-size="20" font-weight="600" text-anchor="start" letter-spacing="0.3em">TIME</text>
-<text id="metric_2_value" x="99" y="1190" fill="#FFFFFF" font-family="Bebas Neue" font-size="76" font-weight="400" text-anchor="start" letter-spacing="0.02em">1:00:00</text>
-<line x1="59" y1="1254" x2="81" y2="1230" stroke="#FF5A1F" stroke-width="3" opacity="1"/>
-<text id="metric_3_label" x="99" y="1256" fill="#BDBDBD" font-family="Inter" font-size="20" font-weight="600" text-anchor="start" letter-spacing="0.3em">PACE</text>
-<text id="metric_3_value" x="99" y="1324" fill="#FFFFFF" font-family="Bebas Neue" font-size="76" font-weight="400" text-anchor="start" letter-spacing="0.02em">05:00</text>
+<line x1="64" y1="1083" x2="94" y2="1051" stroke="#FF5A1F" stroke-width="5" opacity="1" stroke-linecap="round"/>
+<text id="metric_1_label" x="116" y="1081" fill="#E0E0E0" stroke="#000000" stroke-width="3" stroke-linejoin="round" paint-order="stroke fill" font-family="Inter" font-size="42" font-weight="700" text-anchor="start" letter-spacing="0.3em">DISTANCE</text>
+<text id="metric_1_value" x="116" y="1190" fill="#FFFFFF" stroke="#000000" stroke-width="8" stroke-linejoin="round" paint-order="stroke fill" font-family="Bebas Neue" font-size="115" font-weight="400" text-anchor="start" letter-spacing="0.03em">10.0</text>
+<line x1="64" y1="1255" x2="94" y2="1223" stroke="#FF5A1F" stroke-width="5" opacity="1" stroke-linecap="round"/>
+<text id="metric_2_label" x="116" y="1253" fill="#E0E0E0" stroke="#000000" stroke-width="3" stroke-linejoin="round" paint-order="stroke fill" font-family="Inter" font-size="42" font-weight="700" text-anchor="start" letter-spacing="0.3em">TIME</text>
+<text id="metric_2_value" x="116" y="1362" fill="#FFFFFF" stroke="#000000" stroke-width="8" stroke-linejoin="round" paint-order="stroke fill" font-family="Bebas Neue" font-size="115" font-weight="400" text-anchor="start" letter-spacing="0.03em">1:00:00</text>
+<line x1="64" y1="1427" x2="94" y2="1395" stroke="#FF5A1F" stroke-width="5" opacity="1" stroke-linecap="round"/>
+<text id="metric_3_label" x="116" y="1425" fill="#E0E0E0" stroke="#000000" stroke-width="3" stroke-linejoin="round" paint-order="stroke fill" font-family="Inter" font-size="42" font-weight="700" text-anchor="start" letter-spacing="0.3em">PACE</text>
+<text id="metric_3_value" x="116" y="1534" fill="#FFFFFF" stroke="#000000" stroke-width="8" stroke-linejoin="round" paint-order="stroke fill" font-family="Bebas Neue" font-size="115" font-weight="400" text-anchor="start" letter-spacing="0.03em">05:00</text>
 </svg>

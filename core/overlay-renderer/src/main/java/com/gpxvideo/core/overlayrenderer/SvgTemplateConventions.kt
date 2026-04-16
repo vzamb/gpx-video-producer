@@ -119,4 +119,12 @@ object SvgTemplateConventions {
         }
         return slots.size
     }
+
+    /** Returns true if the SVG contains an elevation_chart group. */
+    fun hasChartSlot(svgString: String): Boolean =
+        Regex("""id\s*=\s*"elevation_chart"""").containsMatchIn(svgString)
+
+    /** Returns true if the SVG contains a route_map group. */
+    fun hasRouteMapSlot(svgString: String): Boolean =
+        Regex("""id\s*=\s*"route_map"""").containsMatchIn(svgString)
 }

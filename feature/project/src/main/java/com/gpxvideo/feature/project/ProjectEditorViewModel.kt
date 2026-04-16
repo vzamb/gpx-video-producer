@@ -71,7 +71,9 @@ data class ProjectEditorUiState(
     val chartType: ChartType? = ChartType.ELEVATION,
     val showRouteMap: Boolean = true,
     val metricConfig: List<MetricType> = MetricType.fallbackMetrics,
-    val templateSlotCount: Int = 4
+    val templateSlotCount: Int = 4,
+    val templateHasChart: Boolean = true,
+    val templateHasRouteMap: Boolean = true
 )
 
 sealed interface FrameExportState {
@@ -119,6 +121,8 @@ class ProjectEditorViewModel @Inject constructor(
     private val _showRouteMap = MutableStateFlow(true)
     private val _metricConfig = MutableStateFlow(MetricType.fallbackMetrics)
     private val _templateSlotCount = MutableStateFlow(4)
+    private val _templateHasChart = MutableStateFlow(true)
+    private val _templateHasRouteMap = MutableStateFlow(true)
 
     init {
         previewEngine.initialize()
@@ -204,12 +208,27 @@ class ProjectEditorViewModel @Inject constructor(
                     val slots = loaded?.let {
                         SvgTemplateConventions.countSlots(it.loaded.rawSvgString)
                     } ?: 4
+                    val hasChart = loaded?.let {
+                        SvgTemplateConventions.hasChartSlot(it.loaded.rawSvgString)
+                    } ?: true
+                    val hasRouteMap = loaded?.let {
+                        SvgTemplateConventions.hasRouteMapSlot(it.loaded.rawSvgString)
+                    } ?: true
                     _templateSlotCount.value = slots
+                    _templateHasChart.value = hasChart
+                    _templateHasRouteMap.value = hasRouteMap
 
                     // Auto-trim metric config when switching to a template with fewer slots
                     val currentConfig = _metricConfig.value
                     if (currentConfig.size > slots) {
                         setMetricConfig(currentConfig.take(slots))
+                    }
+                    // If template doesn't support the chart/route, force-disable to avoid stale state
+                    if (!hasChart && _chartType.value != null) {
+                        _chartType.value = null
+                    }
+                    if (!hasRouteMap && _showRouteMap.value) {
+                        _showRouteMap.value = false
                     }
                 }
         }
@@ -423,8 +442,8 @@ class ProjectEditorViewModel @Inject constructor(
             _chartType,
             _showRouteMap,
             _metricConfig,
-            _templateSlotCount
-        ) { extra, ct, srm, mc, tsc -> arrayOf(*extra, ct, srm, mc, tsc) }
+            combine(_templateSlotCount, _templateHasChart, _templateHasRouteMap) { n, hc, hr -> Triple(n, hc, hr) }
+        ) { extra, ct, srm, mc, tcaps -> arrayOf(*extra, ct, srm, mc, tcaps) }
     ) { values ->
         val project = values[0] as ProjectEntity?
         val mediaItems = @Suppress("UNCHECKED_CAST") (values[1] as List<MediaItemEntity>)
@@ -448,7 +467,11 @@ class ProjectEditorViewModel @Inject constructor(
         val showRouteMap = extra[6] as Boolean
         @Suppress("UNCHECKED_CAST")
         val metricConfig = extra[7] as List<MetricType>
-        val templateSlotCount = extra[8] as Int
+        @Suppress("UNCHECKED_CAST")
+        val tcaps = extra[8] as Triple<Int, Boolean, Boolean>
+        val templateSlotCount = tcaps.first
+        val templateHasChart = tcaps.second
+        val templateHasRouteMap = tcaps.third
         ProjectEditorUiState(
             project = project,
             mediaItems = mediaItems,
@@ -468,7 +491,9 @@ class ProjectEditorViewModel @Inject constructor(
             chartType = chartType,
             showRouteMap = showRouteMap,
             metricConfig = metricConfig,
-            templateSlotCount = templateSlotCount
+            templateSlotCount = templateSlotCount,
+            templateHasChart = templateHasChart,
+            templateHasRouteMap = templateHasRouteMap
         )
     }.stateIn(
         scope = viewModelScope,

@@ -2,15 +2,15 @@
 """
 Generate 5 premium templates × 4 aspect ratios each.
 
-Writes SVGs into app/src/main/assets/templates/<name>/<name>_<ratio>.svg
-and copies the appropriate font into that folder. Afterwards run
-finalize_template.py on each folder to produce meta.json.
+Design principles for real-video readability:
+- Every text element has a dark stroke outline (paint-order: stroke fill)
+  so overlays stay legible on any background.
+- Strong gradient scrims under text.
+- Values and labels are sized for impact, not subtlety.
 
-The SVG element IDs follow project conventions:
-  - title_text
-  - metric_N_value, metric_N_label
-  - elevation_chart (group: area, line, full_path, dot, glow)
-  - route_map (group: full_route, route, dot, glow)
+Each template also declares which chart/route slots it supports. Layouts
+that don't include an elevation_chart or route_map group will have those
+toggles disabled in the app's overlay settings.
 """
 
 import os
@@ -30,25 +30,19 @@ RATIOS = {
 }
 
 
-def svg_header(w, h, bg="#0B0B0E"):
+# ---------- Low-level primitives ----------
+
+def stroked_text(id_, x, y, size, family, fill, content,
+                 anchor="start", weight="bold", stroke="#000000",
+                 stroke_width=None, letter_spacing="0em"):
+    """Text with a proportional dark outline for readability on any
+    background. paint-order ensures the stroke is behind the fill."""
+    if stroke_width is None:
+        stroke_width = max(2, round(size * 0.07))
     return (
-        f'<svg width="{w}" height="{h}" viewBox="0 0 {w} {h}" fill="none" '
-        f'xmlns="http://www.w3.org/2000/svg">\n'
-        f'<rect width="{w}" height="{h}" fill="{bg}"/>\n'
-    )
-
-
-def svg_footer():
-    return "</svg>\n"
-
-
-def text(id_, x, y, size, family, fill, content, anchor="start", weight="bold",
-         stroke=None, stroke_width=0, letter_spacing="0em"):
-    stroke_attr = ""
-    if stroke and stroke_width:
-        stroke_attr = f' stroke="{stroke}" stroke-width="{stroke_width}" paint-order="stroke fill"'
-    return (
-        f'<text id="{id_}" x="{x}" y="{y}" fill="{fill}"{stroke_attr} '
+        f'<text id="{id_}" x="{x}" y="{y}" fill="{fill}" '
+        f'stroke="{stroke}" stroke-width="{stroke_width}" '
+        f'stroke-linejoin="round" paint-order="stroke fill" '
         f'font-family="{family}" font-size="{size}" font-weight="{weight}" '
         f'text-anchor="{anchor}" letter-spacing="{letter_spacing}">{content}</text>\n'
     )
@@ -57,16 +51,13 @@ def text(id_, x, y, size, family, fill, content, anchor="start", weight="bold",
 def line(x1, y1, x2, y2, stroke, stroke_width=2, opacity=1):
     return (
         f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="{stroke}" '
-        f'stroke-width="{stroke_width}" opacity="{opacity}"/>\n'
+        f'stroke-width="{stroke_width}" opacity="{opacity}" '
+        f'stroke-linecap="round"/>\n'
     )
 
 
 def rect(x, y, w, h, fill=None, stroke=None, stroke_width=0, opacity=1, rx=0):
-    attrs = []
-    if fill:
-        attrs.append(f'fill="{fill}"')
-    else:
-        attrs.append('fill="none"')
+    attrs = [f'fill="{fill}"' if fill else 'fill="none"']
     if stroke:
         attrs.append(f'stroke="{stroke}"')
         attrs.append(f'stroke-width="{stroke_width}"')
@@ -76,313 +67,315 @@ def rect(x, y, w, h, fill=None, stroke=None, stroke_width=0, opacity=1, rx=0):
     return f'<rect x="{x}" y="{y}" width="{w}" height="{h}" {" ".join(attrs)}/>\n'
 
 
-def elevation_chart(x, y, w, h, line_color, area_color, track_color="#FFFFFF", track_opacity=0.15):
-    """Chart box group (area, line, full_path, dot, glow). The app renderer
-    reads the bounding rect + colors. Shapes are placeholders."""
+def elevation_chart(x, y, w, h, line_color, area_color,
+                    track_color="#FFFFFF", track_opacity=0.18):
     dot_cx = x + w * 0.75
     dot_cy = y + h * 0.45
     return (
         f'<g id="elevation_chart">\n'
         f'  <g id="area"><rect x="{x}" y="{y}" width="{w}" height="{h}" '
-        f'fill="{area_color}" opacity="0.25"/></g>\n'
+        f'fill="{area_color}" opacity="0.28"/></g>\n'
         f'  <g id="full_path"><rect x="{x}" y="{y}" width="{w}" height="{h}" '
         f'stroke="{track_color}" stroke-width="2" opacity="{track_opacity}" fill="none"/></g>\n'
         f'  <g id="line"><rect x="{x}" y="{y}" width="{w}" height="{h}" '
-        f'stroke="{line_color}" stroke-width="3" fill="none"/></g>\n'
-        f'  <g id="glow"><ellipse cx="{dot_cx}" cy="{dot_cy}" rx="10" ry="10" '
+        f'stroke="{line_color}" stroke-width="4" fill="none"/></g>\n'
+        f'  <g id="glow"><ellipse cx="{dot_cx}" cy="{dot_cy}" rx="14" ry="14" '
         f'fill="{line_color}" opacity="0.35"/></g>\n'
-        f'  <g id="dot"><ellipse cx="{dot_cx}" cy="{dot_cy}" rx="5" ry="5" '
-        f'fill="{line_color}"/></g>\n'
+        f'  <g id="dot"><ellipse cx="{dot_cx}" cy="{dot_cy}" rx="7" ry="7" '
+        f'fill="{line_color}" stroke="#000000" stroke-width="2"/></g>\n'
         f'</g>\n'
     )
 
 
-def route_map(x, y, w, h, line_color, track_color="#FFFFFF", track_opacity=0.25):
+def route_map(x, y, w, h, line_color, track_color="#FFFFFF", track_opacity=0.35):
     dot_cx = x + w * 0.5
     dot_cy = y + h * 0.5
     return (
         f'<g id="route_map">\n'
         f'  <g id="full_route"><rect x="{x}" y="{y}" width="{w}" height="{h}" '
-        f'stroke="{track_color}" stroke-width="2" opacity="{track_opacity}" fill="none"/></g>\n'
+        f'stroke="{track_color}" stroke-width="3" opacity="{track_opacity}" fill="none"/></g>\n'
         f'  <g id="route"><rect x="{x}" y="{y}" width="{w}" height="{h}" '
-        f'stroke="{line_color}" stroke-width="3" fill="none"/></g>\n'
-        f'  <g id="glow"><ellipse cx="{dot_cx}" cy="{dot_cy}" rx="10" ry="10" '
+        f'stroke="{line_color}" stroke-width="5" fill="none"/></g>\n'
+        f'  <g id="glow"><ellipse cx="{dot_cx}" cy="{dot_cy}" rx="16" ry="16" '
         f'fill="{line_color}" opacity="0.35"/></g>\n'
-        f'  <g id="dot"><ellipse cx="{dot_cx}" cy="{dot_cy}" rx="5" ry="5" '
-        f'fill="{line_color}"/></g>\n'
+        f'  <g id="dot"><ellipse cx="{dot_cx}" cy="{dot_cy}" rx="8" ry="8" '
+        f'fill="{line_color}" stroke="#000000" stroke-width="2"/></g>\n'
         f'</g>\n'
     )
 
 
-# ---------- Template generators ----------
-# Each returns a full SVG string for (ratio, w, h).
+def scrim_defs(id_, top_opacity=0.0, bottom_opacity=0.75):
+    return (
+        f'  <linearGradient id="{id_}" x1="0" y1="0" x2="0" y2="1">\n'
+        f'    <stop offset="0" stop-color="#000000" stop-opacity="{top_opacity}"/>\n'
+        f'    <stop offset="1" stop-color="#000000" stop-opacity="{bottom_opacity}"/>\n'
+        f'  </linearGradient>\n'
+    )
 
-# ===== A. HORIZON (Garmin-style) =====
-# Title + 4 horizontal metrics footer with vertical dividers + thin elevation
+
+# ============================================================
+# A. HORIZON — Garmin-style horizontal footer. chart only.
+# ============================================================
 def gen_horizon(ratio, w, h):
     font = "Montserrat"
     accent = "#FFFFFF"
-    sub = "#B8B8BE"
-    divider = "#FFFFFF"
-    # Gradient scrim at bottom
-    scrim_h = int(h * 0.42)
+    sub = "#D6D6DE"
+    if ratio in ("9x16", "4x5"):
+        title_size = int(h * 0.052)
+        value_size = int(h * 0.045)
+        label_size = int(h * 0.019)
+        chart_h = int(h * 0.055)
+    elif ratio == "1x1":
+        title_size = 68
+        value_size = 72
+        label_size = 26
+        chart_h = 54
+    else:
+        title_size = 62
+        value_size = 66
+        label_size = 24
+        chart_h = 50
+
+    margin = int(w * 0.05)
+    # Vertical layout in the footer: title, chart, metrics row
+    title_y = h - int(value_size * 1.0) - label_size - chart_h - int(h * 0.09)
+    chart_y = title_y + int(title_size * 0.5)
+    metric_row_y = h - int(h * 0.055)
+    scrim_h = int(h * 0.45)
+
     out = (
         f'<svg width="{w}" height="{h}" viewBox="0 0 {w} {h}" fill="none" '
         f'xmlns="http://www.w3.org/2000/svg">\n'
-        f'<defs>\n'
-        f'  <linearGradient id="scrim" x1="0" y1="0" x2="0" y2="1">\n'
-        f'    <stop offset="0" stop-color="#000000" stop-opacity="0"/>\n'
-        f'    <stop offset="1" stop-color="#000000" stop-opacity="0.75"/>\n'
-        f'  </linearGradient>\n'
-        f'</defs>\n'
-        f'<rect x="0" y="{h-scrim_h}" width="{w}" height="{scrim_h}" fill="url(#scrim)"/>\n'
+        f'<defs>\n{scrim_defs("scrim", 0, 0.8)}</defs>\n'
+        f'<rect x="0" y="{h - scrim_h}" width="{w}" height="{scrim_h}" fill="url(#scrim)"/>\n'
     )
-    # Positions
-    if ratio in ("9x16", "4x5"):
-        title_size = int(h * 0.048)
-        title_y = int(h - 420)
-        metric_row_y = int(h - 120)
-        value_size = int(h * 0.03)
-        label_size = int(h * 0.013)
-        chart_y = int(h - 360)
-        chart_h = int(h * 0.045)
-    elif ratio == "1x1":
-        title_size = 60
-        title_y = h - 380
-        metric_row_y = h - 110
-        value_size = 54
-        label_size = 18
-        chart_y = h - 310
-        chart_h = 45
-    else:  # 16x9
-        title_size = 54
-        title_y = h - 310
-        metric_row_y = h - 95
-        value_size = 46
-        label_size = 16
-        chart_y = h - 250
-        chart_h = 40
-
-    margin = int(w * 0.05)
-    out += text("title_text", margin, title_y, title_size, font, accent,
-                "Morning Run", weight="800", letter_spacing="-0.02em")
-    # thin elevation chart
+    out += stroked_text("title_text", margin, title_y, title_size, font,
+                        accent, "Morning Run", weight="800",
+                        letter_spacing="-0.02em")
     out += elevation_chart(margin, chart_y, w - 2 * margin, chart_h,
-                           line_color=accent, area_color=accent, track_opacity=0.08)
-    # 4 metrics horizontal
+                           line_color=accent, area_color=accent,
+                           track_opacity=0.25)
     cols = 4
     col_w = (w - 2 * margin) / cols
     labels = ["DISTANCE", "TIME", "PACE", "HEART"]
     values = ["10.0", "1:00:00", "05:00", "145"]
     for i in range(cols):
         cx = margin + col_w * i + col_w / 2
-        out += text(f"metric_{i+1}_value", cx, metric_row_y, value_size, font,
-                    accent, values[i], anchor="middle", weight="800",
-                    letter_spacing="-0.02em")
-        out += text(f"metric_{i+1}_label", cx, metric_row_y + label_size + 14,
-                    label_size, font, sub, labels[i], anchor="middle",
-                    weight="600", letter_spacing="0.15em")
+        out += stroked_text(f"metric_{i+1}_value", cx, metric_row_y,
+                            value_size, font, accent, values[i],
+                            anchor="middle", weight="800",
+                            letter_spacing="-0.02em")
+        out += stroked_text(f"metric_{i+1}_label", cx,
+                            metric_row_y + label_size + 18,
+                            label_size, font, sub, labels[i],
+                            anchor="middle", weight="700",
+                            stroke_width=3, letter_spacing="0.2em")
         if i < cols - 1:
             div_x = margin + col_w * (i + 1)
-            out += line(div_x, metric_row_y - value_size, div_x,
-                        metric_row_y + label_size + 20, divider, 1, 0.35)
-    out += svg_footer()
+            out += line(div_x, metric_row_y - value_size + 10, div_x,
+                        metric_row_y + label_size + 22, accent, 2, 0.45)
+    out += "</svg>\n"
     return out
 
 
-# ===== B. EDITORIAL (Adidas serif) =====
+# ============================================================
+# B. EDITORIAL — Adidas-like serif title. Pure typography, no chart/route.
+# ============================================================
 def gen_editorial(ratio, w, h):
-    font = "Playfair Display"
-    mono = "Inter"
-    accent = "#F4EFE6"
-    sub = "#A09A8E"
+    serif = "Playfair Display"
+    sans = "Inter"
+    accent = "#F6F1E7"
+    sub = "#D1C9B6"
     if ratio in ("9x16", "4x5"):
-        title_size = int(h * 0.062)
-        title_y = h - 300
-        top_y = 120
-        metric_row_y = h - 130
-        value_size = int(h * 0.028)
-        label_size = 16
+        title_size = int(h * 0.075)
+        value_size = int(h * 0.048)
+        label_size = int(h * 0.017)
+        top_size = 28
     elif ratio == "1x1":
-        title_size = 78
-        title_y = h - 260
-        top_y = 100
-        metric_row_y = h - 110
-        value_size = 44
-        label_size = 16
+        title_size = 96
+        value_size = 76
+        label_size = 22
+        top_size = 26
     else:
-        title_size = 72
-        title_y = h - 230
-        top_y = 90
-        metric_row_y = h - 100
-        value_size = 40
-        label_size = 15
+        title_size = 88
+        value_size = 70
+        label_size = 22
+        top_size = 24
 
-    margin = int(w * 0.055)
+    margin = int(w * 0.06)
+    title_y = h - int(h * 0.17)
+    metric_y = h - int(h * 0.055)
+    divider_y = metric_y - value_size - int(h * 0.04)
+
     out = (
         f'<svg width="{w}" height="{h}" viewBox="0 0 {w} {h}" fill="none" '
         f'xmlns="http://www.w3.org/2000/svg">\n'
-        f'<defs>\n'
-        f'  <linearGradient id="ed_scrim" x1="0" y1="0" x2="0" y2="1">\n'
-        f'    <stop offset="0" stop-color="#000000" stop-opacity="0"/>\n'
-        f'    <stop offset="1" stop-color="#000000" stop-opacity="0.55"/>\n'
-        f'  </linearGradient>\n'
-        f'</defs>\n'
-        f'<rect x="0" y="{int(h*0.4)}" width="{w}" height="{int(h*0.6)}" '
-        f'fill="url(#ed_scrim)"/>\n'
+        f'<defs>\n{scrim_defs("edscr", 0, 0.65)}</defs>\n'
+        f'<rect x="0" y="{int(h*0.35)}" width="{w}" height="{int(h*0.65)}" fill="url(#edscr)"/>\n'
     )
-    # Top-right brand line
-    out += text("brand", w - margin, top_y, 22, mono, accent, "RUNNING",
-                anchor="end", weight="700", letter_spacing="0.35em")
-    out += line(w - margin - 140, top_y + 12, w - margin, top_y + 12, accent, 1.5, 0.6)
-    # Serif title
-    out += text("title_text", margin, title_y, title_size, font, accent,
-                "Morning Run", weight="700", letter_spacing="-0.01em")
-    # Italic date accent
-    # Horizontal divider line above metrics
-    out += line(margin, metric_row_y - 60, w - margin, metric_row_y - 60,
-                accent, 1, 0.35)
-    # 3 metrics horizontal
+    out += stroked_text("brand", w - margin, int(h * 0.06) + top_size,
+                        top_size, sans, accent, "RUNNING",
+                        anchor="end", weight="800",
+                        letter_spacing="0.35em", stroke_width=3)
+    out += line(w - margin - 200, int(h * 0.06) + top_size + 12,
+                w - margin, int(h * 0.06) + top_size + 12,
+                accent, 2, 0.8)
+
+    out += stroked_text("title_text", margin, title_y, title_size, serif,
+                        accent, "Morning Run", weight="900",
+                        letter_spacing="-0.01em")
+
+    out += line(margin, divider_y, w - margin, divider_y, accent, 2, 0.45)
+
     cols = 3
     col_w = (w - 2 * margin) / cols
     labels = ["DISTANCE", "TIME", "PACE"]
     values = ["10.0", "1:00:00", "05:00"]
     for i in range(cols):
         cx = margin + col_w * i
-        out += text(f"metric_{i+1}_value", cx, metric_row_y, value_size, font,
-                    accent, values[i], weight="700", letter_spacing="-0.01em")
-        out += text(f"metric_{i+1}_label", cx, metric_row_y + label_size + 12,
-                    label_size, mono, sub, labels[i], weight="600",
-                    letter_spacing="0.3em")
-    out += svg_footer()
+        out += stroked_text(f"metric_{i+1}_value", cx, metric_y, value_size,
+                            serif, accent, values[i], weight="900",
+                            letter_spacing="-0.01em")
+        out += stroked_text(f"metric_{i+1}_label", cx,
+                            metric_y + label_size + 14,
+                            label_size, sans, sub, labels[i],
+                            weight="700", letter_spacing="0.35em",
+                            stroke_width=3)
+    out += "</svg>\n"
     return out
 
 
-# ===== C. EXPEDITION (left-stack + route) =====
+# ============================================================
+# C. EXPEDITION — left stack + centered route. route only.
+# ============================================================
 def gen_expedition(ratio, w, h):
-    font = "Bebas Neue"
-    mono = "Inter"
+    display = "Bebas Neue"
+    sans = "Inter"
     accent = "#FFFFFF"
     highlight = "#FF5A1F"
-    sub = "#BDBDBD"
-    margin = int(w * 0.055)
-    out = (
-        f'<svg width="{w}" height="{h}" viewBox="0 0 {w} {h}" fill="none" '
-        f'xmlns="http://www.w3.org/2000/svg">\n'
-        f'<defs>\n'
-        f'  <linearGradient id="ex_scrim" x1="0" y1="1" x2="0" y2="0">\n'
-        f'    <stop offset="0" stop-color="#000000" stop-opacity="0.75"/>\n'
-        f'    <stop offset="1" stop-color="#000000" stop-opacity="0"/>\n'
-        f'  </linearGradient>\n'
-        f'</defs>\n'
-        f'<rect x="0" y="0" width="{w}" height="{int(h*0.35)}" '
-        f'transform="translate(0,{int(h*0.65)})" fill="url(#ex_scrim)"/>\n'
-    )
-
+    sub = "#E0E0E0"
     if ratio == "9x16" or ratio == "4x5":
-        title_size = int(h * 0.06)
-        title_y = 180
-        metric_y_start = int(h * 0.55)
-        metric_gap = int(h * 0.07)
-        value_size = int(h * 0.04)
-        label_size = 20
-        route_w = int(w * 0.85)
-        route_h = int(h * 0.25)
+        title_size = int(h * 0.07)
+        value_size = int(h * 0.06)
+        label_size = int(h * 0.022)
+        metric_gap = int(h * 0.09)
+        route_w = int(w * 0.88)
+        route_h = int(h * 0.28)
         route_x = (w - route_w) // 2
-        route_y = int(h * 0.22)
+        route_y = int(h * 0.24)
+        title_y = int(h * 0.12)
+        metric_y_start = int(h * 0.62)
     elif ratio == "1x1":
-        title_size = 72
-        title_y = 130
-        metric_y_start = 500
-        metric_gap = 95
-        value_size = 56
-        label_size = 20
-        route_w = 500
-        route_h = 360
-        route_x = (w - route_w) // 2
-        route_y = 180
-    else:  # 16x9
-        title_size = 64
-        title_y = 110
-        metric_y_start = 400
-        metric_gap = 85
-        value_size = 50
-        label_size = 18
+        title_size = 90
+        value_size = 92
+        label_size = 30
+        metric_gap = 140
         route_w = 560
-        route_h = 560
+        route_h = 420
         route_x = (w - route_w) // 2
-        route_y = 200
+        route_y = 150
+        title_y = 120
+        metric_y_start = 660
+    else:  # 16x9
+        title_size = 80
+        value_size = 78
+        label_size = 26
+        metric_gap = 110
+        route_w = 620
+        route_h = 620
+        route_x = (w - route_w) // 2
+        route_y = 230
+        title_y = 110
+        metric_y_start = 360
 
-    # Title
-    out += text("title_text", margin, title_y, title_size, font, accent,
-                "MILAN RUNNING", weight="400", letter_spacing="0.02em")
-    # subtitle / accent line
-    out += line(margin, title_y + 25, margin + 240, title_y + 25, highlight, 4)
-
-    # Route map centered
-    out += route_map(route_x, route_y, route_w, route_h, highlight,
-                     track_color=accent, track_opacity=0.3)
-
-    # 3 left-stacked metrics
-    labels = ["DISTANCE", "TIME", "PACE"]
-    values = ["10.0", "1:00:00", "05:00"]
-    for i in range(3):
-        y = metric_y_start + i * metric_gap
-        # small diagonal accent bar
-        out += line(margin, y - value_size + 6, margin + 22, y - value_size - 18,
-                    highlight, 3)
-        out += text(f"metric_{i+1}_label", margin + 40, y - value_size + 8,
-                    label_size, mono, sub, labels[i], weight="600",
-                    letter_spacing="0.3em")
-        out += text(f"metric_{i+1}_value", margin + 40, y, value_size, font,
-                    accent, values[i], weight="400", letter_spacing="0.02em")
-    out += svg_footer()
-    return out
-
-
-# ===== D. MINIMAL (huge typography) =====
-def gen_minimal(ratio, w, h):
-    font = "Oswald"
-    mono = "Inter"
-    accent = "#0A0A0A"  # dark text on transparent
-    bg = "#F6F5F0"
-    sub = "#7A7A7A"
     margin = int(w * 0.06)
     out = (
         f'<svg width="{w}" height="{h}" viewBox="0 0 {w} {h}" fill="none" '
         f'xmlns="http://www.w3.org/2000/svg">\n'
+        f'<defs>\n'
+        f'  <linearGradient id="exsc" x1="0" y1="1" x2="0" y2="0">\n'
+        f'    <stop offset="0" stop-color="#000000" stop-opacity="0.7"/>\n'
+        f'    <stop offset="1" stop-color="#000000" stop-opacity="0"/>\n'
+        f'  </linearGradient>\n'
+        f'  <linearGradient id="exsc_top" x1="0" y1="0" x2="0" y2="1">\n'
+        f'    <stop offset="0" stop-color="#000000" stop-opacity="0.5"/>\n'
+        f'    <stop offset="1" stop-color="#000000" stop-opacity="0"/>\n'
+        f'  </linearGradient>\n'
+        f'</defs>\n'
+        f'<rect x="0" y="0" width="{w}" height="{int(h*0.22)}" fill="url(#exsc_top)"/>\n'
+        f'<rect x="0" y="{int(h*0.5)}" width="{w}" height="{int(h*0.5)}" fill="url(#exsc)"/>\n'
     )
-    # Bottom band
-    band_h = int(h * 0.28)
-    out += rect(0, h - band_h, w, band_h, fill=bg)
+    out += stroked_text("title_text", margin, title_y, title_size, display,
+                        accent, "MILAN RUNNING", weight="400",
+                        letter_spacing="0.03em")
+    out += line(margin, title_y + 22, margin + 300, title_y + 22,
+                highlight, 6)
 
+    out += route_map(route_x, route_y, route_w, route_h, highlight,
+                     track_color=accent, track_opacity=0.4)
+
+    labels = ["DISTANCE", "TIME", "PACE"]
+    values = ["10.0", "1:00:00", "05:00"]
+    for i in range(3):
+        y = metric_y_start + i * metric_gap
+        out += line(margin, y - value_size + 8, margin + 30,
+                    y - value_size - 24, highlight, 5)
+        out += stroked_text(f"metric_{i+1}_label", margin + 52,
+                            y - value_size + 6, label_size, sans, sub,
+                            labels[i], weight="700",
+                            letter_spacing="0.3em", stroke_width=3)
+        out += stroked_text(f"metric_{i+1}_value", margin + 52, y,
+                            value_size, display, accent, values[i],
+                            weight="400", letter_spacing="0.03em")
+    out += "</svg>\n"
+    return out
+
+
+# ============================================================
+# D. MINIMAL — compact cream footer band. No chart, no route.
+# ============================================================
+def gen_minimal(ratio, w, h):
+    display = "Oswald"
+    sans = "Inter"
+    ink = "#0A0A0A"
+    muted = "#5A5A5A"
+    band_col = "#F6F5F0"
     if ratio in ("9x16", "4x5"):
-        title_size = int(h * 0.022)
-        value_size = int(h * 0.055)
-        label_size = 16
-        band_top = h - band_h
-        title_y = band_top + 55
-        row_y = band_top + 55 + title_size + 110
+        title_size = int(h * 0.018)
+        value_size = int(h * 0.05)
+        label_size = int(h * 0.017)
+        band_h = int(h * 0.18)
     elif ratio == "1x1":
-        title_size = 28
-        value_size = 64
-        label_size = 16
-        band_top = h - band_h
-        title_y = band_top + 50
-        row_y = band_top + 180
+        title_size = 24
+        value_size = 72
+        label_size = 22
+        band_h = 210
     else:
-        title_size = 26
-        value_size = 56
-        label_size = 15
-        band_top = h - band_h
-        title_y = band_top + 45
-        row_y = band_top + 145
+        title_size = 22
+        value_size = 64
+        label_size = 20
+        band_h = 190
 
-    out += text("title_text", margin, title_y, title_size, mono, accent,
-                "MORNING RUN", weight="700", letter_spacing="0.3em")
-    # Divider
-    out += line(margin, title_y + 18, w - margin, title_y + 18,
-                accent, 1, 0.2)
+    margin = int(w * 0.06)
+    band_top = h - band_h
+    title_y = band_top + int(band_h * 0.27)
+    row_y = band_top + int(band_h * 0.82)
+
+    out = (
+        f'<svg width="{w}" height="{h}" viewBox="0 0 {w} {h}" fill="none" '
+        f'xmlns="http://www.w3.org/2000/svg">\n'
+    )
+    # Accent ink strip above band for premium feel
+    out += rect(0, band_top - 4, w, 4, fill="#0A0A0A", opacity=0.9)
+    out += rect(0, band_top, w, band_h, fill=band_col)
+    # Title (on band, so no stroke needed)
+    out += (
+        f'<text id="title_text" x="{margin}" y="{title_y}" fill="{ink}" '
+        f'font-family="{sans}" font-size="{title_size}" font-weight="800" '
+        f'letter-spacing="0.35em">MORNING RUN</text>\n'
+    )
+    out += line(margin, title_y + 16, w - margin, title_y + 16,
+                ink, 1, 0.18)
 
     cols = 3
     col_w = (w - 2 * margin) / cols
@@ -390,71 +383,77 @@ def gen_minimal(ratio, w, h):
     values = ["10.0", "1:00:00", "05:00"]
     for i in range(cols):
         cx = margin + col_w * i
-        out += text(f"metric_{i+1}_value", cx, row_y, value_size, font,
-                    accent, values[i], weight="500", letter_spacing="0em")
-        out += text(f"metric_{i+1}_label", cx, row_y + 28, label_size,
-                    mono, sub, labels[i], weight="600",
-                    letter_spacing="0.25em")
-    out += svg_footer()
+        out += (
+            f'<text id="metric_{i+1}_value" x="{cx}" y="{row_y}" '
+            f'fill="{ink}" font-family="{display}" font-size="{value_size}" '
+            f'font-weight="600">{values[i]}</text>\n'
+        )
+        out += (
+            f'<text id="metric_{i+1}_label" x="{cx}" y="{row_y - value_size - 10}" '
+            f'fill="{muted}" font-family="{sans}" font-size="{label_size}" '
+            f'font-weight="700" letter-spacing="0.3em">{labels[i]}</text>\n'
+        )
+    out += "</svg>\n"
     return out
 
 
-# ===== E. DASHBOARD (4-metric grid + chart) =====
+# ============================================================
+# E. DASHBOARD — compact 2x2 grid + chart. chart only.
+# ============================================================
 def gen_dashboard(ratio, w, h):
     font = "Inter"
-    display = "Inter"
     accent = "#FFFFFF"
-    sub = "#9AA0A6"
+    sub = "#B5BCC4"
     tint = "#1FD1A7"
-    card = "#14161A"
-    card_stroke = "#262931"
-    margin = int(w * 0.045)
+    card = "#12141A"
+    card_stroke = "#2A2F3A"
 
     if ratio in ("9x16", "4x5"):
-        title_size = int(h * 0.03)
-        value_size = int(h * 0.045)
-        label_size = 20
-        card_h = int(h * 0.12)
-        grid_top = int(h * 0.55)
-        chart_h = int(h * 0.1)
-        chart_top = int(h * 0.82)
+        title_size = int(h * 0.028)
+        value_size = int(h * 0.04)
+        label_size = int(h * 0.016)
+        card_h = int(h * 0.08)
+        chart_h = int(h * 0.07)
+        bottom_margin = int(h * 0.04)
     elif ratio == "1x1":
-        title_size = 34
-        value_size = 54
-        label_size = 18
+        title_size = 32
+        value_size = 58
+        label_size = 20
         card_h = 120
-        grid_top = 520
-        chart_h = 110
-        chart_top = 860
-    else:
-        title_size = 30
-        value_size = 50
-        label_size = 18
-        card_h = 110
-        grid_top = 480
         chart_h = 100
-        chart_top = 820
+        bottom_margin = 50
+    else:
+        title_size = 28
+        value_size = 52
+        label_size = 18
+        card_h = 105
+        chart_h = 90
+        bottom_margin = 45
+
+    margin = int(w * 0.045)
+    gap = int(w * 0.02)
+    col_w = (w - 2 * margin - gap) / 2
+    chart_y = h - bottom_margin - chart_h
+    grid_bottom = chart_y - int(h * 0.025)
+    grid_top = grid_bottom - card_h * 2 - gap
+    title_y = grid_top - 24
 
     out = (
         f'<svg width="{w}" height="{h}" viewBox="0 0 {w} {h}" fill="none" '
         f'xmlns="http://www.w3.org/2000/svg">\n'
         f'<defs>\n'
-        f'  <linearGradient id="db_scrim" x1="0" y1="1" x2="0" y2="0">\n'
+        f'  <linearGradient id="dbsc" x1="0" y1="1" x2="0" y2="0">\n'
         f'    <stop offset="0" stop-color="#000000" stop-opacity="0.85"/>\n'
         f'    <stop offset="1" stop-color="#000000" stop-opacity="0"/>\n'
         f'  </linearGradient>\n'
         f'</defs>\n'
-        f'<rect x="0" y="{int(h*0.45)}" width="{w}" height="{int(h*0.55)}" fill="url(#db_scrim)"/>\n'
+        f'<rect x="0" y="{int(h*0.5)}" width="{w}" height="{int(h*0.5)}" fill="url(#dbsc)"/>\n'
     )
+    out += stroked_text("title_text", margin, title_y, title_size, font,
+                        accent, "Morning Run", weight="800",
+                        letter_spacing="-0.01em")
+    out += rect(margin, title_y + 12, 48, 4, fill=tint)
 
-    # Title
-    out += text("title_text", margin, grid_top - 40, title_size, display,
-                accent, "Morning Run", weight="700", letter_spacing="-0.01em")
-    out += rect(margin, grid_top - 30, 48, 4, fill=tint)
-
-    # 2x2 grid of metric cards
-    gap = int(w * 0.02)
-    col_w = (w - 2 * margin - gap) / 2
     labels = ["DISTANCE", "TIME", "PACE", "HEART"]
     values = ["10.0", "1:00:00", "05:00", "145"]
     for i in range(4):
@@ -463,41 +462,36 @@ def gen_dashboard(ratio, w, h):
         cx = margin + c * (col_w + gap)
         cy = grid_top + r * (card_h + gap)
         out += rect(cx, cy, col_w, card_h, fill=card, stroke=card_stroke,
-                    stroke_width=1, rx=14)
-        # Accent bar
-        out += rect(cx + 20, cy + 20, 3, card_h - 40, fill=tint)
-        out += text(f"metric_{i+1}_label", cx + 40, cy + 38, label_size,
-                    font, sub, labels[i], weight="600",
-                    letter_spacing="0.2em")
-        out += text(f"metric_{i+1}_value", cx + 40,
-                    cy + card_h - 28, value_size, display, accent,
-                    values[i], weight="700", letter_spacing="-0.02em")
-
-    # Elevation chart
-    out += elevation_chart(margin, chart_top, w - 2 * margin, chart_h,
+                    stroke_width=1, rx=16, opacity=0.92)
+        out += rect(cx + 18, cy + 18, 4, card_h - 36, fill=tint, rx=2)
+        out += (
+            f'<text id="metric_{i+1}_label" x="{cx + 40}" y="{cy + 36}" '
+            f'fill="{sub}" font-family="{font}" font-size="{label_size}" '
+            f'font-weight="700" letter-spacing="0.25em">{labels[i]}</text>\n'
+        )
+        out += (
+            f'<text id="metric_{i+1}_value" x="{cx + 40}" y="{cy + card_h - 22}" '
+            f'fill="{accent}" font-family="{font}" font-size="{value_size}" '
+            f'font-weight="800" letter-spacing="-0.02em">{values[i]}</text>\n'
+        )
+    out += elevation_chart(margin, chart_y, w - 2 * margin, chart_h,
                            line_color=tint, area_color=tint,
-                           track_color=accent, track_opacity=0.12)
-    out += svg_footer()
+                           track_color=accent, track_opacity=0.18)
+    out += "</svg>\n"
     return out
 
 
 TEMPLATES = {
-    "horizon":    (gen_horizon,    "Montserrat",       "Montserrat-Bold.ttf"),
-    "editorial":  (gen_editorial,  "Playfair Display", "PlayfairDisplay-Bold.ttf"),
-    "expedition": (gen_expedition, "Bebas Neue",       "BebasNeue-Regular.ttf"),
-    "minimal":    (gen_minimal,    "Oswald",           "Oswald-Bold.ttf"),
-    "dashboard":  (gen_dashboard,  "Inter",            "Inter-Bold.ttf"),
-}
-
-# Additional fonts shared across templates
-SHARED_FONTS = {
-    "Inter": "Inter-Bold.ttf",
-    "Montserrat": "Montserrat-Bold.ttf",
+    "horizon":    (gen_horizon,    "Montserrat-Bold.ttf"),
+    "editorial":  (gen_editorial,  "PlayfairDisplay-Bold.ttf"),
+    "expedition": (gen_expedition, "BebasNeue-Regular.ttf"),
+    "minimal":    (gen_minimal,    "Oswald-Bold.ttf"),
+    "dashboard":  (gen_dashboard,  "Inter-Bold.ttf"),
 }
 
 
 def main():
-    for name, (gen, family, font_file) in TEMPLATES.items():
+    for name, (gen, font_file) in TEMPLATES.items():
         tpl_dir = os.path.join(TEMPLATES_DIR, name)
         if os.path.isdir(tpl_dir):
             shutil.rmtree(tpl_dir)
@@ -505,25 +499,16 @@ def main():
 
         for ratio, (w, h) in RATIOS.items():
             svg = gen(ratio, w, h)
-            out_path = os.path.join(tpl_dir, f"{name}_{ratio}.svg")
-            with open(out_path, "w", encoding="utf-8") as fh:
+            path = os.path.join(tpl_dir, f"{name}_{ratio}.svg")
+            with open(path, "w", encoding="utf-8") as fh:
                 fh.write(svg)
-            print(f"  wrote {out_path}")
 
-        # Copy primary font
-        src = os.path.join(FONTS_SRC, font_file)
-        if not os.path.isfile(src):
-            print(f"  !! missing font: {src}", file=sys.stderr)
-            sys.exit(1)
-        shutil.copy(src, os.path.join(tpl_dir, font_file))
+        # Copy primary font + Inter as secondary
+        for ff in [font_file, "Inter-Bold.ttf"]:
+            src = os.path.join(FONTS_SRC, ff)
+            if os.path.isfile(src):
+                shutil.copy(src, os.path.join(tpl_dir, ff))
 
-        # Copy Inter (used as secondary/label font in most templates)
-        if font_file != "Inter-Bold.ttf":
-            inter = os.path.join(FONTS_SRC, "Inter-Bold.ttf")
-            shutil.copy(inter, os.path.join(tpl_dir, "Inter-Bold.ttf"))
-
-        # Run finalize
-        print(f"\n>>> Finalizing {name}")
         subprocess.check_call(
             ["python3", os.path.join(REPO, "tools/finalize_template.py"), tpl_dir]
         )

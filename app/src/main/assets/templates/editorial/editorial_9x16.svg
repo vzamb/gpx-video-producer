@@ -1,19 +1,19 @@
 <svg width="1080" height="1920" viewBox="0 0 1080 1920" fill="none" xmlns="http://www.w3.org/2000/svg">
 <defs>
-  <linearGradient id="ed_scrim" x1="0" y1="0" x2="0" y2="1">
+  <linearGradient id="edscr" x1="0" y1="0" x2="0" y2="1">
     <stop offset="0" stop-color="#000000" stop-opacity="0"/>
-    <stop offset="1" stop-color="#000000" stop-opacity="0.55"/>
+    <stop offset="1" stop-color="#000000" stop-opacity="0.65"/>
   </linearGradient>
 </defs>
-<rect x="0" y="768" width="1080" height="1152" fill="url(#ed_scrim)"/>
-<text id="brand" x="1021" y="120" fill="#F4EFE6" font-family="Inter" font-size="22" font-weight="700" text-anchor="end" letter-spacing="0.35em">RUNNING</text>
-<line x1="881" y1="132" x2="1021" y2="132" stroke="#F4EFE6" stroke-width="1.5" opacity="0.6"/>
-<text id="title_text" x="59" y="1620" fill="#F4EFE6" font-family="Playfair Display" font-size="119" font-weight="700" text-anchor="start" letter-spacing="-0.01em">Morning Run</text>
-<line x1="59" y1="1730" x2="1021" y2="1730" stroke="#F4EFE6" stroke-width="1" opacity="0.35"/>
-<text id="metric_1_value" x="59.0" y="1790" fill="#F4EFE6" font-family="Playfair Display" font-size="53" font-weight="700" text-anchor="start" letter-spacing="-0.01em">10.0</text>
-<text id="metric_1_label" x="59.0" y="1818" fill="#A09A8E" font-family="Inter" font-size="16" font-weight="600" text-anchor="start" letter-spacing="0.3em">DISTANCE</text>
-<text id="metric_2_value" x="379.6666666666667" y="1790" fill="#F4EFE6" font-family="Playfair Display" font-size="53" font-weight="700" text-anchor="start" letter-spacing="-0.01em">1:00:00</text>
-<text id="metric_2_label" x="379.6666666666667" y="1818" fill="#A09A8E" font-family="Inter" font-size="16" font-weight="600" text-anchor="start" letter-spacing="0.3em">TIME</text>
-<text id="metric_3_value" x="700.3333333333334" y="1790" fill="#F4EFE6" font-family="Playfair Display" font-size="53" font-weight="700" text-anchor="start" letter-spacing="-0.01em">05:00</text>
-<text id="metric_3_label" x="700.3333333333334" y="1818" fill="#A09A8E" font-family="Inter" font-size="16" font-weight="600" text-anchor="start" letter-spacing="0.3em">PACE</text>
+<rect x="0" y="672" width="1080" height="1248" fill="url(#edscr)"/>
+<text id="brand" x="1016" y="143" fill="#F6F1E7" stroke="#000000" stroke-width="3" stroke-linejoin="round" paint-order="stroke fill" font-family="Inter" font-size="28" font-weight="800" text-anchor="end" letter-spacing="0.35em">RUNNING</text>
+<line x1="816" y1="155" x2="1016" y2="155" stroke="#F6F1E7" stroke-width="2" opacity="0.8" stroke-linecap="round"/>
+<text id="title_text" x="64" y="1594" fill="#F6F1E7" stroke="#000000" stroke-width="10" stroke-linejoin="round" paint-order="stroke fill" font-family="Playfair Display" font-size="144" font-weight="900" text-anchor="start" letter-spacing="-0.01em">Morning Run</text>
+<line x1="64" y1="1647" x2="1016" y2="1647" stroke="#F6F1E7" stroke-width="2" opacity="0.45" stroke-linecap="round"/>
+<text id="metric_1_value" x="64.0" y="1815" fill="#F6F1E7" stroke="#000000" stroke-width="6" stroke-linejoin="round" paint-order="stroke fill" font-family="Playfair Display" font-size="92" font-weight="900" text-anchor="start" letter-spacing="-0.01em">10.0</text>
+<text id="metric_1_label" x="64.0" y="1861" fill="#D1C9B6" stroke="#000000" stroke-width="3" stroke-linejoin="round" paint-order="stroke fill" font-family="Inter" font-size="32" font-weight="700" text-anchor="start" letter-spacing="0.35em">DISTANCE</text>
+<text id="metric_2_value" x="381.3333333333333" y="1815" fill="#F6F1E7" stroke="#000000" stroke-width="6" stroke-linejoin="round" paint-order="stroke fill" font-family="Playfair Display" font-size="92" font-weight="900" text-anchor="start" letter-spacing="-0.01em">1:00:00</text>
+<text id="metric_2_label" x="381.3333333333333" y="1861" fill="#D1C9B6" stroke="#000000" stroke-width="3" stroke-linejoin="round" paint-order="stroke fill" font-family="Inter" font-size="32" font-weight="700" text-anchor="start" letter-spacing="0.35em">TIME</text>
+<text id="metric_3_value" x="698.6666666666666" y="1815" fill="#F6F1E7" stroke="#000000" stroke-width="6" stroke-linejoin="round" paint-order="stroke fill" font-family="Playfair Display" font-size="92" font-weight="900" text-anchor="start" letter-spacing="-0.01em">05:00</text>
+<text id="metric_3_label" x="698.6666666666666" y="1861" fill="#D1C9B6" stroke="#000000" stroke-width="3" stroke-linejoin="round" paint-order="stroke fill" font-family="Inter" font-size="32" font-weight="700" text-anchor="start" letter-spacing="0.35em">PACE</text>
 </svg>

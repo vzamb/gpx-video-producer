@@ -100,6 +100,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -244,6 +245,8 @@ fun StyleTelemetryScreen(
                 onToggleRouteMap = viewModel::setShowRouteMap,
                 metricConfig = uiState.metricConfig,
                 templateSlotCount = uiState.templateSlotCount,
+                templateHasChart = uiState.templateHasChart,
+                templateHasRouteMap = uiState.templateHasRouteMap,
                 onMetricConfigChanged = viewModel::setMetricConfig
             )
         },
@@ -708,6 +711,8 @@ private fun StyleTopBar(
     onToggleRouteMap: (Boolean) -> Unit = {},
     metricConfig: List<MetricType> = MetricType.fallbackMetrics,
     templateSlotCount: Int = 4,
+    templateHasChart: Boolean = true,
+    templateHasRouteMap: Boolean = true,
     onMetricConfigChanged: (List<MetricType>) -> Unit = {}
 ) {
     var showOverlaySheet by remember { mutableStateOf(false) }
@@ -818,6 +823,8 @@ private fun StyleTopBar(
             onToggleRouteMap = onToggleRouteMap,
             metricConfig = metricConfig,
             templateSlotCount = templateSlotCount,
+            templateHasChart = templateHasChart,
+            templateHasRouteMap = templateHasRouteMap,
             onMetricConfigChanged = onMetricConfigChanged,
             onDismiss = { showOverlaySheet = false }
         )
@@ -835,6 +842,8 @@ private fun OverlaySettingsSheet(
     onToggleRouteMap: (Boolean) -> Unit,
     metricConfig: List<MetricType>,
     templateSlotCount: Int,
+    templateHasChart: Boolean,
+    templateHasRouteMap: Boolean,
     onMetricConfigChanged: (List<MetricType>) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -863,11 +872,14 @@ private fun OverlaySettingsSheet(
             Spacer(Modifier.height(12.dp))
 
             // ── Chart type section ─────────────────────────────
-            SectionLabel("Chart")
+            SectionLabel(
+                if (templateHasChart) "Chart" else "Chart — not available in this template"
+            )
 
             ChartTypePicker(
                 selectedType = chartType,
-                onTypeSelected = onChartTypeChanged
+                onTypeSelected = onChartTypeChanged,
+                enabled = templateHasChart
             )
 
             Spacer(Modifier.height(4.dp))
@@ -875,9 +887,11 @@ private fun OverlaySettingsSheet(
             // ── Route map toggle ───────────────────────────────
             SettingsSwitchRow(
                 icon = Icons.Outlined.Route,
-                label = "Route Map",
-                checked = showRouteMap,
-                onCheckedChange = onToggleRouteMap
+                label = if (templateHasRouteMap) "Route Map"
+                        else "Route Map — not available in this template",
+                checked = showRouteMap && templateHasRouteMap,
+                onCheckedChange = onToggleRouteMap,
+                enabled = templateHasRouteMap
             )
 
             HorizontalDivider(
@@ -978,10 +992,12 @@ private fun SettingsSwitchRow(
     icon: ImageVector,
     label: String,
     checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
+    onCheckedChange: (Boolean) -> Unit,
+    enabled: Boolean = true
 ) {
+    val alphaScale = if (enabled) 1f else 0.4f
     Surface(
-        onClick = { onCheckedChange(!checked) },
+        onClick = { if (enabled) onCheckedChange(!checked) },
         color = Color.Transparent,
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -994,19 +1010,20 @@ private fun SettingsSwitchRow(
             Icon(
                 icon,
                 contentDescription = null,
-                tint = Color.White.copy(alpha = 0.6f),
+                tint = Color.White.copy(alpha = 0.6f * alphaScale),
                 modifier = Modifier.size(20.dp)
             )
             Spacer(Modifier.width(12.dp))
             Text(
                 label,
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color.White
+                color = Color.White.copy(alpha = alphaScale)
             )
             Spacer(Modifier.weight(1f))
             Switch(
                 checked = checked,
                 onCheckedChange = onCheckedChange,
+                enabled = enabled,
                 colors = SwitchDefaults.colors(
                     uncheckedThumbColor = Color.White.copy(alpha = 0.5f),
                     uncheckedTrackColor = Color.White.copy(alpha = 0.1f),
@@ -1023,7 +1040,8 @@ private fun SettingsSwitchRow(
 @Composable
 private fun ChartTypePicker(
     selectedType: ChartType?,
-    onTypeSelected: (ChartType?) -> Unit
+    onTypeSelected: (ChartType?) -> Unit,
+    enabled: Boolean = true
 ) {
     val options: List<Pair<ChartType?, String>> = listOf(
         null to "Off",
@@ -1036,13 +1054,14 @@ private fun ChartTypePicker(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 4.dp),
+            .padding(horizontal = 20.dp, vertical = 4.dp)
+            .alpha(if (enabled) 1f else 0.4f),
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         options.forEach { (type, label) ->
             val isSelected = selectedType == type
             Surface(
-                onClick = { onTypeSelected(type) },
+                onClick = { if (enabled) onTypeSelected(type) },
                 shape = RoundedCornerShape(8.dp),
                 color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
                         else Color.White.copy(alpha = 0.06f),
