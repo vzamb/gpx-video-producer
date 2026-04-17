@@ -6,10 +6,15 @@ This document is a practical, prioritized checklist for taking the app from
 its current internal build to a store-ready 1.0 release. It covers
 functionality, security, UI, privacy, performance, and rollout.
 
+See also [`PRODUCT_STRATEGY.md`](./PRODUCT_STRATEGY.md) for the post-1.0
+roadmap (accounts, cloud templates, monetization).
+
 Priorities:
 - 🔴 **P0 — must fix before any release** (blocker, legal, security, crash)
 - 🟠 **P1 — should ship with 1.0** (user-visible quality, store-required)
 - 🟡 **P2 — nice to have / fast-follow**
+
+Status legend: ✅ done · ☐ open
 
 ---
 
@@ -28,49 +33,45 @@ Priorities:
 
 ### Gaps / risks
 
-| # | Area | Issue | Priority |
-|---|---|---|---|
-| 1.1 | Timeline actions | `TimelineEditorTab` has empty TODO handlers for `SpeedChanged`, `VolumeChanged`, entry/exit transitions, Ken Burns. Either ship or hide from UI. | 🔴 P0 |
-| 1.2 | Export formats | `OutputSettings` advertises H.264/H.265/VP9 but only H.264 is verified on all the AVD/real-device paths we've tested. Audit on real hardware. | 🟠 P1 |
-| 1.3 | Sync modes | `GPX_TIMESTAMP` mode depends on video EXIF creation timestamps — many sources (WhatsApp, re-encodes) strip them. Failure path needs a clear UX. | 🟠 P1 |
-| 1.4 | Undo/redo | `UndoManager` exists in `TimelineViewModel` but UI coverage is incomplete. Decide: ship everywhere or scope to MVP (clip trim/reorder only) and document. | 🟠 P1 |
-| 1.5 | Large GPX files | Statistics computed in-memory; >50k-point tracks could stutter during sync. Downsampling exists in parser — confirm it's applied in all code paths. | 🟡 P2 |
-| 1.6 | Background export | `ExportService` runs as `foregroundServiceType="dataSync"` — verify it survives Doze on OEM-skinned Androids (Xiaomi, OPPO). | 🟠 P1 |
-| 1.7 | Strava import | OAuth flow exists but error paths (revoked token, network loss mid-import) need review. | 🟠 P1 |
+| # | Area | Issue | Priority | Status |
+|---|---|---|---|---|
+| 1.1 | Timeline actions | `TimelineEditorTab` with empty TODO handlers was fully dead code — file removed. | 🔴 P0 | ✅ |
+| 1.2 | Export formats | `OutputSettings` advertises H.264/H.265/VP9 but only H.264 is verified on all the AVD/real-device paths we've tested. Audit on real hardware. | 🟠 P1 | ☐ |
+| 1.3 | Sync modes | `GPX_TIMESTAMP` mode depends on video EXIF creation timestamps — many sources (WhatsApp, re-encodes) strip them. Failure path needs a clear UX. | 🟠 P1 | ☐ |
+| 1.4 | Undo/redo | `UndoManager` exists in `TimelineViewModel` but UI coverage is incomplete. Decide: ship everywhere or scope to MVP (clip trim/reorder only) and document. | 🟠 P1 | ☐ |
+| 1.5 | Large GPX files | Statistics computed in-memory; >50k-point tracks could stutter during sync. Downsampling exists in parser — confirm it's applied in all code paths. | 🟡 P2 | ☐ |
+| 1.6 | Background export | `ExportService` runs as `foregroundServiceType="dataSync"` — verify it survives Doze on OEM-skinned Androids (Xiaomi, OPPO). | 🟠 P1 | ☐ |
+| 1.7 | Strava import | OAuth flow exists but error paths (revoked token, network loss mid-import) need review. | 🟠 P1 | ☐ |
 
 ---
 
 ## 2. Security & Privacy
 
-### 🔴 P0 — Secrets in source
+### 🔴 P0 — Secrets in source — ✅ DONE
 
-`lib/strava/src/main/java/com/gpxvideo/lib/strava/StravaConfig.kt` hard-codes
-`CLIENT_SECRET`. Anyone decompiling the APK has it; if it leaks publicly,
-Strava can (and does) revoke the integration.
+`lib/strava/.../StravaConfig.kt` used to hard-code `CLIENT_SECRET`. Fixed:
 
-**Action:**
-1. Revoke the current secret at <https://www.strava.com/settings/api>.
-2. Move `CLIENT_SECRET` out of source. Options, in order of preference:
-   - **Best:** Proxy the token exchange through a lightweight backend (Cloud
-     Run / Cloudflare Worker). The app only sees short-lived access tokens;
-     the refresh/exchange happens server-side.
-   - **OK:** Inject via `BuildConfig` from `local.properties` at build time
-     and check into secret manager (GitHub Actions `secrets`, EAS-style).
-     Still visible in APK but not in git.
-3. Rotate immediately after any leak.
+- Secrets moved to `local.properties` (`strava.clientId`, `strava.clientSecret`).
+- `lib/strava/build.gradle.kts` reads them and injects via `BuildConfig`.
+- `StravaConfig` now reads from `BuildConfig.STRAVA_CLIENT_SECRET`.
+- `local.properties` is already in `.gitignore`.
+- `StravaConfig.isConfigured` flag lets the app disable Strava features when
+  the build lacks credentials (e.g. CI / contributor clones).
 
-### 🔴 P0 — ProGuard / R8 rules
+**⚠️ Still to do manually:**
+1. **Rotate the previously-committed secret at <https://www.strava.com/settings/api>** — it is in git history and on the public internet as of this rewrite. A `git filter-repo` pass over the repo history is also worth considering.
+2. For the long term, move the token exchange to a backend proxy so the secret never ships in the APK at all. Tracked in `PRODUCT_STRATEGY.md` §2.5.
 
-`minifyEnabled=true` and `shrinkResources=true` are on for release, but there
-are no explicit keep rules for:
-- Room entities / DAOs (KSP usually handles this, verify)
-- Hilt generated classes
-- Media3 Transformer reflection points
-- kotlinx-serialization `@Serializable` classes
+### 🔴 P0 — ProGuard / R8 rules — ✅ DONE
 
-**Action:** Produce a release APK, run it end-to-end (import, edit, export),
-and fix any `ClassNotFound`/`NoSuchMethod` crashes with targeted `-keep` rules
-in `proguard-rules.pro`. Add `-printusage` once to audit what was stripped.
+`app/proguard-rules.pro` rewritten with explicit keep rules for Room,
+kotlinx-serialization, Hilt/Dagger, Media3 (Transformer/Effect/ExoPlayer),
+AndroidSVG, Coil 3, OkHttp, and all `@Serializable` / Room entity classes.
+Stale `com.arthenica.**` (ffmpeg-kit) rule removed.
+
+Verified with `./gradlew :app:assembleRelease` — **release build passes
+minifyReleaseWithR8 + shrinkReleaseRes** cleanly. Full end-to-end smoke test
+on a signed release APK is still pending real-device QA.
 
 ### 🟠 P1 — Permissions audit
 
@@ -95,24 +96,25 @@ photo picker (`ACTION_PICK_IMAGES`) on Android 13+ to avoid needing
   sensitive personal data under GDPR.
 - Videos are processed fully on-device (good) — make that explicit in the
   privacy policy.
-- Strava data: access token is stored in `StravaTokenStore`. Confirm it uses
-  `EncryptedSharedPreferences` or the platform Keystore — not plain DataStore.
+- Strava data: access & refresh tokens now stored in
+  **`EncryptedSharedPreferences`** (AES-256-GCM, Android Keystore-backed).
+  `StravaTokenStore` was migrated from plain DataStore. ✅
 - Publish a privacy policy URL (required by Play) that covers: on-device
   processing, no analytics (or disclose what you collect), Strava OAuth data
   retention, crash reporting (if added).
 
-### 🟠 P1 — Network security config
+### 🟠 P1 — Network security config — ✅ DONE
 
-Add `network-security-config.xml` pinning: cleartext disabled, system CAs only,
-no user-added CAs on release. Optional but cheap: pin Strava cert.
+Added `app/src/main/res/xml/network_security_config.xml` (cleartext
+disabled, system CAs only) and wired via `android:networkSecurityConfig`
+in the manifest. Strava uses HTTPS so no per-domain overrides needed.
 
-### 🟡 P2 — Backup policy
+### 🟡 P2 — Backup policy — ✅ DONE
 
-`android:allowBackup="true"` is the default and will push Room DB + Strava
-tokens to Google Drive backups. Either:
-- Set `android:allowBackup="false"`, or
-- Provide a `backup_rules.xml` that excludes the Strava token store and any
-  user media caches.
+Added `backup_rules.xml` (≤ Android 11) and `data_extraction_rules.xml`
+(Android 12+) to exclude the Strava token store from cloud backup and
+device-to-device transfer. `allowBackup=true` is preserved so that user
+projects still back up — only sensitive OAuth material is excluded.
 
 ---
 
@@ -199,11 +201,12 @@ cut this significantly — worth the 30 min setup for a user-facing editor.
 
 ## 5. Code Quality
 
-Recent cleanup (this session) removed:
+Recent cleanup removed:
 - `lib/ffmpeg/` module (FfmpegResult migrated to `feature/export/ExportTaskResult`)
 - `PreviewOverlayRenderer.kt`, `TransitionIndicator.kt`, `TemplateApplicator.kt`,
-  `AppResult` — all unused
+  `TimelineEditorTab.kt`, `AppResult` — all unused
 - Unused `Double.formatDistance/Speed/Pace` extensions
+- `ffmpegKit` and `ffmpeg-kit-full` entries from the version catalog
 - Stale `refactor.md` PRD (superseded by current 2-screen flow)
 
 Still outstanding:

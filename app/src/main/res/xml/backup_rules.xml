@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Auto Backup (legacy, ≤Android 11) -->
+    <exclude domain="sharedpref" path="strava_tokens.xml" />
+    <exclude domain="file" path="datastore/strava_tokens.preferences_pb" />
+    <exclude domain="database" path="gpxvideo.db-journal" />
+</full-backup-content>

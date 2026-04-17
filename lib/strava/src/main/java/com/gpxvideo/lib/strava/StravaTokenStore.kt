@@ -1,20 +1,16 @@
 package com.gpxvideo.lib.strava
 
 import android.content.Context
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.longPreferencesKey
-import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
+import android.content.SharedPreferences
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
-
-private val Context.stravaDataStore: DataStore<Preferences> by preferencesDataStore(name = "strava_tokens")
 
 data class StravaTokens(
     val accessToken: String,
@@ -31,49 +27,83 @@ class StravaTokenStore @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     private companion object {
-        val KEY_ACCESS_TOKEN = stringPreferencesKey("access_token")
-        val KEY_REFRESH_TOKEN = stringPreferencesKey("refresh_token")
-        val KEY_EXPIRES_AT = longPreferencesKey("expires_at")
-        val KEY_ATHLETE_NAME = stringPreferencesKey("athlete_name")
-        val KEY_ATHLETE_ID = longPreferencesKey("athlete_id")
+        const val PREF_NAME = "strava_tokens"
+        const val KEY_ACCESS_TOKEN = "access_token"
+        const val KEY_REFRESH_TOKEN = "refresh_token"
+        const val KEY_EXPIRES_AT = "expires_at"
+        const val KEY_ATHLETE_NAME = "athlete_name"
+        const val KEY_ATHLETE_ID = "athlete_id"
     }
 
-    val tokens: Flow<StravaTokens?> = context.stravaDataStore.data.map { prefs ->
-        val accessToken = prefs[KEY_ACCESS_TOKEN] ?: return@map null
-        val refreshToken = prefs[KEY_REFRESH_TOKEN] ?: return@map null
-        StravaTokens(
-            accessToken = accessToken,
-            refreshToken = refreshToken,
-            expiresAt = prefs[KEY_EXPIRES_AT] ?: 0L,
-            athleteName = prefs[KEY_ATHLETE_NAME] ?: "Strava Athlete",
-            athleteId = prefs[KEY_ATHLETE_ID] ?: 0L
+    private val prefs: SharedPreferences by lazy { openEncryptedPrefs() }
+
+    private val _tokens = MutableStateFlow(readTokens())
+    val tokens: Flow<StravaTokens?> = _tokens.asStateFlow()
+    val isLinked: Flow<Boolean> = tokens.map { it != null }
+
+    fun getTokens(): StravaTokens? = _tokens.value
+
+    fun saveTokens(response: StravaTokenResponse) {
+        prefs.edit().apply {
+            putString(KEY_ACCESS_TOKEN, response.accessToken)
+            putString(KEY_REFRESH_TOKEN, response.refreshToken)
+            putLong(KEY_EXPIRES_AT, response.expiresAt)
+            response.athlete?.let { athlete ->
+                putString(KEY_ATHLETE_NAME, athlete.displayName)
+                putLong(KEY_ATHLETE_ID, athlete.id)
+            }
+        }.apply()
+        _tokens.value = readTokens()
+    }
+
+    fun updateAccessToken(accessToken: String, expiresAt: Long) {
+        prefs.edit()
+            .putString(KEY_ACCESS_TOKEN, accessToken)
+            .putLong(KEY_EXPIRES_AT, expiresAt)
+            .apply()
+        _tokens.value = readTokens()
+    }
+
+    fun clear() {
+        prefs.edit().clear().apply()
+        _tokens.value = null
+    }
+
+    private fun readTokens(): StravaTokens? {
+        val access = prefs.getString(KEY_ACCESS_TOKEN, null) ?: return null
+        val refresh = prefs.getString(KEY_REFRESH_TOKEN, null) ?: return null
+        return StravaTokens(
+            accessToken = access,
+            refreshToken = refresh,
+            expiresAt = prefs.getLong(KEY_EXPIRES_AT, 0L),
+            athleteName = prefs.getString(KEY_ATHLETE_NAME, null) ?: "Strava Athlete",
+            athleteId = prefs.getLong(KEY_ATHLETE_ID, 0L)
         )
     }
 
-    val isLinked: Flow<Boolean> = tokens.map { it != null }
-
-    suspend fun getTokens(): StravaTokens? = tokens.first()
-
-    suspend fun saveTokens(response: StravaTokenResponse) {
-        context.stravaDataStore.edit { prefs ->
-            prefs[KEY_ACCESS_TOKEN] = response.accessToken
-            prefs[KEY_REFRESH_TOKEN] = response.refreshToken
-            prefs[KEY_EXPIRES_AT] = response.expiresAt
-            response.athlete?.let { athlete ->
-                prefs[KEY_ATHLETE_NAME] = athlete.displayName
-                prefs[KEY_ATHLETE_ID] = athlete.id
-            }
+    private fun openEncryptedPrefs(): SharedPreferences {
+        val masterKey = MasterKey.Builder(context)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
+        return try {
+            EncryptedSharedPreferences.create(
+                context,
+                PREF_NAME,
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        } catch (t: Throwable) {
+            // If the keystore is corrupted (key rotation, restored backup, etc.)
+            // wipe the file and re-create rather than crash.
+            context.deleteSharedPreferences(PREF_NAME)
+            EncryptedSharedPreferences.create(
+                context,
+                PREF_NAME,
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
         }
-    }
-
-    suspend fun updateAccessToken(accessToken: String, expiresAt: Long) {
-        context.stravaDataStore.edit { prefs ->
-            prefs[KEY_ACCESS_TOKEN] = accessToken
-            prefs[KEY_EXPIRES_AT] = expiresAt
-        }
-    }
-
-    suspend fun clear() {
-        context.stravaDataStore.edit { it.clear() }
     }
 }

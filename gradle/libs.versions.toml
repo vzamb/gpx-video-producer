@@ -13,6 +13,7 @@ hiltNavigationCompose = "1.2.0"
 splashscreen = "1.0.1"
 datastorePreferences = "1.1.2"
 browser = "1.8.0"
+securityCrypto = "1.1.0-alpha06"
 
 # Compose
 composeBom = "2025.02.00"
@@ -25,7 +26,6 @@ room = "2.7.0"
 
 # Media
 media3 = "1.5.1"
-ffmpegKit = "6.0.LTS"
 coil = "3.0.4"
 
 # SVG
@@ -88,13 +88,15 @@ media3-transformer = { group = "androidx.media3", name = "media3-transformer", v
 media3-effect = { group = "androidx.media3", name = "media3-effect", version.ref = "media3" }
 
 # FFmpeg
-ffmpeg-kit-full = { group = "com.arthenica", name = "ffmpeg-kit-full", version.ref = "ffmpegKit" }
 
 # Coil
 coil-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref = "coil" }
 
 # Browser (Custom Tabs)
 androidx-browser = { group = "androidx.browser", name = "browser", version.ref = "browser" }
+
+# Security
+androidx-security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "securityCrypto" }
 
 # OkHttp
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
